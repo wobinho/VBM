@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+:root {
+  --color-background: #030712;
+  --color-foreground: #f9fafb;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* Scrollbar styling — invisible but functional */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: transparent; }
+* { scrollbar-width: none; }
+
+/* Selection */
+::selection { background: rgba(245, 158, 11, 0.3); color: white; }
+
+/* Smooth transitions */
+* { transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom animations */
+@keyframes shimmer {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-float { animation: float 3s ease-in-out infinite; }
