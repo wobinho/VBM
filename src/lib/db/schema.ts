@@ -5,6 +5,7 @@ export function runSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS leagues (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       league_name TEXT NOT NULL UNIQUE,
+      nation TEXT DEFAULT 'US',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -13,17 +14,13 @@ export function runSchema(db: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       team_name TEXT NOT NULL UNIQUE,
       league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+      nation TEXT DEFAULT 'US',
       team_money REAL DEFAULT 1000000.00,
       played INTEGER DEFAULT 0,
       won INTEGER DEFAULT 0,
       lost INTEGER DEFAULT 0,
       points INTEGER DEFAULT 0,
-      goal_diff INTEGER DEFAULT 0,
-      stadium TEXT DEFAULT '',
-      capacity INTEGER DEFAULT 5000,
-      founded TEXT DEFAULT '2020',
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      goal_diff INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS players (

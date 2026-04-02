@@ -1,29 +1,13 @@
 'use client';
 import Image from 'next/image';
 import { useState } from 'react';
+import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
     jersey_number: number; overall: number; attack: number; defense: number; serve: number;
     block: number; receive: number; setting: number; player_value: number; team_name?: string;
     team_id?: number | null;
-}
-
-function getCountryFlag(country: string): string {
-    const flags: Record<string, string> = {
-        'USA': '🇺🇸', 'Brazil': '🇧🇷', 'Japan': '🇯🇵', 'China': '🇨🇳', 'Russia': '🇷🇺',
-        'France': '🇫🇷', 'Italy': '🇮🇹', 'Germany': '🇩🇪', 'Poland': '🇵🇱', 'Argentina': '🇦🇷',
-        'Mexico': '🇲🇽', 'Spain': '🇪🇸', 'Netherlands': '🇳🇱', 'Australia': '🇦🇺', 'Canada': '🇨🇦',
-        'South Korea': '🇰🇷', 'Turkey': '🇹🇷', 'Thailand': '🇹🇭', 'Serbia': '🇷🇸', 'Montenegro': '🇲🇪',
-        'Croatia': '🇭🇷', 'Greece': '🇬🇷', 'Portugal': '🇵🇹', 'Czech Republic': '🇨🇿', 'Hungary': '🇭🇺',
-        'England': '🇬🇧', 'Scotland': '🇬🇧', 'Wales': '🇬🇧', 'Ireland': '🇮🇪', 'Belgium': '🇧🇪',
-        'Sweden': '🇸🇪', 'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Iceland': '🇮🇸',
-    };
-    return flags[country] || '🌍';
-}
-
-function getCountrySlug(country: string): string {
-    return country.toLowerCase().replace(/\s+/g, '-');
 }
 
 function getPositionAbbrev(pos: string) {
@@ -118,29 +102,24 @@ function TeamLogo({ teamId }: { teamId?: number | null }) {
     );
 }
 
-function CountryFlag({ country }: { country: string }) {
-    const slug = getCountrySlug(country);
-    const [useFallback, setUseFallback] = useState(false);
+function CountryFlag({ countryCode }: { countryCode: string }) {
     const [failed, setFailed] = useState(false);
 
     if (failed) {
-        return <span className="text-2xl leading-none">{getCountryFlag(country)}</span>;
+        return <span className="text-2xl leading-none">🌍</span>;
     }
 
-    const src = useFallback ? '/assets/flags/default.png' : `/assets/flags/${slug}.png`;
+    // Convert country name to code if needed
+    const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
+    const src = `/assets/flags/${code}.svg`;
 
     return (
-        <div className="relative w-10 h-7 rounded overflow-hidden shadow-md">
-            <Image
+        <div className="w-10 h-7 rounded overflow-hidden shadow-md">
+            <img
                 src={src}
-                alt={country}
-                fill
-                unoptimized
-                className="object-cover"
-                onError={() => {
-                    if (!useFallback) setUseFallback(true);
-                    else setFailed(true);
-                }}
+                alt={getCountryName(code)}
+                className="w-full h-full object-cover"
+                onError={() => setFailed(true)}
             />
         </div>
     );
@@ -150,7 +129,8 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
     if (compact) {
-        const flag = getCountryFlag(player.country);
+        // Handle both country codes and country names
+        const countryDisplay = player.country.length > 2 ? player.country : getCountryName(player.country);
         return (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:border-amber-500/30 hover:bg-white/[0.08] transition-all cursor-pointer group" onClick={onClick}>
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center text-sm font-bold text-amber-400">
@@ -158,7 +138,7 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white truncate group-hover:text-amber-400 transition-colors">{player.player_name}</p>
-                    <p className="text-xs text-gray-500">{getPositionAbbrev(player.position)} • {flag} {player.country}</p>
+                    <p className="text-xs text-gray-500">{getPositionAbbrev(player.position)} • {countryDisplay}</p>
                 </div>
                 <div className={`text-lg font-black ${player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
                     {player.overall}
@@ -193,7 +173,7 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
 
                 {/* Country flag — top right */}
                 <div className="absolute top-3 right-3 z-10">
-                    <CountryFlag country={player.country} />
+                    <CountryFlag countryCode={player.country} />
                 </div>
 
                 {/* Player photo */}
@@ -213,7 +193,7 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
                         {getPositionAbbrev(player.position)}
                     </span>
                     <span className="text-[11px] text-gray-400">#{player.jersey_number}</span>
-                    <span className="text-[11px] text-gray-500">{player.country}</span>
+                    <span className="text-[11px] text-gray-500">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
                 </div>
             </div>
 

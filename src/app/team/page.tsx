@@ -16,19 +16,6 @@ interface Player {
     potential: number; consistency: number; team_name?: string;
 }
 
-function getCountryFlag(country: string): string {
-    const flags: Record<string, string> = {
-        'USA': '🇺🇸', 'Brazil': '🇧🇷', 'Japan': '🇯🇵', 'China': '🇨🇳', 'Russia': '🇷🇺',
-        'France': '🇫🇷', 'Italy': '🇮🇹', 'Germany': '🇩🇪', 'Poland': '🇵🇱', 'Argentina': '🇦🇷',
-        'Mexico': '🇲🇽', 'Spain': '🇪🇸', 'Netherlands': '🇳🇱', 'Australia': '🇦🇺', 'Canada': '🇨🇦',
-        'South Korea': '🇰🇷', 'Turkey': '🇹🇷', 'Thailand': '🇹🇭', 'Serbia': '🇷🇸', 'Montenegro': '🇲🇪',
-        'Croatia': '🇭🇷', 'Greece': '🇬🇷', 'Portugal': '🇵🇹', 'Czech Republic': '🇨🇿', 'Hungary': '🇭🇺',
-        'England': '🇬🇧', 'Scotland': '🇬🇧', 'Wales': '🇬🇧', 'Ireland': '🇮🇪', 'Belgium': '🇧🇪',
-        'Sweden': '🇸🇪', 'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Iceland': '🇮🇸',
-    };
-    return flags[country] || '🌍';
-}
-
 export default function TeamPage() {
     const { team } = useAuth();
     const [players, setPlayers] = useState<Player[]>([]);

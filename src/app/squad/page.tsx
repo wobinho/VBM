@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { GripVertical, RotateCcw, Save, Check } from 'lucide-react';
 import Image from 'next/image';
 import PlayerModal from '@/components/player-modal';
+import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; overall: number; jersey_number: number; age: number; country: string;
@@ -24,19 +25,6 @@ const POSITIONS = [
     { key: 'L',   label: 'Libero',          row: 2, col: 1 },
 ];
 
-function getCountrySlug(country: string) {
-    return country.toLowerCase().replace(/\s+/g, '-');
-}
-
-const FLAG_EMOJI: Record<string, string> = {
-    'USA': '🇺🇸', 'Brazil': '🇧🇷', 'Japan': '🇯🇵', 'China': '🇨🇳', 'Russia': '🇷🇺',
-    'France': '🇫🇷', 'Italy': '🇮🇹', 'Germany': '🇩🇪', 'Poland': '🇵🇱', 'Argentina': '🇦🇷',
-    'Mexico': '🇲🇽', 'Spain': '🇪🇸', 'Netherlands': '🇳🇱', 'Australia': '🇦🇺', 'Canada': '🇨🇦',
-    'South Korea': '🇰🇷', 'Turkey': '🇹🇷', 'Thailand': '🇹🇭', 'Serbia': '🇷🇸', 'Montenegro': '🇲🇪',
-    'Croatia': '🇭🇷', 'Greece': '🇬🇷', 'Portugal': '🇵🇹', 'Czech Republic': '🇨🇿', 'Hungary': '🇭🇺',
-    'England': '🇬🇧', 'Scotland': '🇬🇧', 'Wales': '🇬🇧', 'Ireland': '🇮🇪', 'Belgium': '🇧🇪',
-    'Sweden': '🇸🇪', 'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Iceland': '🇮🇸',
-};
 
 const POS_ACCENT: Record<string, { badge: string; border: string; glow: string }> = {
     'Setter':         { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',    border: 'border-blue-500/40',    glow: 'shadow-blue-500/20' },
@@ -74,16 +62,15 @@ function PlayerPhoto({ playerId, className }: { playerId: number; className?: st
     );
 }
 
-function FlagImg({ country, size = 'sm' }: { country: string; size?: 'sm' | 'md' }) {
-    const slug = getCountrySlug(country);
-    const [src, setSrc] = useState(`/assets/flags/${slug}.png`);
+function FlagImg({ countryCode, size = 'sm' }: { countryCode: string; size?: 'sm' | 'md' }) {
     const [failed, setFailed] = useState(false);
     const dims = size === 'sm' ? 'w-7 h-5' : 'w-9 h-6';
-    if (failed) return <span className={size === 'sm' ? 'text-sm' : 'text-base'}>{FLAG_EMOJI[country] ?? '🌍'}</span>;
+    const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
+    if (failed) return <span className={size === 'sm' ? 'text-sm' : 'text-base'}>🌍</span>;
     return (
-        <div className={`relative ${dims} rounded overflow-hidden shrink-0`}>
-            <Image src={src} alt={country} fill unoptimized className="object-cover"
-                onError={() => { if (src !== '/assets/flags/default.png') setSrc('/assets/flags/default.png'); else setFailed(true); }} />
+        <div className={`${dims} rounded overflow-hidden shrink-0`}>
+            <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover"
+                onError={() => setFailed(true)} />
         </div>
     );
 }
@@ -122,8 +109,8 @@ function BenchCard({ player, onDragStart, onClick }: { player: Player; onDragSta
                     <div className={`text-2xl font-black leading-none ${overallColor(player.overall)}`} style={{ textShadow: '0 0 10px currentColor' }}>{player.overall}</div>
                 </div>
                 {/* Flag — top right */}
-                <div className="absolute top-1.5 right-1.5 z-10">
-                    <FlagImg country={player.country} size="sm" />
+                <div className="absolute top-1 right-1 z-10">
+                    <FlagImg countryCode={player.country} size="md" />
                 </div>
                 {/* Photo */}
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[90px] h-[108px]">
@@ -165,7 +152,7 @@ function LineupCard({ player, posKey, onDragStart, onClick }: { player: Player; 
                 </div>
                 {/* Flag */}
                 <div className="absolute bottom-2 right-2 z-10">
-                    <FlagImg country={player.country} size="sm" />
+                    <FlagImg countryCode={player.country} size="sm" />
                 </div>
                 {/* Photo */}
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[110px] h-[125px]">
@@ -284,49 +271,7 @@ export default function SquadPage() {
 
             {/* ── Squad Stats + Lineup grid ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
-                {/* Team Overall Stats */}
-                <div className="rounded-xl bg-gradient-to-br from-amber-900/30 via-orange-900/20 to-red-900/30 border border-amber-500/30 p-6 flex flex-col">
-                    <h3 className="text-sm font-semibold text-amber-300 mb-6 uppercase tracking-wider">Team Overall</h3>
-                    <div className="space-y-6 flex-1">
-                        <div className="text-center">
-                            <div className={`text-4xl font-black mb-1 ${lineupCount > 0 ? overallColor(lineupStrength / lineupCount) : 'text-gray-500'}`}>
-                                {lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : '-'}
-                            </div>
-                            <p className="text-xs text-gray-400">Average Rating</p>
-                        </div>
-                        <div className="border-t border-amber-500/20 pt-6 space-y-4">
-                            {lineupCount > 0 && (() => {
-                                const pp = Object.values(lineup).filter(Boolean) as Player[];
-                                const stats: Record<string, number> = {
-                                    'Attack':  pp.reduce((s, p) => s + p.attack,  0) / lineupCount,
-                                    'Defense': pp.reduce((s, p) => s + p.defense, 0) / lineupCount,
-                                    'Serve':   pp.reduce((s, p) => s + p.serve,   0) / lineupCount,
-                                    'Block':   pp.reduce((s, p) => s + p.block,   0) / lineupCount,
-                                    'Receive': pp.reduce((s, p) => s + p.receive, 0) / lineupCount,
-                                    'Chemistry': 75,
-                                };
-                                return Object.entries(stats).map(([stat, value]) => (
-                                    <div key={stat}>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xs font-semibold text-gray-300">{stat}</span>
-                                            <span className="text-sm font-bold text-amber-400">{Math.round(value)}</span>
-                                        </div>
-                                        <div className="w-full h-1.5 rounded-full bg-black/30 border border-white/5 overflow-hidden">
-                                            <div className={`h-full rounded-full transition-all duration-500 ${value >= 80 ? 'bg-emerald-500' : value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                                style={{ width: `${value}%` }} />
-                                        </div>
-                                    </div>
-                                ));
-                            })()}
-                            <div className="flex items-center justify-between pt-4 border-t border-amber-500/20">
-                                <span className="text-xs text-gray-400">Players Placed</span>
-                                <span className="text-lg font-bold text-amber-400">{lineupCount}/7</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Squad Lineup Grid — FM-style cards */}
+                {/* Squad Lineup Grid — FM-style cards (moved first) */}
                 <div className="lg:col-span-2 rounded-xl bg-gradient-to-br from-slate-900/40 via-slate-800/30 to-slate-900/40 border border-slate-500/30 p-6">
                     <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Squad Lineup</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -373,10 +318,76 @@ export default function SquadPage() {
                         })}
                     </div>
                 </div>
+
+                {/* Team Overall Stats (moved to right side) */}
+                <div className="rounded-xl bg-gradient-to-br from-amber-900/30 via-orange-900/20 to-red-900/30 border border-amber-500/30 p-6 flex flex-col">
+                    <h3 className="text-sm font-semibold text-amber-300 mb-6 uppercase tracking-wider">Team Overall</h3>
+                    <div className="space-y-6 flex-1">
+                        <div className="text-center">
+                            <div className={`text-4xl font-black mb-1 ${lineupCount > 0 ? overallColor(lineupStrength / lineupCount) : 'text-gray-500'}`}>
+                                {lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : '-'}
+                            </div>
+                            <p className="text-xs text-gray-400">Average Rating</p>
+                        </div>
+                        <div className="border-t border-amber-500/20 pt-6 space-y-4">
+                            {lineupCount > 0 && (() => {
+                                const pp = Object.values(lineup).filter(Boolean) as Player[];
+                                const stats: Record<string, number> = {
+                                    'Attack':  pp.reduce((s, p) => s + p.attack,  0) / lineupCount,
+                                    'Defense': pp.reduce((s, p) => s + p.defense, 0) / lineupCount,
+                                    'Serve':   pp.reduce((s, p) => s + p.serve,   0) / lineupCount,
+                                    'Block':   pp.reduce((s, p) => s + p.block,   0) / lineupCount,
+                                    'Receive': pp.reduce((s, p) => s + p.receive, 0) / lineupCount,
+                                    'Chemistry': 75,
+                                };
+                                return Object.entries(stats).map(([stat, value], idx) => (
+                                    <div key={`stat-${idx}-${stat}`}>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xs font-semibold text-gray-300">{stat}</span>
+                                            <span className="text-sm font-bold text-amber-400">{Math.round(value)}</span>
+                                        </div>
+                                        <div className="w-full h-1.5 rounded-full bg-black/30 border border-white/5 overflow-hidden">
+                                            <div className={`h-full rounded-full transition-all duration-500 ${value >= 80 ? 'bg-emerald-500' : value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                style={{ width: `${value}%` }} />
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
+                            <div className="flex items-center justify-between pt-4 border-t border-amber-500/20">
+                                <span className="text-xs text-gray-400">Players Placed</span>
+                                <span className="text-lg font-bold text-amber-400">{lineupCount}/7</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
-                {/* ── Formation court ── */}
+                {/* ── Bench ── (moved first, takes up 2 columns) */}
+                <div
+                    className="lg:col-span-2 rounded-xl bg-white/5 border border-white/10 p-4 flex flex-col"
+                    style={{ height: '540px' }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={handleDropOnBench}
+                >
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2 shrink-0">
+                        <GripVertical size={14} className="text-gray-500" /> Bench ({bench.length})
+                    </h3>
+                    <div className="overflow-y-auto flex-1">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            {bench.map(player => (
+                                <BenchCard
+                                    key={player.id}
+                                    player={player}
+                                    onDragStart={() => handleDragStart(player)}
+                                    onClick={() => setSelectedPlayer(player)}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Formation court ── (moved to right side) */}
                 <div className="lg:col-span-1 flex flex-col" style={{ height: '540px' }}>
                     <div className="rounded-xl bg-gradient-to-b from-green-900/30 via-green-800/20 to-green-900/30 border border-green-500/30 p-4 flex flex-col h-full">
                         <div className="text-xs font-bold text-green-500/50 text-center mb-4 uppercase tracking-wider shrink-0">Net</div>
@@ -422,30 +433,6 @@ export default function SquadPage() {
                                         );
                                     })}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Bench ── */}
-                <div
-                    className="lg:col-span-2 rounded-xl bg-white/5 border border-white/10 p-4 flex flex-col"
-                    style={{ height: '540px' }}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={handleDropOnBench}
-                >
-                    <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2 shrink-0">
-                        <GripVertical size={14} className="text-gray-500" /> Bench ({bench.length})
-                    </h3>
-                    <div className="overflow-y-auto flex-1">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                            {bench.map(player => (
-                                <BenchCard
-                                    key={player.id}
-                                    player={player}
-                                    onDragStart={() => handleDragStart(player)}
-                                    onClick={() => setSelectedPlayer(player)}
-                                />
                             ))}
                         </div>
                     </div>

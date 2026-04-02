@@ -2,6 +2,7 @@
 import Image from 'next/image';
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
@@ -12,23 +13,6 @@ interface Player {
     concentration?: number; pressure_handling?: number; jump_serve?: number; float_serve?: number;
     spike_power?: number; spike_accuracy?: number; block_timing?: number; dig_technique?: number;
     experience?: number; potential?: number; consistency?: number; team_name?: string;
-}
-
-function getCountryFlag(country: string): string {
-    const flags: Record<string, string> = {
-        'USA': '🇺🇸', 'Brazil': '🇧🇷', 'Japan': '🇯🇵', 'China': '🇨🇳', 'Russia': '🇷🇺',
-        'France': '🇫🇷', 'Italy': '🇮🇹', 'Germany': '🇩🇪', 'Poland': '🇵🇱', 'Argentina': '🇦🇷',
-        'Mexico': '🇲🇽', 'Spain': '🇪🇸', 'Netherlands': '🇳🇱', 'Australia': '🇦🇺', 'Canada': '🇨🇦',
-        'South Korea': '🇰🇷', 'Turkey': '🇹🇷', 'Thailand': '🇹🇭', 'Serbia': '🇷🇸', 'Montenegro': '🇲🇪',
-        'Croatia': '🇭🇷', 'Greece': '🇬🇷', 'Portugal': '🇵🇹', 'Czech Republic': '🇨🇿', 'Hungary': '🇭🇺',
-        'England': '🇬🇧', 'Scotland': '🇬🇧', 'Wales': '🇬🇧', 'Ireland': '🇮🇪', 'Belgium': '🇧🇪',
-        'Sweden': '🇸🇪', 'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Iceland': '🇮🇸',
-    };
-    return flags[country] || '🌍';
-}
-
-function getCountrySlug(country: string): string {
-    return country.toLowerCase().replace(/\s+/g, '-');
 }
 
 function getPositionAccent(position: string): { badge: string; glow: string; bar: string } {
@@ -139,29 +123,24 @@ function ModalTeamLogo({ teamId }: { teamId?: number | null }) {
     );
 }
 
-function ModalCountryFlag({ country }: { country: string }) {
-    const slug = getCountrySlug(country);
-    const [useFallback, setUseFallback] = useState(false);
+function ModalCountryFlag({ countryCode }: { countryCode: string }) {
     const [failed, setFailed] = useState(false);
 
     if (failed) {
-        return <span className="text-4xl leading-none">{getCountryFlag(country)}</span>;
+        return <span className="text-4xl leading-none">🌍</span>;
     }
 
-    const src = useFallback ? '/assets/flags/default.png' : `/assets/flags/${slug}.png`;
+    // Convert country name to code if needed
+    const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
+    const src = `/assets/flags/${code}.svg`;
 
     return (
-        <div className="relative w-[72px] h-12 rounded-md overflow-hidden shadow-lg shrink-0">
-            <Image
+        <div className="w-[72px] h-12 rounded-md overflow-hidden shadow-lg shrink-0">
+            <img
                 src={src}
-                alt={country}
-                fill
-                unoptimized
-                className="object-cover"
-                onError={() => {
-                    if (!useFallback) setUseFallback(true);
-                    else setFailed(true);
-                }}
+                alt={getCountryName(code)}
+                className="w-full h-full object-cover"
+                onError={() => setFailed(true)}
             />
         </div>
     );
@@ -250,7 +229,7 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
 
                     {/* Country flag — top right (left of close btn) */}
                     <div className="absolute top-4 right-14 z-10">
-                        <ModalCountryFlag country={player.country} />
+                        <ModalCountryFlag countryCode={player.country} />
                     </div>
 
                     {/* Player photo — centered, 50% bigger: was 160×190 → 240×285 */}
@@ -265,12 +244,15 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
                 {/* ── PLAYER IDENTITY ── */}
                 <div className="px-6 pt-4 pb-5 text-center border-b border-white/5">
                     <h2 className="text-2xl font-bold text-white">{player.player_name}</h2>
+                    {player.team_name && (
+                        <p className="text-sm text-gray-500 mt-1 mb-2.5">{player.team_name}</p>
+                    )}
                     <div className="flex items-center justify-center gap-3 mt-2.5 flex-wrap">
                         <span className={`px-3 py-1 rounded-md text-sm font-bold border ${accent.badge}`}>
                             {player.position}
                         </span>
                         <span className="text-base text-gray-400 font-semibold">#{player.jersey_number}</span>
-                        <span className="text-base text-gray-500">{player.country}</span>
+                        <span className="text-base text-gray-500">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
                     </div>
                 </div>
 

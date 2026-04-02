@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { AVAILABLE_COUNTRY_CODES } from '../country-codes';
 
 function clamp(val: number, min: number, max: number) {
     return Math.max(min, Math.min(max, Math.round(val)));
@@ -20,7 +21,7 @@ function calculatePlayerValue(overall: number, age: number, attack: number, defe
     return Math.round((baseValue * ageMod) + statBonus);
 }
 
-const COUNTRIES = ['Japan', 'Brazil', 'USA', 'Italy', 'Poland', 'France', 'Serbia', 'Argentina', 'Cuba', 'Russia', 'South Korea', 'China', 'Germany', 'Turkey', 'Canada', 'Iran', 'Australia', 'Netherlands'];
+const COUNTRIES = AVAILABLE_COUNTRY_CODES;
 const POSITIONS = ['Setter', 'Outside Hitter', 'Middle Blocker', 'Opposite Hitter', 'Libero'];
 const FIRST_NAMES = ['Takeshi', 'Lucas', 'Marco', 'Alex', 'James', 'Yuki', 'Diego', 'Pavel', 'Andre', 'Liam', 'Noah', 'Carlos', 'Ivan', 'Felix', 'Oscar', 'Kai', 'Ryu', 'Ethan', 'Leo', 'Ren', 'Dante', 'Viktor', 'Sasha', 'Mateo', 'Hugo', 'Finn', 'Emil', 'Niko', 'Jiro', 'Tomas', 'Rafael', 'Sergei', 'Bruno', 'Axel', 'Hiro', 'Jun', 'Kyle', 'Max', 'Zane', 'Lars'];
 const LAST_NAMES = ['Tanaka', 'Silva', 'Rossi', 'Johnson', 'Smith', 'Yamamoto', 'Rodriguez', 'Petrov', 'Santos', 'Williams', 'Brown', 'Garcia', 'Mueller', 'Volkov', 'Chen', 'Park', 'Kim', 'Wagner', 'Duval', 'Moreno', 'Hansen', 'Berg', 'Costa', 'Ferreira', 'Nakamura', 'Ishida', 'Clark', 'Lee', 'Stone', 'Rivera', 'Popov', 'Cruz', 'Wolf', 'Sato', 'Ito', 'Wright', 'Foster', 'Reed', 'Russo', 'Novak'];

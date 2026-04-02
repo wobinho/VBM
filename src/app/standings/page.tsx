@@ -1,10 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Trophy, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
+import Image from 'next/image';
+import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface League { id: number; league_name: string; }
 interface Team {
-    id: number; team_name: string; league_id: number; league_name: string;
+    id: number; team_name: string; league_id: number; league_name: string; nation?: string;
     played: number; won: number; lost: number; points: number; goal_diff: number;
     team_money: number; stadium: string; capacity: number; founded: string;
 }
@@ -25,6 +27,34 @@ export default function StandingsPage() {
         .sort((a, b) => b.points - a.points || b.goal_diff - a.goal_diff);
 
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : `$${(n / 1000).toFixed(0)}K`;
+
+    function TeamLogo({ teamId }: { teamId: number }) {
+        const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+        const [failed, setFailed] = useState(false);
+        if (failed) return null;
+        return (
+            <div className="relative w-8 h-8 shrink-0">
+                <Image src={src} alt="Team" fill unoptimized className="object-contain"
+                    onError={() => {
+                        if (src !== '/assets/teams/default.png') setSrc('/assets/teams/default.png');
+                        else setFailed(true);
+                    }} />
+            </div>
+        );
+    }
+
+    function CountryFlag({ country }: { country?: string }) {
+        const [failed, setFailed] = useState(false);
+        if (!country) return <span className="text-xs">🌍</span>;
+        if (failed) return <span className="text-xs">🌍</span>;
+        const code = country.length > 2 ? getCountryCode(country) : country.toLowerCase();
+        return (
+            <div className="w-5 h-3.5 rounded overflow-hidden shrink-0">
+                <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover"
+                    onError={() => setFailed(true)} />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -64,10 +94,11 @@ export default function StandingsPage() {
                                 {idx > 0 && idx + 1}
                             </span>
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-400">
-                                    {team.team_name.charAt(0)}
+                                <TeamLogo teamId={team.id} />
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-white text-sm">{team.team_name}</span>
+                                    <CountryFlag country={team.nation} />
                                 </div>
-                                <span className="font-semibold text-white text-sm">{team.team_name}</span>
                                 {expandedTeam === team.id ? <ChevronUp size={14} className="text-gray-500" /> : <ChevronDown size={14} className="text-gray-500" />}
                             </div>
                             <span className="text-center text-sm text-gray-300">{team.played}</span>
