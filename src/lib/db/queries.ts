@@ -2,7 +2,7 @@ import { getDb } from './index';
 
 // ==================== TYPES ====================
 export interface League { id: number; league_name: string; created_at: string; updated_at: string; }
-export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; goal_diff: number; stadium: string; capacity: number; founded: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
+export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; goal_diff: number; stadium: string; capacity: number; founded: string; nation?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
 export interface Player {
     id: number; player_name: string; team_id: number | null; position: string; age: number; country: string;
     jersey_number: number; overall: number; attack: number; defense: number; serve: number; block: number;
@@ -115,27 +115,54 @@ export function searchPlayers(term: string): Player[] {
   `).all(like, like, like) as Player[];
 }
 
-export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_at' | 'team_name'>): number {
-    const result = getDb().prepare(`
-    INSERT INTO players (
-      player_name, team_id, position, age, country, jersey_number, overall,
-      attack, defense, serve, block, receive, setting,
-      contract_years, monthly_wage, player_value,
-      speed, agility, strength, endurance, height,
-      leadership, teamwork, concentration, pressure_handling,
-      jump_serve, float_serve, spike_power, spike_accuracy,
-      block_timing, dig_technique, experience, potential, consistency
-    ) VALUES (
-      @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
-      @attack, @defense, @serve, @block, @receive, @setting,
-      @contract_years, @monthly_wage, @player_value,
-      @speed, @agility, @strength, @endurance, @height,
-      @leadership, @teamwork, @concentration, @pressure_handling,
-      @jump_serve, @float_serve, @spike_power, @spike_accuracy,
-      @block_timing, @dig_technique, @experience, @potential, @consistency
-    )
-  `).run(data);
-    return Number(result.lastInsertRowid);
+export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_at' | 'team_name'> & { id?: number }): number {
+    const hasCustomId = data.id !== undefined;
+
+    if (hasCustomId) {
+        // INSERT with explicit ID
+        const result = getDb().prepare(`
+        INSERT INTO players (
+          id, player_name, team_id, position, age, country, jersey_number, overall,
+          attack, defense, serve, block, receive, setting,
+          contract_years, monthly_wage, player_value,
+          speed, agility, strength, endurance, height,
+          leadership, teamwork, concentration, pressure_handling,
+          jump_serve, float_serve, spike_power, spike_accuracy,
+          block_timing, dig_technique, experience, potential, consistency
+        ) VALUES (
+          @id, @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
+          @attack, @defense, @serve, @block, @receive, @setting,
+          @contract_years, @monthly_wage, @player_value,
+          @speed, @agility, @strength, @endurance, @height,
+          @leadership, @teamwork, @concentration, @pressure_handling,
+          @jump_serve, @float_serve, @spike_power, @spike_accuracy,
+          @block_timing, @dig_technique, @experience, @potential, @consistency
+        )
+      `).run(data);
+        return data.id!;
+    } else {
+        // INSERT without ID (auto-increment)
+        const result = getDb().prepare(`
+        INSERT INTO players (
+          player_name, team_id, position, age, country, jersey_number, overall,
+          attack, defense, serve, block, receive, setting,
+          contract_years, monthly_wage, player_value,
+          speed, agility, strength, endurance, height,
+          leadership, teamwork, concentration, pressure_handling,
+          jump_serve, float_serve, spike_power, spike_accuracy,
+          block_timing, dig_technique, experience, potential, consistency
+        ) VALUES (
+          @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
+          @attack, @defense, @serve, @block, @receive, @setting,
+          @contract_years, @monthly_wage, @player_value,
+          @speed, @agility, @strength, @endurance, @height,
+          @leadership, @teamwork, @concentration, @pressure_handling,
+          @jump_serve, @float_serve, @spike_power, @spike_accuracy,
+          @block_timing, @dig_technique, @experience, @potential, @consistency
+        )
+      `).run(data);
+        return Number(result.lastInsertRowid);
+    }
 }
 
 export function updatePlayer(id: number, data: Partial<Player>) {
@@ -198,11 +225,11 @@ export function getUserById(id: string): User | undefined {
     return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
 }
 
-export function createUser(data: { id: string; email: string; username: string; password_hash: string; display_name: string }) {
+export function createUser(data: { id: string; email: string; username: string; password_hash: string; display_name: string; is_admin?: number }) {
     return getDb().prepare(`
-    INSERT INTO users (id, email, username, password_hash, display_name)
-    VALUES (@id, @email, @username, @password_hash, @display_name)
-  `).run(data);
+    INSERT INTO users (id, email, username, password_hash, display_name, is_admin)
+    VALUES (@id, @email, @username, @password_hash, @display_name, @is_admin)
+  `).run({ ...data, is_admin: data.is_admin ?? 0 });
 }
 
 // ==================== USER TEAMS ====================
@@ -285,6 +312,62 @@ export function updateOfferStatus(id: number, status: string) {
 
 export function getOfferById(id: number): TransferOffer | undefined {
     return getDb().prepare('SELECT * FROM transfer_offers WHERE id = ?').get(id) as TransferOffer | undefined;
+}
+
+// ==================== SQUAD LINEUPS ====================
+export interface SquadLineup {
+  id: number;
+  team_id: number;
+  oh1_player_id: number | null;
+  mb1_player_id: number | null;
+  opp_player_id: number | null;
+  s_player_id: number | null;
+  mb2_player_id: number | null;
+  oh2_player_id: number | null;
+  l_player_id: number | null;
+  updated_at: string;
+}
+
+export function getSquadLineup(teamId: number): SquadLineup | undefined {
+  return getDb().prepare('SELECT * FROM squad_lineups WHERE team_id = ?').get(teamId) as SquadLineup | undefined;
+}
+
+export function saveSquadLineup(teamId: number, lineup: {
+  oh1: number | null; mb1: number | null; opp: number | null;
+  s: number | null; mb2: number | null; oh2: number | null; l: number | null;
+}) {
+  const db = getDb();
+  const exists = db.prepare('SELECT id FROM squad_lineups WHERE team_id = ?').get(teamId);
+  if (exists) {
+    return db.prepare(`
+      UPDATE squad_lineups SET
+        oh1_player_id = @oh1, mb1_player_id = @mb1, opp_player_id = @opp,
+        s_player_id = @s, mb2_player_id = @mb2, oh2_player_id = @oh2,
+        l_player_id = @l, updated_at = datetime('now')
+      WHERE team_id = @teamId
+    `).run({ ...lineup, teamId });
+  }
+  return db.prepare(`
+    INSERT INTO squad_lineups (team_id, oh1_player_id, mb1_player_id, opp_player_id, s_player_id, mb2_player_id, oh2_player_id, l_player_id)
+    VALUES (@teamId, @oh1, @mb1, @opp, @s, @mb2, @oh2, @l)
+  `).run({ ...lineup, teamId });
+}
+
+export function getSquadLineupWithPlayers(teamId: number): Record<string, Player | null> {
+  const lineup = getSquadLineup(teamId);
+  const empty = { OH1: null, MB1: null, OPP: null, S: null, MB2: null, OH2: null, L: null };
+  if (!lineup) return empty;
+
+  const posMap: Record<string, number | null> = {
+    OH1: lineup.oh1_player_id, MB1: lineup.mb1_player_id, OPP: lineup.opp_player_id,
+    S: lineup.s_player_id, MB2: lineup.mb2_player_id, OH2: lineup.oh2_player_id, L: lineup.l_player_id,
+  };
+
+  const result: Record<string, Player | null> = {};
+  for (const [pos, playerId] of Object.entries(posMap)) {
+    result[pos] = playerId ? (getPlayerById(playerId) ?? null) : null;
+  }
+  return result;
 }
 
 // ==================== DATA SUMMARY ====================

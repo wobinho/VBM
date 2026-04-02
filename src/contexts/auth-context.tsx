@@ -14,6 +14,7 @@ interface AuthContextType {
     register: (data: { email: string; password: string; username: string; displayName: string }) => Promise<{ success: boolean; error?: string }>;
     logout: () => Promise<void>;
     createTeam: (teamName: string, leagueId: number) => Promise<{ success: boolean; error?: string }>;
+    joinTeam: (teamId: number) => Promise<{ success: boolean; error?: string }>;
     refresh: () => Promise<void>;
 }
 
@@ -72,8 +73,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: data.error };
     };
 
+    const joinTeam = async (teamId: number) => {
+        const res = await fetch('/api/teams/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId }) });
+        const data = await res.json();
+        if (data.success) { setTeam(data.team); return { success: true }; }
+        return { success: false, error: data.error };
+    };
+
     return (
-        <AuthContext.Provider value={{ user, team, isAdmin, availableLeagues, loading, login, register, logout, createTeam, refresh }}>
+        <AuthContext.Provider value={{ user, team, isAdmin, availableLeagues, loading, login, register, logout, createTeam, joinTeam, refresh }}>
             {children}
         </AuthContext.Provider>
     );

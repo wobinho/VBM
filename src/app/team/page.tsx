@@ -63,42 +63,44 @@ export default function TeamPage() {
                 <p className="text-sm text-gray-400">{players.length} players total</p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
+            <div className="flex flex-col gap-3">
+                <div className="relative">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                     <input
                         type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500/50 transition-all"
+                        className="w-full pl-10 pr-4 py-2 md:py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500/50 transition-all"
                     />
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                    <SlidersHorizontal size={14} className="text-gray-500" />
-                    {positions.map(pos => (
-                        <button key={pos} onClick={() => setPosFilter(pos)}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${posFilter === pos ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'}`}>
-                            {pos === 'all' ? 'All' : pos.split(' ').map(w => w[0]).join('')}
-                        </button>
-                    ))}
+                <div className="flex flex-wrap items-center gap-2">
+                    <SlidersHorizontal size={14} className="text-gray-500 shrink-0" />
+                    <div className="flex flex-wrap gap-1.5">
+                        {positions.map(pos => (
+                            <button key={pos} onClick={() => setPosFilter(pos)}
+                                className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-medium transition-all ${posFilter === pos ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'}`}>
+                                {pos === 'all' ? 'All' : pos.split(' ').map(w => w[0]).join('')}
+                            </button>
+                        ))}
+                    </div>
+
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                        className="px-2 md:px-3 py-1.5 md:py-2 bg-white/5 border border-white/10 rounded-xl text-xs md:text-sm text-gray-300 focus:outline-none ml-auto">
+                        <option value="overall">Overall</option>
+                        <option value="attack">Attack</option>
+                        <option value="defense">Defense</option>
+                        <option value="serve">Serve</option>
+                        <option value="player_value">Value</option>
+                        <option value="age">Age</option>
+                    </select>
+
+                    <button onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+                        className="p-1.5 md:p-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all shrink-0">
+                        <ArrowUpDown size={14} />
+                    </button>
                 </div>
-
-                <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                    className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-gray-300 focus:outline-none">
-                    <option value="overall">Overall</option>
-                    <option value="attack">Attack</option>
-                    <option value="defense">Defense</option>
-                    <option value="serve">Serve</option>
-                    <option value="player_value">Value</option>
-                    <option value="age">Age</option>
-                </select>
-
-                <button onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-                    className="p-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all">
-                    <ArrowUpDown size={14} />
-                </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
                 {filtered.map(player => (
                     <PlayerCard key={player.id} player={player} onClick={() => setSelectedPlayer(player)} />
                 ))}

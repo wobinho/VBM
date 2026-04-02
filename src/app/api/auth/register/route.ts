@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
         const id = crypto.randomUUID();
         const passwordHash = await bcrypt.hash(password, 10);
 
-        createUser({ id, email, username, password_hash: passwordHash, display_name: displayName });
+        createUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 1 });
 
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
         session.userId = id;

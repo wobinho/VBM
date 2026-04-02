@@ -33,15 +33,15 @@ function StatBar({ label, value, color }: { label: string; value: number; color:
     };
     const numColor = value >= 80 ? 'text-emerald-400' : value >= 60 ? 'text-amber-400' : 'text-red-400';
     return (
-        <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400 w-20 shrink-0">{label}</span>
-            <div className="flex-1 h-[5px] bg-white/5 rounded-full overflow-hidden">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-[10px] sm:text-[11px] text-gray-400 w-16 sm:w-20 shrink-0">{label}</span>
+            <div className="flex-1 h-1 sm:h-[5px] bg-white/5 rounded-full overflow-hidden">
                 <div
                     className={`h-full rounded-full ${colorMap[color] || colorMap.amber}`}
                     style={{ width: `${value}%` }}
                 />
             </div>
-            <span className={`text-[11px] font-bold w-5 text-right ${numColor}`}>{value}</span>
+            <span className={`text-[10px] sm:text-[11px] font-bold w-5 text-right ${numColor}`}>{value}</span>
         </div>
     );
 }
@@ -105,20 +105,24 @@ function TeamLogo({ teamId }: { teamId?: number | null }) {
 function CountryFlag({ countryCode }: { countryCode: string }) {
     const [failed, setFailed] = useState(false);
 
-    if (failed) {
-        return <span className="text-2xl leading-none">🌍</span>;
-    }
-
     // Convert country name to code if needed
     const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
-    const src = `/assets/flags/${code}.svg`;
+
+    if (failed) {
+        return (
+            <div className="w-10 h-7 rounded overflow-hidden shadow-md bg-gray-700 flex items-center justify-center flex-shrink-0">
+                <span className="text-[9px] font-bold text-white uppercase">{code}</span>
+            </div>
+        );
+    }
 
     return (
-        <div className="w-10 h-7 rounded overflow-hidden shadow-md">
+        <div className="w-10 h-7 rounded overflow-hidden shadow-md flex-shrink-0">
             <img
-                src={src}
+                src={`/assets/flags/${code}.svg`}
                 alt={getCountryName(code)}
                 className="w-full h-full object-cover"
+                loading="lazy"
                 onError={() => setFailed(true)}
             />
         </div>
@@ -132,15 +136,15 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
         // Handle both country codes and country names
         const countryDisplay = player.country.length > 2 ? player.country : getCountryName(player.country);
         return (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:border-amber-500/30 hover:bg-white/[0.08] transition-all cursor-pointer group" onClick={onClick}>
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center text-sm font-bold text-amber-400">
+            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl bg-white/5 border border-white/5 hover:border-amber-500/30 hover:bg-white/[0.08] transition-all cursor-pointer group" onClick={onClick}>
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center text-xs sm:text-sm font-bold text-amber-400 shrink-0">
                     {player.jersey_number}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate group-hover:text-amber-400 transition-colors">{player.player_name}</p>
-                    <p className="text-xs text-gray-500">{getPositionAbbrev(player.position)} • {countryDisplay}</p>
+                    <p className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-amber-400 transition-colors">{player.player_name}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">{getPositionAbbrev(player.position)} • {countryDisplay}</p>
                 </div>
-                <div className={`text-lg font-black ${player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                <div className={`text-base sm:text-lg font-black shrink-0 ${player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
                     {player.overall}
                 </div>
             </div>
@@ -152,70 +156,70 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
 
     return (
         <div
-            className={`relative w-full rounded-2xl overflow-hidden border border-white/8 cursor-pointer hover:border-white/20 hover:scale-[1.02] transition-all duration-200 shadow-xl ${accent.glow}`}
+            className={`relative w-full rounded-2xl overflow-hidden border border-white/8 cursor-pointer hover:border-white/20 hover:shadow-lg transition-all duration-200 shadow-xl ${accent.glow}`}
             style={{ background: '#0d1117' }}
             onClick={onClick}
         >
             {/* ── HEADER ZONE ── */}
-            <div className="relative h-[200px] overflow-hidden" style={{ background: 'linear-gradient(160deg, #111827 0%, #0d1117 100%)' }}>
+            <div className="relative h-40 sm:h-48 md:h-52 overflow-hidden" style={{ background: 'linear-gradient(160deg, #111827 0%, #0d1117 100%)' }}>
                 {/* Team logo — top left, allowed to overlap other elements */}
-                <div className="absolute top-2 left-2 z-20">
+                <div className="absolute top-1.5 left-1.5 z-20">
                     <TeamLogo teamId={player.team_id} />
                 </div>
 
                 {/* Overall rating — top center */}
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 text-center z-10">
-                    <div className={`text-5xl font-black leading-none ${overallColor}`} style={{ textShadow: '0 0 20px currentColor' }}>
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 text-center z-10">
+                    <div className={`text-4xl sm:text-5xl font-black leading-none ${overallColor}`} style={{ textShadow: '0 0 20px currentColor' }}>
                         {player.overall}
                     </div>
-                    <div className="text-[9px] font-semibold tracking-[0.2em] text-gray-500 uppercase mt-0.5">Overall</div>
+                    <div className="text-[8px] sm:text-[9px] font-semibold tracking-[0.2em] text-gray-500 uppercase mt-0.5">Overall</div>
                 </div>
 
                 {/* Country flag — top right */}
-                <div className="absolute top-3 right-3 z-10">
+                <div className="absolute top-2 right-2 z-10">
                     <CountryFlag countryCode={player.country} />
                 </div>
 
                 {/* Player photo */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[140px] h-[160px]">
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-32 sm:w-32 sm:h-40 md:w-36 md:h-44">
                     <PlayerPhoto playerId={player.id} />
                 </div>
 
                 {/* Bottom gradient fade */}
-                <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
+                <div className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
             </div>
 
             {/* ── PLAYER IDENTITY ── */}
-            <div className="px-4 pt-3 pb-2 text-center">
-                <h3 className="text-[15px] font-bold text-white leading-tight truncate">{player.player_name}</h3>
-                <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${accent.badge}`}>
+            <div className="px-3 sm:px-4 pt-2 sm:pt-3 pb-1.5 sm:pb-2 text-center">
+                <h3 className="text-sm sm:text-[15px] font-bold text-white leading-tight truncate">{player.player_name}</h3>
+                <div className="flex items-center justify-center gap-1 sm:gap-2 mt-1 sm:mt-1.5 flex-wrap">
+                    <span className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold border ${accent.badge}`}>
                         {getPositionAbbrev(player.position)}
                     </span>
-                    <span className="text-[11px] text-gray-400">#{player.jersey_number}</span>
-                    <span className="text-[11px] text-gray-500">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
+                    <span className="text-[10px] sm:text-[11px] text-gray-400">#{player.jersey_number}</span>
+                    <span className="text-[10px] sm:text-[11px] text-gray-500 hidden sm:inline">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
                 </div>
             </div>
 
             {/* ── INFO GRID ── */}
-            <div className="px-3 pb-3">
-                <div className="grid grid-cols-3 gap-1.5 mb-3">
-                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="text-[12px] font-bold text-white leading-tight">{formatMoney(player.player_value)}</div>
-                        <div className="text-[9px] text-gray-500 mt-0.5">Value</div>
+            <div className="px-2 sm:px-3 pb-2 sm:pb-3">
+                <div className="grid grid-cols-3 gap-1 sm:gap-1.5 mb-2 sm:mb-3">
+                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{formatMoney(player.player_value)}</div>
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Value</div>
                     </div>
-                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="text-[12px] font-bold text-white leading-tight">{player.age}</div>
-                        <div className="text-[9px] text-gray-500 mt-0.5">Age</div>
+                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{player.age}</div>
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Age</div>
                     </div>
-                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className={`text-[12px] font-bold leading-tight ${overallColor}`}>{player.overall}</div>
-                        <div className="text-[9px] text-gray-500 mt-0.5">OVR</div>
+                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <div className={`text-[11px] sm:text-[12px] font-bold leading-tight ${overallColor}`}>{player.overall}</div>
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">OVR</div>
                     </div>
                 </div>
 
                 {/* ── STAT BARS ── */}
-                <div className="space-y-[6px]">
+                <div className="space-y-1 sm:space-y-[6px]">
                     <StatBar label="Attack" value={player.attack} color="red" />
                     <StatBar label="Defense" value={player.defense} color="blue" />
                     <StatBar label="Serve" value={player.serve} color="green" />

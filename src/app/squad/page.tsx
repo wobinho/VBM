@@ -192,12 +192,20 @@ export default function SquadPage() {
 
     useEffect(() => {
         if (team) {
-            fetch(`/api/players?teamId=${team.id}`).then(r => r.json()).then((data: Player[]) => {
+            Promise.all([
+                fetch(`/api/players?teamId=${team.id}`).then(r => r.json()),
+                fetch(`/api/squad?teamId=${team.id}`).then(r => r.json()),
+            ]).then(([data, savedLineup]: [Player[], Record<string, Player | null>]) => {
                 setPlayers(data);
                 const initial: Record<string, Player | null> = {};
-                POSITIONS.forEach(p => { initial[p.key] = null; });
-                setBench(data);
+                const inLineup = new Set<number>();
+                POSITIONS.forEach(pos => {
+                    const saved = savedLineup[pos.key] ?? null;
+                    initial[pos.key] = saved;
+                    if (saved) inLineup.add(saved.id);
+                });
                 setLineup(initial);
+                setBench(data.filter((p: Player) => !inLineup.has(p.id)));
             });
         }
     }, [team]);
@@ -251,7 +259,19 @@ export default function SquadPage() {
 
     const lineupStrength = Object.values(lineup).filter(Boolean).reduce((sum, p) => sum + (p?.overall || 0), 0);
     const lineupCount = Object.values(lineup).filter(Boolean).length;
-    const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+    const handleSave = async () => {
+        if (!team) return;
+        const posKeyMap: Record<string, string> = { OH1: 'oh1', MB1: 'mb1', OPP: 'opp', S: 's', MB2: 'mb2', OH2: 'oh2', L: 'l' };
+        const lineupData: Record<string, number | null> = {};
+        POSITIONS.forEach(pos => { lineupData[posKeyMap[pos.key]] = lineup[pos.key]?.id ?? null; });
+        await fetch('/api/squad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId: team.id, lineup: lineupData }),
+        });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+    };
 
     return (
         <div className="space-y-6">

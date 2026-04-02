@@ -44,9 +44,16 @@ Object.entries(COUNTRY_CODES).forEach(([code, name]) => {
   COUNTRY_NAME_TO_CODE[name] = code;
 });
 
-// Get country code from country name
+// Get country code from country name (case-insensitive)
 export function getCountryCode(countryName: string): string {
-  return COUNTRY_NAME_TO_CODE[countryName] || 'un'; // 'un' as fallback for unknown countries
+  // Try exact match first
+  if (COUNTRY_NAME_TO_CODE[countryName]) return COUNTRY_NAME_TO_CODE[countryName];
+
+  // Try title-cased match (capitalize first letter, lowercase rest)
+  const titled = countryName.charAt(0).toUpperCase() + countryName.slice(1).toLowerCase();
+  if (COUNTRY_NAME_TO_CODE[titled]) return COUNTRY_NAME_TO_CODE[titled];
+
+  return 'un'; // 'un' as fallback for unknown countries
 }
 
 // Get country name from country code

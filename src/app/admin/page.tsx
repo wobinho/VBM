@@ -87,7 +87,6 @@ const STAT_GROUPS = [
       { key: 'concentration', label: 'Concentration' },
       { key: 'pressure_handling', label: 'Pressure Handling' },
       { key: 'experience', label: 'Experience' },
-      { key: 'potential', label: 'Potential' },
       { key: 'consistency', label: 'Consistency' },
     ],
   },
@@ -164,7 +163,7 @@ function renderCellContent(tableName: string, columnName: string, value: any, sh
   return String(value ?? '—');
 }
 
-const DEFAULT_QUICK_ADD = { player_name: '', team_id: '', position: '', age: '', country: '', jersey_number: '' };
+const DEFAULT_QUICK_ADD = { player_id: '', player_name: '', team_id: '', position: '', age: '', country: '', jersey_number: '' };
 
 export default function AdminPage() {
   const { isAdmin } = useAuth();
@@ -397,7 +396,7 @@ export default function AdminPage() {
 
   // ── Quick Add Player ──────────────────────────────────────────────────────
   const handleQuickAddPlayer = async () => {
-    const { player_name, position, age, country, jersey_number } = quickAdd;
+    const { player_id, player_name, position, age, country, jersey_number } = quickAdd;
     if (!player_name || !position || !age || !country || !jersey_number) {
       alert('Please fill in all required fields (name, position, age, country, jersey number)');
       return;
@@ -407,6 +406,7 @@ export default function AdminPage() {
     const jerseyNum = parseInt(jersey_number);
     const overall = 50;
     const payload = {
+      ...(player_id ? { id: parseInt(player_id) } : {}),
       player_name,
       team_id: quickAdd.team_id ? parseInt(quickAdd.team_id) : null,
       position,
@@ -692,7 +692,10 @@ export default function AdminPage() {
                                       ) : (selectedTable === 'leagues' || selectedTable === 'teams') && col.name === 'nation' && row[col.name] ? (
                                         <div className="flex items-center gap-2">
                                           <div className="w-6 h-4 rounded overflow-hidden">
-                                            <img src={`/assets/flags/${row[col.name].toLowerCase()}.svg`} alt={row[col.name]} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                                            {(() => {
+                                              const code = row[col.name].length > 2 ? getCountryCode(row[col.name]) : row[col.name].toLowerCase();
+                                              return <img src={`/assets/flags/${code}.svg`} alt={row[col.name]} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />;
+                                            })()}
                                           </div>
                                           <span>{getCountryName(row[col.name])}</span>
                                         </div>
@@ -754,6 +757,17 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Player ID (Optional)</label>
+            <input
+              type="number"
+              value={quickAdd.player_id}
+              onChange={e => setQuickAdd({ ...quickAdd, player_id: e.target.value })}
+              placeholder="Auto-assigned if empty"
+              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-all"
+            />
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Player Name *</label>
             <input
@@ -956,6 +970,18 @@ export default function AdminPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Potential — separate, not counted in overall */}
+            <div className="p-4 rounded-xl bg-white/[0.03] border border-violet-500/10">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">
+                Potential <span className="text-gray-500 normal-case font-normal">(not counted in overall)</span>
+              </h3>
+              <StatSlider
+                label="Potential"
+                value={editorStats.potential ?? 50}
+                onChange={v => setEditorStats(prev => ({ ...prev, potential: v }))}
+              />
             </div>
 
             {/* Save bar */}
