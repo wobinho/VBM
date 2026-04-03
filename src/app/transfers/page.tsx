@@ -485,7 +485,7 @@ export default function TransfersPage() {
         fetch('/api/offers?type=received').then(r => r.json()).then(setReceivedOffers).catch(() => { });
         fetch('/api/offers?type=sent').then(r => r.json()).then(setSentOffers).catch(() => { });
         if (team) {
-            fetch(`/api/teams/${team.id}`).then(r => r.json()).then(d => {
+            fetch(`/api/teams/${team.id}?t=${Date.now()}`).then(r => r.json()).then(d => {
                 if (d?.team_money !== undefined) setTeamMoney(d.team_money);
             });
         }
@@ -564,6 +564,7 @@ export default function TransfersPage() {
         const currentTeam = await fetch(`/api/teams/${team.id}`).then(r => r.json());
         const currentMoney = currentTeam?.team_money ?? teamMoney;
         const totalDeduction = agreedFee + bonus;
+        const nextMoney = currentMoney - totalDeduction;
 
         await Promise.all([
             // Move player to our team
@@ -576,7 +577,10 @@ export default function TransfersPage() {
             fetch(`/api/teams/${team.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ team_money: currentMoney - totalDeduction }),
+                body: JSON.stringify({ team_money: nextMoney }),
+            }).then(() => {
+                // Update state manually for immediate feedback
+                setTeamMoney(nextMoney);
             }),
         ]);
 
@@ -592,10 +596,10 @@ export default function TransfersPage() {
             }
         }
 
-        // Refresh data
+        // Refresh data (with no-cache)
         const [updatedTeam, updatedPlayers] = await Promise.all([
-            fetch(`/api/teams/${team.id}`).then(r => r.json()),
-            fetch('/api/players').then(r => r.json()),
+            fetch(`/api/teams/${team.id}?t=${Date.now()}`).then(r => r.json()),
+            fetch('/api/players?t=' + Date.now()).then(r => r.json()),
         ]);
         if (updatedTeam?.team_money !== undefined) setTeamMoney(updatedTeam.team_money);
         setAllPlayers(updatedPlayers);

@@ -8,6 +8,7 @@ interface Player {
     jersey_number: number; overall: number; height?: number;
     attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
     player_value: number; team_name?: string; team_id?: number | null;
+    [key: string]: any;
 }
 
 function getPositionAbbrev(pos: string) {

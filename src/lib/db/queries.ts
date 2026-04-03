@@ -129,12 +129,12 @@ export function getTeamsByLeague(leagueId: number): Team[] {
 }
 
 export function updateTeamMoney(teamId: number, amount: number) {
-    return getDb().prepare("UPDATE teams SET team_money = ?, updated_at = datetime('now') WHERE id = ?").run(amount, teamId);
+    return getDb().prepare("UPDATE teams SET team_money = ? WHERE id = ?").run(amount, teamId);
 }
 
 export function updateTeamStats(teamId: number, data: Partial<Team>) {
     const fields = Object.keys(data).filter(k => k !== 'id').map(k => `${k} = @${k}`).join(', ');
-    return getDb().prepare(`UPDATE teams SET ${fields}, updated_at = datetime('now') WHERE id = @id`).run({ ...data, id: teamId });
+    return getDb().prepare(`UPDATE teams SET ${fields} WHERE id = @id`).run({ ...data, id: teamId });
 }
 
 // ==================== PLAYERS ====================

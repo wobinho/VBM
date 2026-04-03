@@ -466,7 +466,7 @@ export default function OfficePage() {
         fetch(`/api/players?teamId=${team.id}`)
             .then(r => r.json())
             .then((data: Player[]) => setPlayers(data));
-        fetch(`/api/teams/${team.id}`)
+        fetch(`/api/teams/${team.id}?t=${Date.now()}`)
             .then(r => r.json())
             .then((data) => {
                 if (data?.team_money !== undefined) setTeamMoney(data.team_money);
@@ -479,9 +479,10 @@ export default function OfficePage() {
     async function handleSigned(playerId: number, years: number, wage: number, bonus: number) {
         setNegotiating(null);
 
-        // Fetch current team money to ensure we have the latest value
-        const currentTeam = await fetch(`/api/teams/${team!.id}`).then(r => r.json());
+        // Fetch current team money to ensure we have the latest value (no-cache)
+        const currentTeam = await fetch(`/api/teams/${team!.id}?t=${Date.now()}`).then(r => r.json());
         const currentMoney = currentTeam?.team_money ?? teamMoney ?? 0;
+        const nextMoney = currentMoney - bonus;
 
         await Promise.all([
             fetch(`/api/players/${playerId}`, {
@@ -493,7 +494,10 @@ export default function OfficePage() {
                 ? fetch(`/api/teams/${team!.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ team_money: currentMoney - bonus }),
+                    body: JSON.stringify({ team_money: nextMoney }),
+                }).then(() => {
+                    // Update state manually for immediate feedback
+                    setTeamMoney(nextMoney);
                 })
                 : Promise.resolve(),
         ]);
