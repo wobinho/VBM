@@ -360,43 +360,69 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         </div>
 
                         {/* New wage */}
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <p className="text-xs font-semibold text-white">Monthly Wage</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">New monthly salary offer</p>
+                                    <p className="text-xs font-bold text-white">Monthly Wage</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">New monthly salary offer</p>
                                 </div>
-                                <DollarSign size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                <DollarSign size={14} className="text-amber-500" />
                             </div>
-                            <Stepper
-                                label="Wage / mo"
-                                value={wage}
-                                min={500}
-                                max={50_000}
-                                step={500}
-                                format={v => formatMoney(v)}
-                                onChange={setWage}
-                            />
+                            <div className="relative group flex items-center gap-3">
+                                <button onClick={() => setWage(Math.max(500, wage - 500))} disabled={wage <= 500}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Minus size={14} />
+                                </button>
+                                <div className="relative flex-1 group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
+                                    <input 
+                                        type="text" 
+                                        value={wage.toLocaleString()}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setWage(Math.max(0, parseInt(raw) || 0));
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                    />
+                                </div>
+                                <button onClick={() => setWage(Math.min(100000, wage + 500))} disabled={wage >= 100000}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Signing bonus */}
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <p className="text-xs font-semibold text-white">Signing Bonus</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">One-time payment deducted from club funds</p>
+                                    <p className="text-xs font-bold text-white">Signing Bonus</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">One-time payment from funds</p>
                                 </div>
-                                <Star size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                <Star size={14} className="text-amber-500" />
                             </div>
-                            <Stepper
-                                label="Bonus"
-                                value={bonus}
-                                min={0}
-                                max={Math.min(500_000, teamMoney)}
-                                step={5_000}
-                                format={v => v === 0 ? 'None' : formatMoney(v)}
-                                onChange={setBonus}
-                            />
+                            <div className="relative group flex items-center gap-3">
+                                <button onClick={() => setBonus(Math.max(0, bonus - 5000))} disabled={bonus <= 0}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Minus size={14} />
+                                </button>
+                                <div className="relative flex-1 group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
+                                    <input 
+                                        type="text" 
+                                        value={bonus.toLocaleString()}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setBonus(Math.max(0, parseInt(raw) || 0));
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                    />
+                                </div>
+                                <button onClick={() => setBonus(Math.min(teamMoney, bonus + 5000))} disabled={bonus >= teamMoney}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                             {bonus > 0 && !canAffordBonus && (
                                 <p className="text-[10px] text-red-400 mt-2">Insufficient club funds for this bonus.</p>
                             )}

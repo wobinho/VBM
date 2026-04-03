@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
 import PlayerCard from '@/components/player-card';
 import PlayerModal from '@/components/player-modal';
 import {
-    Search, ShoppingCart, Inbox, Send, DollarSign, Filter,
+    Search, ShoppingCart, ShoppingBag, Inbox, Send, DollarSign, Filter,
     ChevronDown, X, Bookmark, FileSignature, CheckCircle,
     Plus, Minus, AlertTriangle, Star, Calendar,
 } from 'lucide-react';
@@ -51,6 +52,42 @@ function calcTransferFee(playerValue: number, contractYears: number): number {
     // 1 yr = 0.85x, 2 = 1.0x, 3 = 1.15x, 4 = 1.30x, 5 = 1.45x
     const multiplier = 0.7 + contractYears * 0.15;
     return Math.round(playerValue * multiplier / 1000) * 1000;
+}
+
+// ─── Photo/Logo Helpers ──────────────────────────────────────────────────────
+
+function PlayerPhoto({ playerId, className = "" }: { playerId: number; className?: string }) {
+    const [useFallback, setUseFallback] = useState(false);
+    const src = useFallback ? '/assets/players/default.png' : `/assets/players/${playerId}.png`;
+    return (
+        <div className={`relative overflow-hidden ${className}`}>
+            <Image
+                src={src}
+                alt="Player"
+                fill
+                unoptimized
+                className="object-contain object-bottom"
+                onError={() => setUseFallback(true)}
+            />
+        </div>
+    );
+}
+
+function TeamLogo({ teamId, className = "" }: { teamId?: number | null; className?: string }) {
+    const [failed, setFailed] = useState(false);
+    if (!teamId || failed) return null;
+    return (
+        <div className={`relative ${className}`}>
+            <Image
+                src={`/assets/teams/${teamId}.png`}
+                alt="Team"
+                fill
+                unoptimized
+                className="object-contain"
+                onError={() => setFailed(true)}
+            />
+        </div>
+    );
 }
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
@@ -148,17 +185,36 @@ function ClubNegotiationModal({ player, teamMoney, onClose, onAccepted }: ClubNe
                 onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
-                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                <div className="relative px-6 pt-8 pb-5 border-b border-white/10"
+                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(249,115,22,0.05) 100%)' }}>
                     <button onClick={onClose}
-                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer z-10">
                         <X size={14} />
                     </button>
-                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-2">Club Negotiation</p>
-                    <h2 className="text-lg font-bold text-white">{player.player_name}</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        {isFreeAgent ? 'Free Agent — no transfer fee required' : `${player.team_name ?? 'Unknown Club'} · ${player.contract_years}yr contract`}
-                    </p>
+
+                    <div className="flex items-center gap-5">
+                        <div className="relative shrink-0">
+                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 overflow-hidden shadow-2xl">
+                                <PlayerPhoto playerId={player.id} className="w-full h-full" />
+                            </div>
+                            {!isFreeAgent && (
+                                <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-lg bg-gray-900 border border-white/20 p-1 shadow-xl">
+                                    <TeamLogo teamId={player.team_id} className="w-full h-full" />
+                                </div>
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                <ShoppingBag size={10} /> Club Negotiation
+                            </p>
+                            <h2 className="text-xl font-black text-white truncate leading-tight">{player.player_name}</h2>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-gray-400 font-medium">{player.position}</span>
+                                <span className="w-1 h-1 rounded-full bg-gray-700" />
+                                <span className="text-xs text-gray-500 truncate">{isFreeAgent ? 'Free Agent' : player.team_name}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {isFreeAgent ? (
@@ -198,17 +254,53 @@ function ClubNegotiationModal({ player, teamMoney, onClose, onAccepted }: ClubNe
                             <PatienceDots patience={patience} />
                         </div>
 
-                        {/* Fee stepper */}
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
+                        {/* Fee Input */}
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <p className="text-xs font-semibold text-white">Transfer Fee</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">Your offer to the club</p>
+                                    <p className="text-xs font-bold text-white">Transfer Fee</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">Your offer to the club</p>
                                 </div>
-                                <DollarSign size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                <div className="px-2 py-1 rounded bg-white/5 border border-white/5">
+                                    <DollarSign size={12} className="text-amber-500" />
+                                </div>
                             </div>
-                            <Stepper label="Fee" value={fee} min={minFee} max={maxFee} step={10_000}
-                                format={v => formatMoney(v)} onChange={setFee} />
+                            
+                            <div className="relative group">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-amber-500 group-focus-within:text-amber-400 transition-colors">$</span>
+                                <input 
+                                    type="text" 
+                                    value={fee.toLocaleString()}
+                                    onChange={(e) => {
+                                        const raw = e.target.value.replace(/[^0-9]/g, '');
+                                        setFee(Math.max(0, parseInt(raw) || 0));
+                                    }}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-9 pr-24 py-3.5 text-xl font-bold text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                />
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setFee(Math.max(0, fee - 50000))}
+                                        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                                    >
+                                        <Minus size={12} />
+                                    </button>
+                                    <button 
+                                        onClick={() => setFee(fee + 50000)}
+                                        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                                    >
+                                        <Plus size={12} />
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-end mt-3 px-1">
+                                <button 
+                                    onClick={() => setFee(suggestedFee)} 
+                                    className="text-[10px] font-bold text-amber-500/70 hover:text-amber-400 uppercase tracking-widest transition-colors"
+                                >
+                                    Reset to Asking Price
+                                </button>
+                            </div>
                             {!canAfford && (
                                 <p className="text-[10px] text-red-400 mt-2">Insufficient club funds for this fee.</p>
                             )}
@@ -352,28 +444,68 @@ function ContractSigningModal({ player, transferFee, teamMoney, onClose, onSigne
                                 format={v => `${v} yr${v !== 1 ? 's' : ''}`} onChange={setYears} />
                         </div>
 
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <p className="text-xs font-semibold text-white">Monthly Wage</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">New monthly salary offer</p>
+                                    <p className="text-xs font-bold text-white">Monthly Wage</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">New monthly salary offer</p>
                                 </div>
-                                <DollarSign size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                <DollarSign size={14} className="text-amber-500" />
                             </div>
-                            <Stepper label="Wage / mo" value={wage} min={500} max={50_000} step={500}
-                                format={v => formatMoney(v)} onChange={setWage} />
+                            <div className="relative group flex items-center gap-3">
+                                <button onClick={() => setWage(Math.max(500, wage - 500))} disabled={wage <= 500}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Minus size={14} />
+                                </button>
+                                <div className="relative flex-1 group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
+                                    <input 
+                                        type="text" 
+                                        value={wage.toLocaleString()}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setWage(Math.max(0, parseInt(raw) || 0));
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                    />
+                                </div>
+                                <button onClick={() => setWage(Math.min(100000, wage + 500))} disabled={wage >= 100000}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <p className="text-xs font-semibold text-white">Signing Bonus</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">One-time payment from club funds</p>
+                                    <p className="text-xs font-bold text-white">Signing Bonus</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">One-time payment from funds</p>
                                 </div>
-                                <Star size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                <Star size={14} className="text-amber-500" />
                             </div>
-                            <Stepper label="Bonus" value={bonus} min={0} max={Math.min(500_000, fundsAfterFee)} step={5_000}
-                                format={v => v === 0 ? 'None' : formatMoney(v)} onChange={setBonus} />
+                            <div className="relative group flex items-center gap-3">
+                                <button onClick={() => setBonus(Math.max(0, bonus - 5000))} disabled={bonus <= 0}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Minus size={14} />
+                                </button>
+                                <div className="relative flex-1 group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
+                                    <input 
+                                        type="text" 
+                                        value={bonus.toLocaleString()}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setBonus(Math.max(0, parseInt(raw) || 0));
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                    />
+                                </div>
+                                <button onClick={() => setBonus(Math.min(fundsAfterFee, bonus + 5000))} disabled={bonus >= fundsAfterFee}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                             {bonus > 0 && !canAffordBonus && (
                                 <p className="text-[10px] text-red-400 mt-2">Insufficient funds for this bonus.</p>
                             )}
@@ -786,10 +918,10 @@ export default function TransfersPage() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                             {filtered.slice(0, 60).map(p => (
-                                <PlayerCard key={p.id} player={p}
-                                    onClick={() => setSelectedPlayer(p)}
-                                    onSign={handleSignPlayer}
-                                    onShortlist={handleShortlist} />
+                                <PlayerCard key={p.id} player={p as any}
+                                    onClick={() => setSelectedPlayer(p as any)}
+                                    onSign={handleSignPlayer as any}
+                                    onShortlist={handleShortlist as any} />
                             ))}
                         </div>
 
@@ -823,10 +955,10 @@ export default function TransfersPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                                 {shortlist.map(p => (
                                     <div key={p.id} className="relative">
-                                        <PlayerCard player={p}
-                                            onClick={() => setSelectedPlayer(p)}
-                                            onSign={handleSignPlayer}
-                                            onShortlist={() => removeFromShortlist(p.id)}
+                                        <PlayerCard player={p as any}
+                                            onClick={() => setSelectedPlayer(p as any)}
+                                            onSign={handleSignPlayer as any}
+                                            onShortlist={() => removeFromShortlist(p.id) as any}
                                             shortlistLabel="Remove" />
                                     </div>
                                 ))}
