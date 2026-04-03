@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
-import { getSquadLineupWithPlayers, saveSquadLineup } from '@/lib/db/queries';
+import { getSquadLineupWithPlayers, saveSquadLineup, getUserTeam } from '@/lib/db/queries';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-    if (!session.teamId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
     const { teamId, lineup } = body as {
@@ -22,7 +22,9 @@ export async function POST(req: NextRequest) {
         lineup: { oh1: number | null; mb1: number | null; opp: number | null; s: number | null; mb2: number | null; oh2: number | null; l: number | null };
     };
 
-    if (teamId !== session.teamId) {
+    // Check if user owns this team
+    const userTeam = getUserTeam(session.userId);
+    if (!userTeam || userTeam.team_id !== teamId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

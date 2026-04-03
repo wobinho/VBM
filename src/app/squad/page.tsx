@@ -12,7 +12,8 @@ interface Player {
     contract_years?: number; monthly_wage?: number; player_value?: number; speed?: number; agility?: number;
     strength?: number; endurance?: number; height?: number; leadership?: number; teamwork?: number;
     concentration?: number; pressure_handling?: number; potential?: number; experience?: number; consistency?: number;
-    team_id?: number;
+    jump_serve?: number; float_serve?: number; spike_power?: number; spike_accuracy?: number;
+    block_timing?: number; dig_technique?: number; team_id?: number;
 }
 
 const POSITIONS = [
@@ -264,13 +265,21 @@ export default function SquadPage() {
         const posKeyMap: Record<string, string> = { OH1: 'oh1', MB1: 'mb1', OPP: 'opp', S: 's', MB2: 'mb2', OH2: 'oh2', L: 'l' };
         const lineupData: Record<string, number | null> = {};
         POSITIONS.forEach(pos => { lineupData[posKeyMap[pos.key]] = lineup[pos.key]?.id ?? null; });
-        await fetch('/api/squad', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teamId: team.id, lineup: lineupData }),
-        });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        try {
+            const res = await fetch('/api/squad', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, lineup: lineupData }),
+            });
+            if (!res.ok) {
+                console.error('Save failed:', await res.text());
+                return;
+            }
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (e) {
+            console.error('Save error:', e);
+        }
     };
 
     return (
@@ -352,12 +361,19 @@ export default function SquadPage() {
                         <div className="border-t border-amber-500/20 pt-6 space-y-4">
                             {lineupCount > 0 && (() => {
                                 const pp = Object.values(lineup).filter(Boolean) as Player[];
+                                const attackers = [lineup.OH1, lineup.OPP, lineup.MB1, lineup.MB2].filter(Boolean) as Player[];
+                                const blockers  = [lineup.MB1, lineup.MB2, lineup.OH1, lineup.OH2, lineup.OPP].filter(Boolean) as Player[];
+                                const receivers = [lineup.L, lineup.OH1, lineup.OH2].filter(Boolean) as Player[];
+                                const setterBonus = lineup.S ? lineup.S.setting * 0.04 : 0;
+
+                                const avg = (nums: number[]) => nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : 50;
+
                                 const stats: Record<string, number> = {
-                                    'Attack':  pp.reduce((s, p) => s + p.attack,  0) / lineupCount,
-                                    'Defense': pp.reduce((s, p) => s + p.defense, 0) / lineupCount,
-                                    'Serve':   pp.reduce((s, p) => s + p.serve,   0) / lineupCount,
-                                    'Block':   pp.reduce((s, p) => s + p.block,   0) / lineupCount,
-                                    'Receive': pp.reduce((s, p) => s + p.receive, 0) / lineupCount,
+                                    'Attack':  avg(attackers.map(p => p.attack * 0.4 + (p.spike_power ?? 50) * 0.35 + (p.spike_accuracy ?? 50) * 0.25)) + setterBonus,
+                                    'Defense': avg(pp.map(p => p.defense)),
+                                    'Serve':   avg(pp.map(p => p.serve * 0.5 + (p.jump_serve ?? 50) * 0.3 + (p.float_serve ?? 50) * 0.2)),
+                                    'Block':   avg(blockers.map(p => p.block * 0.5 + (p.block_timing ?? 50) * 0.5)),
+                                    'Receive': avg(receivers.map(p => p.receive * 0.5 + (p.dig_technique ?? 50) * 0.5)),
                                     'Chemistry': 75,
                                 };
                                 return Object.entries(stats).map(([stat, value], idx) => (

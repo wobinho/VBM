@@ -30,7 +30,7 @@ export default function Sidebar() {
                 {mobileOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
 
-            <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gray-900/95 backdrop-blur-xl border-r border-white/10 flex flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+            <aside className={`fixed lg:sticky lg:top-0 lg:self-start inset-y-0 left-0 z-40 w-64 h-screen bg-gray-900/95 backdrop-blur-xl border-r border-white/10 flex flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                 <div className="p-6 border-b border-white/10">
                     <h1 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
                         🏐 Spike Dynasty

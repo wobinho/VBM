@@ -12,7 +12,7 @@ interface Player {
     endurance?: number; height?: number; leadership?: number; teamwork?: number;
     concentration?: number; pressure_handling?: number; jump_serve?: number; float_serve?: number;
     spike_power?: number; spike_accuracy?: number; block_timing?: number; dig_technique?: number;
-    experience?: number; potential?: number; consistency?: number; team_name?: string;
+    experience?: number; potential?: number; consistency?: number; team_name?: string; team_country?: string;
 }
 
 function getPositionAccent(position: string): { badge: string; glow: string; bar: string } {
@@ -146,6 +146,16 @@ function ModalCountryFlag({ countryCode }: { countryCode: string }) {
     );
 }
 
+function TeamCountryFlag({ code }: { code: string }) {
+    const [failed, setFailed] = useState(false);
+    if (failed) return null;
+    return (
+        <div className="w-5 h-3.5 rounded overflow-hidden shrink-0">
+            <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover" onError={() => setFailed(true)} />
+        </div>
+    );
+}
+
 function InfoTile({ label, value, accent }: { label: string; value: string; accent?: string }) {
     return (
         <div className="relative rounded-xl py-2.5 px-2 text-center overflow-hidden border border-white/8"
@@ -245,7 +255,13 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
                 <div className="px-6 pt-4 pb-5 text-center border-b border-white/5">
                     <h2 className="text-2xl font-bold text-white">{player.player_name}</h2>
                     {player.team_name && (
-                        <p className="text-sm text-gray-500 mt-1 mb-2.5">{player.team_name}</p>
+                        <div className="flex items-center justify-center gap-2 mt-1 mb-2.5">
+                            {player.team_country && (() => {
+                                const code = player.team_country!.length > 2 ? getCountryCode(player.team_country!) : player.team_country!.toLowerCase();
+                                return <TeamCountryFlag code={code} />;
+                            })()}
+                            <p className="text-sm text-gray-500">{player.team_name}</p>
+                        </div>
                     )}
                     <div className="flex items-center justify-center gap-3 mt-2.5 flex-wrap">
                         <span className={`px-3 py-1 rounded-md text-sm font-bold border ${accent.badge}`}>

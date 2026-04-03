@@ -156,8 +156,11 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
 
     return (
         <div
-            className={`relative w-full rounded-2xl overflow-hidden border border-white/8 cursor-pointer hover:border-white/20 hover:shadow-lg transition-all duration-200 shadow-xl ${accent.glow}`}
-            style={{ background: '#0d1117' }}
+            className={`relative w-full rounded-2xl overflow-hidden border border-white/8 cursor-pointer hover:border-white/30 hover:shadow-2xl hover:scale-105 transition-all duration-300 shadow-xl ${accent.glow} hover:${accent.glow}`}
+            style={{
+                background: '#0d1117',
+                boxShadow: `0 0 30px ${accent.glow.includes('blue') ? 'rgba(59, 130, 246, 0.2)' : accent.glow.includes('red') ? 'rgba(239, 68, 68, 0.2)' : accent.glow.includes('purple') ? 'rgba(168, 85, 247, 0.2)' : accent.glow.includes('orange') ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`
+            }}
             onClick={onClick}
         >
             {/* ── HEADER ZONE ── */}

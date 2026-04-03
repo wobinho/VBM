@@ -48,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(data.user);
             setTeam(data.team);
             setIsAdmin(data.user?.isAdmin ?? false);
-            if (!data.team) await refresh();
             return { success: true };
         }
         return { success: false, error: data.error };
@@ -76,7 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const joinTeam = async (teamId: number) => {
         const res = await fetch('/api/teams/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId }) });
         const data = await res.json();
-        if (data.success) { setTeam(data.team); return { success: true }; }
+        if (data.success) {
+            setTeam(data.team);
+            await refresh();
+            return { success: true };
+        }
         return { success: false, error: data.error };
     };
 

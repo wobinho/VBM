@@ -61,38 +61,40 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Record', value: teamData ? `${teamData.won}W - ${teamData.lost}L` : '—', icon: Trophy, color: 'amber' },
-          { label: 'Players', value: `${players.length}`, icon: Users, color: 'blue' },
-          { label: 'Avg Overall', value: `${avgOverall}`, icon: Swords, color: 'emerald' },
-          { label: 'Budget', value: teamData ? formatMoney(teamData.team_money) : '—', icon: DollarSign, color: 'purple' },
+          { label: 'Record', value: teamData ? `${teamData.won}W – ${teamData.lost}L` : '—', icon: Trophy, from: 'from-amber-500/15', to: 'to-orange-500/5', border: 'border-amber-500/20', iconColor: 'text-amber-400' },
+          { label: 'Players', value: `${players.length}`, icon: Users, from: 'from-sky-500/15', to: 'to-blue-500/5', border: 'border-sky-500/20', iconColor: 'text-sky-400' },
+          { label: 'Avg Overall', value: `${avgOverall}`, icon: Swords, from: 'from-emerald-500/15', to: 'to-teal-500/5', border: 'border-emerald-500/20', iconColor: 'text-emerald-400' },
+          { label: 'Budget', value: teamData ? formatMoney(teamData.team_money) : '—', icon: DollarSign, from: 'from-violet-500/15', to: 'to-purple-500/5', border: 'border-violet-500/20', iconColor: 'text-violet-400' },
         ].map(stat => (
-          <div key={stat.label} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <stat.icon size={16} className={`text-${stat.color}-400`} />
-              <span className="text-xs text-gray-500 uppercase tracking-wider">{stat.label}</span>
+          <div key={stat.label} className={`p-4 rounded-2xl bg-gradient-to-br ${stat.from} ${stat.to} border ${stat.border} shadow-sm`}>
+            <div className="flex items-center gap-2 mb-3">
+              <stat.icon size={15} className={stat.iconColor} />
+              <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">{stat.label}</span>
             </div>
-            <div className="text-xl font-bold text-white">{stat.value}</div>
+            <div className="text-2xl font-black text-white">{stat.value}</div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+        {/* Calendar */}
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold text-gray-300 flex items-center gap-2"><Calendar size={14} className="text-amber-400" /> {MONTHS[currentMonth]} {currentYear}</span>
           </div>
           <div className="grid grid-cols-7 gap-1">
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (
-              <div key={day} className="text-center text-[10px] text-gray-500 py-1 font-medium">{day}</div>
+              <div key={day} className="text-center text-[10px] text-gray-600 py-1 font-semibold">{day}</div>
             ))}
             {calendarDays.map((day, i) => (
-              <div key={i} className={`aspect-square flex items-center justify-center rounded text-xs transition-all ${day === null ? '' :
-                  day === currentDay ? 'bg-amber-500/30 border border-amber-500/50 text-amber-400 font-bold' :
-                    isMatchDay(day) ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' :
-                      isTrainingDay(day) ? 'bg-blue-500/5 text-gray-400 hover:bg-blue-500/10' :
-                        'text-gray-500 hover:bg-white/5'
+              <div key={i} className={`aspect-square flex items-center justify-center rounded-lg text-xs transition-all ${day === null ? '' :
+                  day === currentDay ? 'bg-amber-500/30 border border-amber-500/50 text-amber-400 font-bold shadow-sm shadow-amber-500/20' :
+                    isMatchDay(day) ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/10' :
+                      isTrainingDay(day) ? 'text-gray-400 hover:bg-white/5' :
+                        'text-gray-600 hover:bg-white/5'
                 }`}>
                 {day}
               </div>
@@ -100,28 +102,29 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm lg:col-span-2">
+        {/* Schedule overview */}
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-semibold text-gray-300 mb-4">Schedule Overview</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <Swords size={16} className="text-red-400 flex-shrink-0" />
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-red-500/10 to-transparent border border-red-500/15">
+              <Swords size={15} className="text-red-400 shrink-0" />
               <div>
-                <div className="text-sm font-medium text-white">Match Days</div>
-                <div className="text-xs text-gray-400">Every 4th day</div>
+                <div className="text-sm font-semibold text-white">Match Days</div>
+                <div className="text-xs text-gray-500">Every 4th day — compete for points</div>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <Dumbbell size={16} className="text-blue-400 flex-shrink-0" />
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/15">
+              <Dumbbell size={15} className="text-blue-400 shrink-0" />
               <div>
-                <div className="text-sm font-medium text-white">Training Days</div>
-                <div className="text-xs text-gray-400">Regular season training</div>
+                <div className="text-sm font-semibold text-white">Training Days</div>
+                <div className="text-xs text-gray-500">Develop your squad's skills</div>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-              <Trophy size={16} className="text-emerald-400 flex-shrink-0" />
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 to-transparent border border-emerald-500/15">
+              <Trophy size={15} className="text-emerald-400 shrink-0" />
               <div>
-                <div className="text-sm font-medium text-white">Current Day</div>
-                <div className="text-xs text-gray-400">Season Day {seasonDay}</div>
+                <div className="text-sm font-semibold text-white">Current Day</div>
+                <div className="text-xs text-gray-500">Season Day {seasonDay}</div>
               </div>
             </div>
           </div>
@@ -129,8 +132,8 @@ export default function DashboardPage() {
       </div>
 
       {isMatchDay(currentDay) && (
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-red-500/10 to-orange-500/10 border border-red-500/20">
-          <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Swords size={18} className="text-red-400" /> Next Match</h3>
+        <div className="p-6 rounded-2xl bg-gradient-to-br from-red-500/15 via-orange-500/8 to-transparent border border-red-500/25 shadow-lg shadow-red-900/10">
+          <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Swords size={18} className="text-red-400" /> Match Day</h3>
           <p className="text-sm text-gray-400">Head to the Match Simulation page to play your match!</p>
         </div>
       )}

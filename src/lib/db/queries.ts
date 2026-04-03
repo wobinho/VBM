@@ -80,14 +80,14 @@ export function updateTeamStats(teamId: number, data: Partial<Team>) {
 export function getPlayers(teamId?: number): Player[] {
     if (teamId) {
         return getDb().prepare(`
-      SELECT p.*, t.team_name FROM players p
+      SELECT p.*, t.team_name, t.country as team_country FROM players p
       LEFT JOIN teams t ON p.team_id = t.id
       WHERE p.team_id = ?
       ORDER BY p.overall DESC
     `).all(teamId) as Player[];
     }
     return getDb().prepare(`
-    SELECT p.*, t.team_name FROM players p
+    SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     ORDER BY p.overall DESC
   `).all() as Player[];
@@ -95,7 +95,7 @@ export function getPlayers(teamId?: number): Player[] {
 
 export function getPlayerById(id: number): Player | undefined {
     return getDb().prepare(`
-    SELECT p.*, t.team_name FROM players p
+    SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     WHERE p.id = ?
   `).get(id) as Player | undefined;
@@ -108,7 +108,7 @@ export function getFreeAgents(): Player[] {
 export function searchPlayers(term: string): Player[] {
     const like = `%${term}%`;
     return getDb().prepare(`
-    SELECT p.*, t.team_name FROM players p
+    SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     WHERE p.player_name LIKE ? OR p.country LIKE ? OR p.position LIKE ?
     ORDER BY p.overall DESC
