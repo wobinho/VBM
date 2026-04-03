@@ -2,13 +2,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database } from 'lucide-react';
+import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/squad', label: 'Squad Selection', icon: Users },
     { href: '/team', label: 'Team Management', icon: UserCircle },
+    { href: '/office', label: 'Office', icon: Briefcase },
     { href: '/standings', label: 'Standings', icon: ListOrdered },
     { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart },
     { href: '/match', label: 'Match Simulation', icon: Swords },

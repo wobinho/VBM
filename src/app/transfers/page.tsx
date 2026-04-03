@@ -3,7 +3,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import PlayerCard from '@/components/player-card';
 import PlayerModal from '@/components/player-modal';
-import { Search, ShoppingCart, Inbox, Send, DollarSign, Filter, ChevronDown, X } from 'lucide-react';
+import {
+    Search, ShoppingCart, Inbox, Send, DollarSign, Filter,
+    ChevronDown, X, Bookmark, FileSignature, CheckCircle,
+    Plus, Minus, AlertTriangle, Star, Calendar,
+} from 'lucide-react';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
@@ -19,26 +23,403 @@ interface Player {
     team_name?: string; team_id: number | null;
 }
 
-interface League {
-    id: number;
-    league_name: string;
-}
-
-interface TeamInfo {
-    id: number;
-    team_name: string;
-    league_id: number;
-    nation?: string;
-}
-
+interface League { id: number; league_name: string; }
+interface TeamInfo { id: number; team_name: string; league_id: number; nation?: string; }
 interface Offer {
     id: number; player_name: string; offer_amount: number; status: string;
     from_team_name: string; to_team_name: string; created_at: string;
 }
 
-type Tab = 'market' | 'received' | 'sent';
+type Tab = 'market' | 'shortlist' | 'received' | 'sent';
 
 const POSITIONS = ['All', 'Outside Hitter', 'Middle Blocker', 'Opposite Hitter', 'Setter', 'Libero'];
+const MAX_PATIENCE = 3;
+
+function fmt(n: number) {
+    return n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n}`;
+}
+
+function formatMoney(n: number) {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+    return `$${n.toLocaleString()}`;
+}
+
+// Transfer fee formula: base is player_value, modified by contract years left
+// Fewer years → closer to value; more years → premium above value
+function calcTransferFee(playerValue: number, contractYears: number): number {
+    // 1 yr = 0.85x, 2 = 1.0x, 3 = 1.15x, 4 = 1.30x, 5 = 1.45x
+    const multiplier = 0.7 + contractYears * 0.15;
+    return Math.round(playerValue * multiplier / 1000) * 1000;
+}
+
+// ─── Stepper ──────────────────────────────────────────────────────────────────
+
+function Stepper({ label, value, min, max, step = 1, format, onChange }: {
+    label: string; value: number; min: number; max: number;
+    step?: number; format: (v: number) => string; onChange: (v: number) => void;
+}) {
+    return (
+        <div className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
+            <div className="flex items-center gap-3">
+                <button onClick={() => onChange(Math.max(min, value - step))} disabled={value <= min}
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    <Minus size={14} />
+                </button>
+                <div className="flex-1 text-center">
+                    <span className="text-lg font-bold text-white">{format(value)}</span>
+                </div>
+                <button onClick={() => onChange(Math.min(max, value + step))} disabled={value >= max}
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    <Plus size={14} />
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Patience Dots ────────────────────────────────────────────────────────────
+
+function PatienceDots({ patience }: { patience: number }) {
+    return (
+        <div className="flex items-center gap-1.5">
+            {Array.from({ length: MAX_PATIENCE }).map((_, i) => (
+                <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${i < patience
+                    ? 'bg-emerald-400 border-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
+                    : 'bg-transparent border-gray-600'}`} />
+            ))}
+        </div>
+    );
+}
+
+// ─── Club Negotiation Modal ───────────────────────────────────────────────────
+
+interface ClubNegotiationProps {
+    player: Player;
+    teamMoney: number;
+    onClose: () => void;
+    onAccepted: (fee: number) => void;
+}
+
+function ClubNegotiationModal({ player, teamMoney, onClose, onAccepted }: ClubNegotiationProps) {
+    const suggestedFee = calcTransferFee(player.player_value, player.contract_years);
+    const [fee, setFee] = useState(suggestedFee);
+    const [patience, setPatience] = useState(MAX_PATIENCE);
+    const [result, setResult] = useState<'idle' | 'thinking' | 'accepted' | 'rejected' | 'no_funds'>('idle');
+    const [rejectMsg, setRejectMsg] = useState('');
+
+    const canAfford = teamMoney >= fee;
+    const minFee = Math.round(player.player_value * 0.3 / 1000) * 1000;
+    const maxFee = Math.round(player.player_value * 3 / 1000) * 1000;
+
+    function makeOffer() {
+        if (!canAfford) { setResult('no_funds'); return; }
+        setResult('thinking');
+
+        setTimeout(() => {
+            // Club accepts if fee >= 90% of suggested. Lower offers lose patience.
+            const threshold = suggestedFee * 0.9;
+            if (fee >= threshold) {
+                setResult('accepted');
+                setTimeout(() => onAccepted(fee), 1200);
+            } else {
+                const newPatience = patience - 1;
+                setPatience(newPatience);
+                if (newPatience <= 0) {
+                    setRejectMsg('The club has ended negotiations.');
+                    setResult('rejected');
+                } else {
+                    setRejectMsg(`The club rejects your offer. They want closer to ${fmt(suggestedFee)}.`);
+                    setResult('idle');
+                }
+            }
+        }, 900);
+    }
+
+    const isFreeAgent = !player.team_id;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+            onClick={onClose}>
+            <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+                onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
+                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                    <button onClick={onClose}
+                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+                        <X size={14} />
+                    </button>
+                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-2">Club Negotiation</p>
+                    <h2 className="text-lg font-bold text-white">{player.player_name}</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        {isFreeAgent ? 'Free Agent — no transfer fee required' : `${player.team_name ?? 'Unknown Club'} · ${player.contract_years}yr contract`}
+                    </p>
+                </div>
+
+                {isFreeAgent ? (
+                    // Free agent: skip straight through
+                    <div className="px-6 py-6 space-y-4">
+                        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
+                            <CheckCircle size={24} className="mx-auto text-emerald-400 mb-2" />
+                            <p className="text-sm font-semibold text-emerald-400">No transfer fee needed</p>
+                            <p className="text-xs text-gray-400 mt-1">This player is a free agent.</p>
+                        </div>
+                        <button onClick={() => onAccepted(0)}
+                            className="w-full py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 transition-all cursor-pointer">
+                            Proceed to Contract
+                        </button>
+                    </div>
+                ) : (
+                    <div className="px-6 py-5 space-y-5">
+                        {/* Value info */}
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="rounded-xl bg-white/[0.03] border border-white/5 px-2 py-2.5">
+                                <p className="text-[9px] text-gray-600 uppercase tracking-widest mb-0.5">Player Value</p>
+                                <p className="text-xs font-bold text-gray-300">{fmt(player.player_value)}</p>
+                            </div>
+                            <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-2 py-2.5">
+                                <p className="text-[9px] text-amber-500/60 uppercase tracking-widest mb-0.5">Asking Price</p>
+                                <p className="text-xs font-bold text-amber-400">{fmt(suggestedFee)}</p>
+                            </div>
+                            <div className="rounded-xl bg-white/[0.03] border border-white/5 px-2 py-2.5">
+                                <p className="text-[9px] text-gray-600 uppercase tracking-widest mb-0.5">Contract</p>
+                                <p className="text-xs font-bold text-gray-300">{player.contract_years}yr</p>
+                            </div>
+                        </div>
+
+                        {/* Patience */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-widest">Club Patience</span>
+                            <PatienceDots patience={patience} />
+                        </div>
+
+                        {/* Fee stepper */}
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-white">Transfer Fee</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">Your offer to the club</p>
+                                </div>
+                                <DollarSign size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                            </div>
+                            <Stepper label="Fee" value={fee} min={minFee} max={maxFee} step={10_000}
+                                format={v => formatMoney(v)} onChange={setFee} />
+                            {!canAfford && (
+                                <p className="text-[10px] text-red-400 mt-2">Insufficient club funds for this fee.</p>
+                            )}
+                        </div>
+
+                        {/* Rejection message */}
+                        {rejectMsg && (
+                            <div className="flex items-start gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5">
+                                <AlertTriangle size={13} className="text-red-400 mt-0.5 shrink-0" />
+                                <p className="text-[11px] text-red-300">{rejectMsg}</p>
+                            </div>
+                        )}
+
+                        {/* Funds display */}
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500">Your funds</span>
+                            <span className={`font-semibold ${canAfford ? 'text-gray-300' : 'text-red-400'}`}>{formatMoney(teamMoney)}</span>
+                        </div>
+
+                        {result === 'accepted' ? (
+                            <div className="w-full py-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
+                                <CheckCircle size={16} />Deal Agreed!
+                            </div>
+                        ) : result === 'rejected' ? (
+                            <button onClick={onClose}
+                                className="w-full py-3.5 rounded-xl font-bold text-sm bg-white/5 border border-white/10 text-gray-400 cursor-pointer">
+                                Close
+                            </button>
+                        ) : (
+                            <button onClick={makeOffer} disabled={result === 'thinking' || !canAfford || patience <= 0}
+                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2
+                                    ${result === 'thinking'
+                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                        : !canAfford || patience <= 0
+                                            ? 'bg-white/5 text-gray-600 border border-white/5 cursor-not-allowed'
+                                            : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
+                                    }`}>
+                                <DollarSign size={16} />
+                                {result === 'thinking' ? 'Waiting for response...' : 'Make Offer'}
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Contract Signing Modal ───────────────────────────────────────────────────
+
+interface ContractSigningProps {
+    player: Player;
+    transferFee: number;
+    teamMoney: number;
+    onClose: () => void;
+    onSigned: (years: number, wage: number, bonus: number) => void;
+}
+
+function ContractSigningModal({ player, transferFee, teamMoney, onClose, onSigned }: ContractSigningProps) {
+    const fundsAfterFee = teamMoney - transferFee;
+    const [years, setYears] = useState(2);
+    const [wage, setWage] = useState(Math.round(player.monthly_wage * 1.1 / 500) * 500 || 1000);
+    const [bonus, setBonus] = useState(0);
+    const [patience] = useState(MAX_PATIENCE);
+    const [signed, setSigned] = useState(false);
+    const [signing, setSigning] = useState(false);
+
+    const totalCost = bonus + wage * years * 12;
+    const canAffordBonus = fundsAfterFee >= bonus;
+
+    function handleSign() {
+        if (!canAffordBonus) return;
+        setSigning(true);
+        setTimeout(() => {
+            setSigned(true);
+            setTimeout(() => onSigned(years, wage, bonus), 1200);
+        }, 600);
+    }
+
+    const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+            onClick={onClose}>
+            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+                onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
+                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                    <button onClick={onClose}
+                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+                        <X size={14} />
+                    </button>
+                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-3">Contract Negotiation</p>
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <h2 className="text-lg font-bold text-white leading-none">{player.player_name}</h2>
+                                <span className={`text-sm font-black ${overallColor}`}>{player.overall}</span>
+                            </div>
+                            <p className="text-xs text-gray-500">Age {player.age} · {player.position}</p>
+                            {transferFee > 0 && (
+                                <p className="text-[10px] text-amber-400 mt-1">Transfer fee paid: {fmt(transferFee)}</p>
+                            )}
+                        </div>
+                        <div className="ml-auto shrink-0 text-right">
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Patience</p>
+                            <PatienceDots patience={patience} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Controls */}
+                <div className="px-6 py-5 space-y-5">
+                    {/* Suggested wage banner */}
+                    <div className="grid grid-cols-2 gap-3 text-center">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
+                            <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Current Wage</p>
+                            <p className="text-sm font-bold text-gray-300">{formatMoney(player.monthly_wage)}<span className="text-xs text-gray-600">/mo</span></p>
+                        </div>
+                        <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
+                            <p className="text-[10px] text-amber-500/60 uppercase tracking-widest mb-0.5">Available Funds</p>
+                            <p className="text-sm font-bold text-amber-400">{formatMoney(fundsAfterFee)}</p>
+                        </div>
+                    </div>
+
+                    {/* Steppers */}
+                    <div className="space-y-3">
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-white">Contract Length</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">Years on new contract</p>
+                                </div>
+                                <Calendar size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                            </div>
+                            <Stepper label="Years" value={years} min={1} max={5}
+                                format={v => `${v} yr${v !== 1 ? 's' : ''}`} onChange={setYears} />
+                        </div>
+
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-white">Monthly Wage</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">New monthly salary offer</p>
+                                </div>
+                                <DollarSign size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                            </div>
+                            <Stepper label="Wage / mo" value={wage} min={500} max={50_000} step={500}
+                                format={v => formatMoney(v)} onChange={setWage} />
+                        </div>
+
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-white">Signing Bonus</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">One-time payment from club funds</p>
+                                </div>
+                                <Star size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                            </div>
+                            <Stepper label="Bonus" value={bonus} min={0} max={Math.min(500_000, fundsAfterFee)} step={5_000}
+                                format={v => v === 0 ? 'None' : formatMoney(v)} onChange={setBonus} />
+                            {bonus > 0 && !canAffordBonus && (
+                                <p className="text-[10px] text-red-400 mt-2">Insufficient funds for this bonus.</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Cost summary */}
+                    <div className="rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500">Wage over contract ({years} yr{years !== 1 ? 's' : ''})</span>
+                            <span className="text-gray-300 font-semibold">{formatMoney(wage * years * 12)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500">Signing bonus (from funds)</span>
+                            <span className={`font-semibold ${bonus > 0 ? 'text-amber-400' : 'text-gray-600'}`}>{bonus > 0 ? `-${formatMoney(bonus)}` : '—'}</span>
+                        </div>
+                        <div className="border-t border-white/5 pt-1.5 flex items-center justify-between text-xs">
+                            <span className="text-gray-400 font-medium">Total Commitment</span>
+                            <span className="text-white font-bold">{formatMoney(totalCost)}</span>
+                        </div>
+                    </div>
+
+                    {!signed ? (
+                        <button onClick={handleSign} disabled={signing || !canAffordBonus}
+                            className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2
+                                ${signing
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                    : !canAffordBonus
+                                        ? 'bg-white/5 text-gray-600 border border-white/5 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
+                                }`}>
+                            <FileSignature size={16} />
+                            {signing ? 'Processing...' : 'Sign Contract'}
+                        </button>
+                    ) : (
+                        <div className="w-full py-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
+                            <CheckCircle size={16} />Contract Signed!
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Filter helpers ───────────────────────────────────────────────────────────
 
 function FilterPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
@@ -65,6 +446,8 @@ function CollapsibleSection({ title, children, defaultOpen = true }: { title: st
     );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function TransfersPage() {
     const { team } = useAuth();
     const [tab, setTab] = useState<Tab>('market');
@@ -75,6 +458,15 @@ export default function TransfersPage() {
     const [receivedOffers, setReceivedOffers] = useState<Offer[]>([]);
     const [sentOffers, setSentOffers] = useState<Offer[]>([]);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+    const [teamMoney, setTeamMoney] = useState(0);
+
+    // Shortlist
+    const [shortlist, setShortlist] = useState<Player[]>([]);
+
+    // Signing flow
+    const [signingPlayer, setSigningPlayer] = useState<Player | null>(null);
+    const [signingStep, setSigningStep] = useState<'club' | 'contract'>('club');
+    const [agreedFee, setAgreedFee] = useState(0);
 
     // Filter state
     const [search, setSearch] = useState('');
@@ -92,21 +484,23 @@ export default function TransfersPage() {
         fetch('/api/teams').then(r => r.json()).then(setTeams);
         fetch('/api/offers?type=received').then(r => r.json()).then(setReceivedOffers).catch(() => { });
         fetch('/api/offers?type=sent').then(r => r.json()).then(setSentOffers).catch(() => { });
-    }, []);
+        if (team) {
+            fetch(`/api/teams/${team.id}`).then(r => r.json()).then(d => {
+                if (d?.team_money !== undefined) setTeamMoney(d.team_money);
+            });
+        }
+    }, [team]);
 
-    // Derive unique countries from all players
     const countries = useMemo(() => {
         const set = new Set(allPlayers.map(p => p.country).filter(Boolean));
         return Array.from(set).sort();
     }, [allPlayers]);
 
-    // Teams filtered by selected league
     const filteredTeams = useMemo(() => {
         if (selectedLeague === null) return teams;
         return teams.filter(t => t.league_id === selectedLeague);
     }, [teams, selectedLeague]);
 
-    // Build a map: teamId → leagueId for fast filtering
     const teamLeagueMap = useMemo(() => {
         const map: Record<number, number> = {};
         for (const t of teams) map[t.id] = t.league_id;
@@ -138,10 +532,81 @@ export default function TransfersPage() {
         setSelectedPosition('All');
     }
 
-    const fmt = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${(n / 1e3).toFixed(0)}K`;
+    // ── Shortlist helpers ──────────────────────────────────────────────────────
+
+    function handleShortlist(player: Player) {
+        setShortlist(prev => {
+            if (prev.some(p => p.id === player.id)) return prev;
+            return [...prev, player];
+        });
+    }
+
+    function removeFromShortlist(playerId: number) {
+        setShortlist(prev => prev.filter(p => p.id !== playerId));
+    }
+
+    // ── Sign flow ─────────────────────────────────────────────────────────────
+
+    function handleSignPlayer(player: Player) {
+        setSigningPlayer(player);
+        setSigningStep('club');
+        setAgreedFee(0);
+    }
+
+    function handleClubAccepted(fee: number) {
+        setAgreedFee(fee);
+        setSigningStep('contract');
+    }
+
+    async function handleContractSigned(years: number, wage: number, bonus: number) {
+        if (!signingPlayer || !team) return;
+
+        const currentTeam = await fetch(`/api/teams/${team.id}`).then(r => r.json());
+        const currentMoney = currentTeam?.team_money ?? teamMoney;
+        const totalDeduction = agreedFee + bonus;
+
+        await Promise.all([
+            // Move player to our team
+            fetch(`/api/players/${signingPlayer.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_id: team.id, contract_years: years, monthly_wage: wage }),
+            }),
+            // Deduct transfer fee + bonus from our funds
+            fetch(`/api/teams/${team.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_money: currentMoney - totalDeduction }),
+            }),
+        ]);
+
+        // Pay selling club the transfer fee
+        if (agreedFee > 0 && signingPlayer.team_id) {
+            const sellerTeam = await fetch(`/api/teams/${signingPlayer.team_id}`).then(r => r.json());
+            if (sellerTeam?.team_money !== undefined) {
+                await fetch(`/api/teams/${signingPlayer.team_id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team_money: sellerTeam.team_money + agreedFee }),
+                });
+            }
+        }
+
+        // Refresh data
+        const [updatedTeam, updatedPlayers] = await Promise.all([
+            fetch(`/api/teams/${team.id}`).then(r => r.json()),
+            fetch('/api/players').then(r => r.json()),
+        ]);
+        if (updatedTeam?.team_money !== undefined) setTeamMoney(updatedTeam.team_money);
+        setAllPlayers(updatedPlayers);
+        // Remove from shortlist if present
+        setShortlist(prev => prev.filter(p => p.id !== signingPlayer.id));
+        setSigningPlayer(null);
+    }
 
     const tabs = [
         { key: 'market' as Tab, label: 'Market', icon: ShoppingCart, count: filtered.length },
+        { key: 'shortlist' as Tab, label: 'Shortlist', icon: Bookmark, count: shortlist.length },
         { key: 'received' as Tab, label: 'Received', icon: Inbox, count: receivedOffers.length },
         { key: 'sent' as Tab, label: 'Sent', icon: Send, count: sentOffers.length },
     ];
@@ -173,18 +638,16 @@ export default function TransfersPage() {
                 ))}
             </div>
 
+            {/* Market tab */}
             {tab === 'market' && (
                 <div className="flex gap-4 items-start">
-                    {/* ── Filters sidebar ──────────────────────────────────── */}
+                    {/* Filters sidebar */}
                     <aside className="hidden lg:flex flex-col w-56 shrink-0 gap-4">
-                        {/* Filter panel */}
                         <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-4 space-y-5">
                             <div className="flex items-center gap-2">
                                 <Filter size={13} className="text-amber-400" />
                                 <span className="text-xs font-bold uppercase tracking-wider text-gray-300">Filters</span>
                             </div>
-
-                            {/* Free agents toggle */}
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-400">Free Agents Only</span>
                                 <button onClick={() => setShowFreeOnly(!showFreeOnly)}
@@ -192,8 +655,6 @@ export default function TransfersPage() {
                                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showFreeOnly ? 'translate-x-5' : ''}`} />
                                 </button>
                             </div>
-
-                            {/* Position */}
                             <CollapsibleSection title="Position">
                                 <div className="flex flex-col gap-1">
                                     {POSITIONS.map(pos => (
@@ -204,8 +665,6 @@ export default function TransfersPage() {
                                     ))}
                                 </div>
                             </CollapsibleSection>
-
-                            {/* League */}
                             <CollapsibleSection title="League">
                                 <div className="flex flex-col gap-1">
                                     <FilterPill label="All Leagues" active={selectedLeague === null} onClick={() => { setSelectedLeague(null); setSelectedTeam(null); }} />
@@ -215,8 +674,6 @@ export default function TransfersPage() {
                                     ))}
                                 </div>
                             </CollapsibleSection>
-
-                            {/* Team (only shown when league selected or always) */}
                             <CollapsibleSection title="Team" defaultOpen={false}>
                                 <div className="flex flex-col gap-1 max-h-40 overflow-y-auto pr-1">
                                     <FilterPill label="All Teams" active={selectedTeam === null} onClick={() => setSelectedTeam(null)} />
@@ -226,8 +683,6 @@ export default function TransfersPage() {
                                     ))}
                                 </div>
                             </CollapsibleSection>
-
-                            {/* Country */}
                             <CollapsibleSection title="Nationality" defaultOpen={false}>
                                 <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1">
                                     <FilterPill label="All Countries" active={selectedCountry === null} onClick={() => setSelectedCountry(null)} />
@@ -240,31 +695,27 @@ export default function TransfersPage() {
                         </div>
                     </aside>
 
-                    {/* ── Main content ──────────────────────────────────────── */}
+                    {/* Main content */}
                     <div className="flex-1 min-w-0 space-y-4">
-                        {/* Search bar + mobile filter toggle */}
                         <div className="flex gap-2">
                             <div className="relative flex-1">
                                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                                 <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players..."
                                     className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500/50 transition-colors" />
                             </div>
-                            {/* Mobile filter toggle */}
                             <button onClick={() => setFiltersOpen(!filtersOpen)}
                                 className={`lg:hidden px-3 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer ${hasActiveFilters ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-white/5 text-gray-400 border-white/10'}`}>
                                 <Filter size={16} />
                             </button>
-                            {/* Free agents on mobile */}
                             <button onClick={() => setShowFreeOnly(!showFreeOnly)}
                                 className={`lg:hidden px-3 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${showFreeOnly ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-gray-400 border border-white/10'}`}>
                                 Free
                             </button>
                         </div>
 
-                        {/* Mobile filters panel */}
+                        {/* Mobile filters */}
                         {filtersOpen && (
                             <div className="lg:hidden rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-4 space-y-4">
-                                {/* Position quick pills */}
                                 <div>
                                     <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold mb-2">Position</p>
                                     <div className="flex flex-wrap gap-1.5">
@@ -276,7 +727,6 @@ export default function TransfersPage() {
                                         ))}
                                     </div>
                                 </div>
-                                {/* League quick pills */}
                                 {leagues.length > 0 && (
                                     <div>
                                         <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold mb-2">League</p>
@@ -326,15 +776,16 @@ export default function TransfersPage() {
                             </div>
                         )}
 
-                        {/* Result count */}
                         <p className="text-xs text-gray-500">
                             {filtered.length} player{filtered.length !== 1 ? 's' : ''} found
                         </p>
 
-                        {/* Player grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                             {filtered.slice(0, 60).map(p => (
-                                <PlayerCard key={p.id} player={p} onClick={() => setSelectedPlayer(p)} />
+                                <PlayerCard key={p.id} player={p}
+                                    onClick={() => setSelectedPlayer(p)}
+                                    onSign={handleSignPlayer}
+                                    onShortlist={handleShortlist} />
                             ))}
                         </div>
 
@@ -350,6 +801,34 @@ export default function TransfersPage() {
                             <p className="text-center text-xs text-gray-600">Showing first 60 results — refine filters to narrow down</p>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Shortlist tab */}
+            {tab === 'shortlist' && (
+                <div className="space-y-4">
+                    {shortlist.length === 0 ? (
+                        <div className="text-center py-16 rounded-2xl bg-white/[0.02] border border-white/5">
+                            <Bookmark size={32} className="mx-auto text-gray-700 mb-3" />
+                            <p className="text-gray-500 font-medium">Your shortlist is empty</p>
+                            <p className="text-xs text-gray-600 mt-1">Click &quot;+ Shortlist&quot; on any player card to add them here</p>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-xs text-gray-500">{shortlist.length} player{shortlist.length !== 1 ? 's' : ''} shortlisted</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                                {shortlist.map(p => (
+                                    <div key={p.id} className="relative">
+                                        <PlayerCard player={p}
+                                            onClick={() => setSelectedPlayer(p)}
+                                            onSign={handleSignPlayer}
+                                            onShortlist={() => removeFromShortlist(p.id)}
+                                            shortlistLabel="Remove" />
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -376,7 +855,27 @@ export default function TransfersPage() {
                 </div>
             )}
 
+            {/* Player detail modal */}
             {selectedPlayer && <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}
+
+            {/* Club negotiation modal */}
+            {signingPlayer && signingStep === 'club' && (
+                <ClubNegotiationModal
+                    player={signingPlayer}
+                    teamMoney={teamMoney}
+                    onClose={() => setSigningPlayer(null)}
+                    onAccepted={handleClubAccepted} />
+            )}
+
+            {/* Contract signing modal */}
+            {signingPlayer && signingStep === 'contract' && (
+                <ContractSigningModal
+                    player={signingPlayer}
+                    transferFee={agreedFee}
+                    teamMoney={teamMoney}
+                    onClose={() => setSigningPlayer(null)}
+                    onSigned={handleContractSigned} />
+            )}
         </div>
     );
 }

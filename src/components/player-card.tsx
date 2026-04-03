@@ -129,7 +129,7 @@ function CountryFlag({ countryCode }: { countryCode: string }) {
     );
 }
 
-export default function PlayerCard({ player, onClick, compact = false }: { player: Player; onClick?: () => void; compact?: boolean }) {
+export default function PlayerCard({ player, onClick, compact = false, onSign, onShortlist, shortlistLabel }: { player: Player; onClick?: () => void; compact?: boolean; onSign?: (player: Player) => void; onShortlist?: (player: Player) => void; shortlistLabel?: string; }) {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
     if (compact) {
@@ -230,6 +230,28 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
                     <StatBar label="Receive" value={player.receive} color="cyan" />
                     <StatBar label="Setting" value={player.setting} color="amber" />
                 </div>
+
+                {/* ── ACTION BUTTONS ── */}
+                {(onSign || onShortlist) && (
+                    <div className="grid grid-cols-2 gap-1.5 mt-2 sm:mt-3">
+                        {onSign && (
+                            <button
+                                onClick={e => { e.stopPropagation(); onSign(player); }}
+                                className="py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 transition-all duration-150 cursor-pointer"
+                            >
+                                Sign Player
+                            </button>
+                        )}
+                        {onShortlist && (
+                            <button
+                                onClick={e => { e.stopPropagation(); onShortlist(player); }}
+                                className="py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white transition-all duration-150 cursor-pointer"
+                            >
+                                {shortlistLabel ?? '+ Shortlist'}
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

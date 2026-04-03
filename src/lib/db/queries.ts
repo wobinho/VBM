@@ -265,6 +265,15 @@ export function getUserById(id: string): User | undefined {
     return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
 }
 
+export function getUserByTeamId(teamId: number): User | undefined {
+    return getDb().prepare(`
+        SELECT u.* FROM users u
+        JOIN user_teams ut ON u.id = ut.user_id
+        WHERE ut.team_id = ? AND ut.is_primary = 1
+        LIMIT 1
+    `).get(teamId) as User | undefined;
+}
+
 export function createUser(data: { id: string; email: string; username: string; password_hash: string; display_name: string; is_admin?: number }) {
     return getDb().prepare(`
     INSERT INTO users (id, email, username, password_hash, display_name, is_admin)
