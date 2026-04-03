@@ -18,6 +18,71 @@ export function getDb(): Database.Database {
       db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0");
     }
 
+    // Migration: new player stat schema (Technical + expanded Physical/Mental)
+    const playerCols = db.prepare("PRAGMA table_info(players)").all() as {name: string}[];
+    const playerColNames = playerCols.map(c => c.name);
+
+    // Add new Technical columns
+    const technicalCols = ['precision', 'flair', 'digging', 'positioning', 'ball_control', 'technique', 'playmaking', 'spin'];
+    for (const col of technicalCols) {
+      if (!playerColNames.includes(col)) {
+        db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 50`);
+      }
+    }
+    // Add new Physical columns
+    const newPhysicalCols = ['vertical', 'flexibility', 'torque', 'balance'];
+    for (const col of newPhysicalCols) {
+      if (!playerColNames.includes(col)) {
+        db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 50`);
+      }
+    }
+    // Add new Mental columns (rename pressure_handling → pressure, add vision/game_iq/intimidation)
+    if (!playerColNames.includes('pressure')) {
+      if (playerColNames.includes('pressure_handling')) {
+        db.exec(`ALTER TABLE players ADD COLUMN pressure INTEGER NOT NULL DEFAULT 50`);
+        db.exec(`UPDATE players SET pressure = pressure_handling`);
+      } else {
+        db.exec(`ALTER TABLE players ADD COLUMN pressure INTEGER NOT NULL DEFAULT 50`);
+      }
+    }
+    const newMentalCols = ['vision', 'game_iq', 'intimidation'];
+    for (const col of newMentalCols) {
+      if (!playerColNames.includes(col)) {
+        db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 50`);
+      }
+    }
+    // Ensure old Physical/Mental cols that were nullable are now present (speed/agility/etc already existed)
+    const ensureNotNull = ['speed', 'agility', 'strength', 'endurance', 'leadership', 'teamwork', 'concentration', 'consistency'];
+    for (const col of ensureNotNull) {
+      if (!playerColNames.includes(col)) {
+        db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 50`);
+      }
+    }
+    // Add height and potential columns if missing
+    if (!playerColNames.includes('height')) {
+      db.exec(`ALTER TABLE players ADD COLUMN height INTEGER`);
+    }
+    if (!playerColNames.includes('potential')) {
+      db.exec(`ALTER TABLE players ADD COLUMN potential INTEGER`);
+    }
+    if (!playerColNames.includes('created_at')) {
+      db.exec(`ALTER TABLE players ADD COLUMN created_at TEXT`);
+    }
+    if (!playerColNames.includes('updated_at')) {
+      db.exec(`ALTER TABLE players ADD COLUMN updated_at TEXT`);
+    }
+    // Recalculate overall for existing players using new formula when migrating
+    const needsOverallRecalc = !playerColNames.includes('vertical') || !playerColNames.includes('pressure');
+    if (needsOverallRecalc) {
+      db.exec(`
+        UPDATE players SET overall = MAX(1, MIN(100, CAST(ROUND(
+          (CAST(attack + defense + serve + block + receive + setting AS REAL) / 6 * 0.50) +
+          (CAST(speed + agility + strength + endurance AS REAL) / 4 * 0.25) +
+          (CAST(leadership + teamwork + concentration + consistency AS REAL) / 4 * 0.25)
+        ) AS INTEGER)))
+      `);
+    }
+
     // Check if tables exist
     const tableCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='leagues'"

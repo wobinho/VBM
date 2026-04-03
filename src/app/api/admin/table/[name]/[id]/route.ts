@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
+import { calculateOverall } from '@/lib/db/queries';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 
 export async function PUT(
@@ -25,10 +26,26 @@ export async function PUT(
 
     db.prepare(`UPDATE ${name} SET ${updates} WHERE id = ?`).run(...values, id);
 
+    // For players table: recalculate overall from current stats after any update
+    if (name === 'players') {
+      const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id) as Record<string, number | string | null> | undefined;
+      if (player) {
+        const n = (k: string) => Number(player[k] ?? 50);
+        const overall = calculateOverall(
+          n('attack'), n('defense'), n('serve'), n('block'), n('receive'), n('setting'),
+          n('speed'), n('agility'), n('strength'), n('endurance'), n('vertical'), n('flexibility'), n('torque'), n('balance'),
+          n('leadership'), n('teamwork'), n('concentration'), n('pressure'), n('consistency'), n('vision'), n('game_iq'), n('intimidation'),
+          String(player.position ?? ''),
+          n('precision'), n('flair'), n('digging'), n('positioning'), n('ball_control'), n('technique'), n('playmaking'), n('spin'),
+        );
+        db.prepare('UPDATE players SET overall = ? WHERE id = ?').run(overall, id);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Update error:', error);
-    return NextResponse.json({ error: 'Failed to update row' }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
 

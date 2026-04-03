@@ -6,13 +6,21 @@ import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
-    jersey_number: number; overall: number; attack: number; defense: number; serve: number;
-    block: number; receive: number; setting: number; contract_years?: number; monthly_wage?: number;
-    player_value?: number; team_id?: number | null; speed?: number; agility?: number; strength?: number;
-    endurance?: number; height?: number; leadership?: number; teamwork?: number;
-    concentration?: number; pressure_handling?: number; jump_serve?: number; float_serve?: number;
-    spike_power?: number; spike_accuracy?: number; block_timing?: number; dig_technique?: number;
-    experience?: number; potential?: number; consistency?: number; team_name?: string; team_country?: string;
+    jersey_number: number; overall: number; height?: number;
+    // Core
+    attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
+    // Technical
+    precision?: number; flair?: number; digging?: number; positioning?: number;
+    ball_control?: number; technique?: number; playmaking?: number; spin?: number;
+    // Physical
+    speed?: number; agility?: number; strength?: number; endurance?: number;
+    vertical?: number; flexibility?: number; torque?: number; balance?: number;
+    // Mental
+    leadership?: number; teamwork?: number; concentration?: number; pressure?: number;
+    consistency?: number; vision?: number; game_iq?: number; intimidation?: number;
+    // Contract
+    contract_years?: number; monthly_wage?: number; player_value?: number;
+    team_id?: number | null; team_name?: string; team_country?: string;
 }
 
 function getPositionAccent(position: string): { badge: string; glow: string; bar: string } {
@@ -185,13 +193,6 @@ function StatSection({ title, children }: { title: string; children: React.React
 export default function PlayerModal({ player, onClose }: { player: Player; onClose: () => void }) {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
-    const convertCmToFeet = (cm: number) => {
-        const totalInches = Math.round(cm / 2.54);
-        const feet = Math.floor(totalInches / 12);
-        const inches = totalInches % 12;
-        return `${feet}'${inches}"`;
-    };
-
     const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
     const accent = getPositionAccent(player.position);
 
@@ -274,13 +275,13 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
 
                 {/* ── STATS BODY ── */}
                 <div className="p-6 space-y-4">
-                    {/* Info row — 5 tiles in one line */}
+                    {/* Info row — 5 tiles */}
                     <div className="grid grid-cols-5 gap-2">
                         <InfoTile label="Value"    value={player.player_value ? formatMoney(player.player_value) : '—'} accent="bg-emerald-500" />
                         <InfoTile label="Wage/mo"  value={player.monthly_wage ? formatMoney(player.monthly_wage) : '—'} accent="bg-amber-500" />
                         <InfoTile label="Contract" value={player.contract_years ? `${player.contract_years}y` : '—'}    accent="bg-blue-500" />
                         <InfoTile label="Age"      value={String(player.age)}                                            accent="bg-purple-500" />
-                        <InfoTile label="Height"   value={player.height ? convertCmToFeet(player.height) : '—'}         accent="bg-cyan-500" />
+                        <InfoTile label="Height"   value={player.height ? `${player.height} cm` : '—'}                  accent="bg-cyan-500" />
                     </div>
 
                     {/* Core Skills */}
@@ -293,32 +294,45 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
                         <StatBar label="Setting" value={player.setting} color="amber" />
                     </StatSection>
 
+                    {/* Technical Skills */}
+                    {player.precision != null && (
+                        <StatSection title="Technical">
+                            <StatBar label="Precision"   value={player.precision}           color="amber" />
+                            <StatBar label="Flair"       value={player.flair ?? 0}          color="red" />
+                            <StatBar label="Digging"     value={player.digging ?? 0}        color="cyan" />
+                            <StatBar label="Positioning" value={player.positioning ?? 0}    color="blue" />
+                            <StatBar label="Ball Control" value={player.ball_control ?? 0}  color="green" />
+                            <StatBar label="Technique"   value={player.technique ?? 0}      color="purple" />
+                            <StatBar label="Playmaking"  value={player.playmaking ?? 0}     color="amber" />
+                            <StatBar label="Spin"        value={player.spin ?? 0}           color="cyan" />
+                        </StatSection>
+                    )}
+
                     {/* Physical Attributes */}
                     {player.speed != null && (
-                        <StatSection title="Physical Attributes">
-                            <StatBar label="Speed"     value={player.speed}            color="green" />
-                            <StatBar label="Agility"   value={player.agility ?? 0}    color="cyan" />
-                            <StatBar label="Strength"  value={player.strength ?? 0}   color="red" />
-                            <StatBar label="Endurance" value={player.endurance ?? 0}  color="blue" />
+                        <StatSection title="Physical">
+                            <StatBar label="Speed"       value={player.speed}               color="green" />
+                            <StatBar label="Agility"     value={player.agility ?? 0}        color="cyan" />
+                            <StatBar label="Strength"    value={player.strength ?? 0}       color="red" />
+                            <StatBar label="Endurance"   value={player.endurance ?? 0}      color="blue" />
+                            <StatBar label="Vertical"    value={player.vertical ?? 0}       color="purple" />
+                            <StatBar label="Flexibility" value={player.flexibility ?? 0}    color="amber" />
+                            <StatBar label="Torque"      value={player.torque ?? 0}         color="red" />
+                            <StatBar label="Balance"     value={player.balance ?? 0}        color="green" />
                         </StatSection>
                     )}
 
                     {/* Mental */}
                     {player.leadership != null && (
                         <StatSection title="Mental">
-                            <StatBar label="Leadership"   value={player.leadership}              color="amber" />
-                            <StatBar label="Teamwork"     value={player.teamwork ?? 0}           color="green" />
-                            <StatBar label="Concentration" value={player.concentration ?? 0}    color="blue" />
-                            <StatBar label="Pressure"     value={player.pressure_handling ?? 0} color="purple" />
-                        </StatSection>
-                    )}
-
-                    {/* Development */}
-                    {player.potential != null && (
-                        <StatSection title="Development">
-                            <StatBar label="Potential"   value={player.potential}          color="green" />
-                            <StatBar label="Experience"  value={player.experience ?? 0}   color="amber" />
-                            <StatBar label="Consistency" value={player.consistency ?? 0}  color="blue" />
+                            <StatBar label="Leadership"    value={player.leadership}             color="amber" />
+                            <StatBar label="Teamwork"      value={player.teamwork ?? 0}          color="green" />
+                            <StatBar label="Concentration" value={player.concentration ?? 0}     color="blue" />
+                            <StatBar label="Pressure"      value={player.pressure ?? 0}          color="purple" />
+                            <StatBar label="Consistency"   value={player.consistency ?? 0}       color="cyan" />
+                            <StatBar label="Vision"        value={player.vision ?? 0}            color="amber" />
+                            <StatBar label="Game IQ"       value={player.game_iq ?? 0}           color="green" />
+                            <StatBar label="Intimidation"  value={player.intimidation ?? 0}      color="red" />
                         </StatSection>
                     )}
                 </div>

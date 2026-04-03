@@ -5,12 +5,20 @@ export interface League { id: number; league_name: string; created_at: string; u
 export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; goal_diff: number; stadium: string; capacity: number; founded: string; nation?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
 export interface Player {
     id: number; player_name: string; team_id: number | null; position: string; age: number; country: string;
-    jersey_number: number; overall: number; attack: number; defense: number; serve: number; block: number;
-    receive: number; setting: number; contract_years: number; monthly_wage: number; player_value: number;
-    speed: number; agility: number; strength: number; endurance: number; height: number;
-    leadership: number; teamwork: number; concentration: number; pressure_handling: number;
-    jump_serve: number; float_serve: number; spike_power: number; spike_accuracy: number;
-    block_timing: number; dig_technique: number; experience: number; potential: number; consistency: number;
+    jersey_number: number; overall: number; height?: number; potential?: number;
+    // Core Skills
+    attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
+    // Technical Skills
+    precision: number; flair: number; digging: number; positioning: number;
+    ball_control: number; technique: number; playmaking: number; spin: number;
+    // Physical Skills
+    speed: number; agility: number; strength: number; endurance: number;
+    vertical: number; flexibility: number; torque: number; balance: number;
+    // Mental Skills
+    leadership: number; teamwork: number; concentration: number; pressure: number;
+    consistency: number; vision: number; game_iq: number; intimidation: number;
+    // Contract
+    contract_years: number; monthly_wage: number; player_value: number;
     created_at: string; updated_at: string; team_name?: string;
 }
 export interface Transfer { id: number; player_id: number; from_team: number | null; to_team: number | null; price: number; transfer_date: string; status: string; created_at: string; updated_at: string; player_name?: string; from_team_name?: string; to_team_name?: string; }
@@ -18,8 +26,44 @@ export interface User { id: string; email: string; username: string; password_ha
 export interface UserTeam { id: number; user_id: string; team_id: number; is_primary: number; created_at: string; updated_at: string; }
 export interface TransferOffer { id: number; player_id: number; from_user_id: string; to_user_id: string; offer_amount: number; message: string | null; status: string; expires_at: string; created_at: string; updated_at: string; responded_at: string | null; player_name?: string; from_team_name?: string; to_team_name?: string; }
 
-// ==================== PLAYER VALUE ====================
-export function calculatePlayerValue(overall: number, age: number, attack: number, defense: number, serve: number, block: number, receive: number, setting: number) {
+// ==================== OVERALL & PLAYER VALUE ====================
+function coreSkillByPosition(
+    position: string,
+    attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
+): number {
+    switch (position) {
+        case 'Libero':
+            return receive * 0.40 + defense * 0.40 + setting * 0.20;
+        case 'Setter':
+            return setting * 0.50 + attack * 0.10 + defense * 0.10 + serve * 0.10 + block * 0.10;
+        case 'Middle Blocker':
+            return attack * 0.30 + defense * 0.30 + block * 0.25 + serve * 0.10 + setting * 0.05;
+        case 'Outside Hitter':
+        case 'Opposite Hitter':
+            return attack * 0.25 + defense * 0.25 + serve * 0.15 + block * 0.15 + receive * 0.15 + setting * 0.05;
+        default:
+            return (attack + defense + serve + block + receive + setting) / 6;
+    }
+}
+
+export function calculateOverall(
+    attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
+    speed: number, agility: number, strength: number, endurance: number, vertical: number, flexibility: number, torque: number, balance: number,
+    leadership: number, teamwork: number, concentration: number, pressure: number, consistency: number, vision: number, game_iq: number, intimidation: number,
+    position: string,
+    precision: number, flair: number, digging: number, positioning: number,
+    ball_control: number, technique: number, playmaking: number, spin: number,
+): number {
+    const coreSkill   = coreSkillByPosition(position, attack, defense, serve, block, receive, setting);
+    const technicalAvg = (precision + flair + digging + positioning + ball_control + technique + playmaking + spin) / 8;
+    const physicalAvg = (speed + agility + strength + endurance + vertical + flexibility + torque + balance) / 8;
+    const mentalAvg   = (leadership + teamwork + concentration + pressure + consistency + vision + game_iq + intimidation) / 8;
+    return Math.max(1, Math.min(100, Math.round(
+        coreSkill * 0.55 + technicalAvg * 0.15 + physicalAvg * 0.15 + mentalAvg * 0.15
+    )));
+}
+
+export function calculatePlayerValue(overall: number, age: number) {
     const baseValue = overall * 5000;
     let ageMod = 1.0;
     if (age < 22) ageMod = 1.3;
@@ -27,8 +71,25 @@ export function calculatePlayerValue(overall: number, age: number, attack: numbe
     else if (age < 30) ageMod = 1.0;
     else if (age < 35) ageMod = 0.8;
     else ageMod = 0.6;
-    const statBonus = (attack + defense + serve + block + receive + setting) * 50;
-    return Math.round((baseValue * ageMod) + statBonus);
+    return Math.round(baseValue * ageMod);
+}
+
+function recomputeOverall(player: Player): Player {
+    const overall = calculateOverall(
+        player.attack ?? 50, player.defense ?? 50, player.serve ?? 50,
+        player.block ?? 50, player.receive ?? 50, player.setting ?? 50,
+        player.speed ?? 50, player.agility ?? 50, player.strength ?? 50,
+        player.endurance ?? 50, player.vertical ?? 50, player.flexibility ?? 50,
+        player.torque ?? 50, player.balance ?? 50,
+        player.leadership ?? 50, player.teamwork ?? 50, player.concentration ?? 50,
+        player.pressure ?? 50, player.consistency ?? 50, player.vision ?? 50,
+        player.game_iq ?? 50, player.intimidation ?? 50,
+        player.position ?? '',
+        player.precision ?? 50, player.flair ?? 50, player.digging ?? 50,
+        player.positioning ?? 50, player.ball_control ?? 50, player.technique ?? 50,
+        player.playmaking ?? 50, player.spin ?? 50,
+    );
+    return { ...player, overall };
 }
 
 // ==================== LEAGUES ====================
@@ -79,88 +140,67 @@ export function updateTeamStats(teamId: number, data: Partial<Team>) {
 // ==================== PLAYERS ====================
 export function getPlayers(teamId?: number): Player[] {
     if (teamId) {
-        return getDb().prepare(`
+        const rows = getDb().prepare(`
       SELECT p.*, t.team_name, t.country as team_country FROM players p
       LEFT JOIN teams t ON p.team_id = t.id
       WHERE p.team_id = ?
       ORDER BY p.overall DESC
     `).all(teamId) as Player[];
+        return rows.map(recomputeOverall);
     }
-    return getDb().prepare(`
+    const rows = getDb().prepare(`
     SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     ORDER BY p.overall DESC
   `).all() as Player[];
+    return rows.map(recomputeOverall);
 }
 
 export function getPlayerById(id: number): Player | undefined {
-    return getDb().prepare(`
+    const row = getDb().prepare(`
     SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     WHERE p.id = ?
   `).get(id) as Player | undefined;
+    return row ? recomputeOverall(row) : undefined;
 }
 
 export function getFreeAgents(): Player[] {
-    return getDb().prepare('SELECT * FROM players WHERE team_id IS NULL ORDER BY overall DESC').all() as Player[];
+    const rows = getDb().prepare('SELECT * FROM players WHERE team_id IS NULL ORDER BY overall DESC').all() as Player[];
+    return rows.map(recomputeOverall);
 }
 
 export function searchPlayers(term: string): Player[] {
     const like = `%${term}%`;
-    return getDb().prepare(`
+    const rows = getDb().prepare(`
     SELECT p.*, t.team_name, t.country as team_country FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
     WHERE p.player_name LIKE ? OR p.country LIKE ? OR p.position LIKE ?
     ORDER BY p.overall DESC
   `).all(like, like, like) as Player[];
+    return rows.map(recomputeOverall);
 }
 
 export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_at' | 'team_name'> & { id?: number }): number {
     const hasCustomId = data.id !== undefined;
+    const cols = `player_name, team_id, position, age, country, jersey_number, overall,
+          attack, defense, serve, block, receive, setting,
+          precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
+          speed, agility, strength, endurance, vertical, flexibility, torque, balance,
+          leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+          contract_years, monthly_wage, player_value`;
+    const vals = `@player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
+          @attack, @defense, @serve, @block, @receive, @setting,
+          @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
+          @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
+          @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
+          @contract_years, @monthly_wage, @player_value`;
 
     if (hasCustomId) {
-        // INSERT with explicit ID
-        const result = getDb().prepare(`
-        INSERT INTO players (
-          id, player_name, team_id, position, age, country, jersey_number, overall,
-          attack, defense, serve, block, receive, setting,
-          contract_years, monthly_wage, player_value,
-          speed, agility, strength, endurance, height,
-          leadership, teamwork, concentration, pressure_handling,
-          jump_serve, float_serve, spike_power, spike_accuracy,
-          block_timing, dig_technique, experience, potential, consistency
-        ) VALUES (
-          @id, @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
-          @attack, @defense, @serve, @block, @receive, @setting,
-          @contract_years, @monthly_wage, @player_value,
-          @speed, @agility, @strength, @endurance, @height,
-          @leadership, @teamwork, @concentration, @pressure_handling,
-          @jump_serve, @float_serve, @spike_power, @spike_accuracy,
-          @block_timing, @dig_technique, @experience, @potential, @consistency
-        )
-      `).run(data);
+        getDb().prepare(`INSERT INTO players (id, ${cols}) VALUES (@id, ${vals})`).run(data);
         return data.id!;
     } else {
-        // INSERT without ID (auto-increment)
-        const result = getDb().prepare(`
-        INSERT INTO players (
-          player_name, team_id, position, age, country, jersey_number, overall,
-          attack, defense, serve, block, receive, setting,
-          contract_years, monthly_wage, player_value,
-          speed, agility, strength, endurance, height,
-          leadership, teamwork, concentration, pressure_handling,
-          jump_serve, float_serve, spike_power, spike_accuracy,
-          block_timing, dig_technique, experience, potential, consistency
-        ) VALUES (
-          @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
-          @attack, @defense, @serve, @block, @receive, @setting,
-          @contract_years, @monthly_wage, @player_value,
-          @speed, @agility, @strength, @endurance, @height,
-          @leadership, @teamwork, @concentration, @pressure_handling,
-          @jump_serve, @float_serve, @spike_power, @spike_accuracy,
-          @block_timing, @dig_technique, @experience, @potential, @consistency
-        )
-      `).run(data);
+        const result = getDb().prepare(`INSERT INTO players (${cols}) VALUES (${vals})`).run(data);
         return Number(result.lastInsertRowid);
     }
 }
@@ -168,12 +208,12 @@ export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_a
 export function updatePlayer(id: number, data: Partial<Player>) {
     const allowedFields = [
         'player_name', 'team_id', 'position', 'age', 'country', 'jersey_number', 'overall',
+        'height', 'potential',
         'attack', 'defense', 'serve', 'block', 'receive', 'setting',
+        'precision', 'flair', 'digging', 'positioning', 'ball_control', 'technique', 'playmaking', 'spin',
+        'speed', 'agility', 'strength', 'endurance', 'vertical', 'flexibility', 'torque', 'balance',
+        'leadership', 'teamwork', 'concentration', 'pressure', 'consistency', 'vision', 'game_iq', 'intimidation',
         'contract_years', 'monthly_wage', 'player_value',
-        'speed', 'agility', 'strength', 'endurance', 'height',
-        'leadership', 'teamwork', 'concentration', 'pressure_handling',
-        'jump_serve', 'float_serve', 'spike_power', 'spike_accuracy',
-        'block_timing', 'dig_technique', 'experience', 'potential', 'consistency',
     ];
     const updates: Record<string, unknown> = {};
     for (const key of allowedFields) {

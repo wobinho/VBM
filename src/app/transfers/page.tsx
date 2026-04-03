@@ -7,13 +7,16 @@ import { Search, ShoppingCart, Inbox, Send, DollarSign, Filter, ChevronDown, X }
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
-    jersey_number: number; overall: number; attack: number; defense: number; serve: number;
+    jersey_number: number; overall: number; height?: number; attack: number; defense: number; serve: number;
     block: number; receive: number; setting: number; contract_years: number; monthly_wage: number;
-    player_value: number; speed: number; agility: number; strength: number; endurance: number;
-    height: number; leadership: number; teamwork: number; concentration: number;
-    pressure_handling: number; jump_serve: number; float_serve: number; spike_power: number;
-    spike_accuracy: number; block_timing: number; dig_technique: number; experience: number;
-    potential: number; consistency: number; team_name?: string; team_id: number | null;
+    player_value: number;
+    precision: number; flair: number; digging: number; positioning: number;
+    ball_control: number; technique: number; playmaking: number; spin: number;
+    speed: number; agility: number; strength: number; endurance: number;
+    vertical: number; flexibility: number; torque: number; balance: number;
+    leadership: number; teamwork: number; concentration: number; pressure: number;
+    consistency: number; vision: number; game_iq: number; intimidation: number;
+    team_name?: string; team_id: number | null;
 }
 
 interface League {

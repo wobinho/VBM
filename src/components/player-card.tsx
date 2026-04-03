@@ -5,9 +5,9 @@ import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
-    jersey_number: number; overall: number; attack: number; defense: number; serve: number;
-    block: number; receive: number; setting: number; player_value: number; team_name?: string;
-    team_id?: number | null;
+    jersey_number: number; overall: number; height?: number;
+    attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
+    player_value: number; team_name?: string; team_id?: number | null;
 }
 
 function getPositionAbbrev(pos: string) {
@@ -216,8 +216,8 @@ export default function PlayerCard({ player, onClick, compact = false }: { playe
                         <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Age</div>
                     </div>
                     <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className={`text-[11px] sm:text-[12px] font-bold leading-tight ${overallColor}`}>{player.overall}</div>
-                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">OVR</div>
+                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{player.height ? `${player.height}cm` : '—'}</div>
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Height</div>
                     </div>
                 </div>
 

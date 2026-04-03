@@ -12,10 +12,18 @@ interface Team { id: number; team_name: string; played: number; won: number; los
 
 interface SimPlayer {
     id: number; player_name: string; position: string; overall: number;
+    // Core
     attack: number; serve: number; block: number; receive: number; setting: number;
-    spike_power: number; spike_accuracy: number; jump_serve: number; float_serve: number;
-    block_timing: number; dig_technique: number; pressure_handling: number; consistency: number;
-    country: string; experience: number;
+    // Technical
+    precision: number; flair: number; digging: number; positioning: number;
+    ball_control: number; technique: number; playmaking: number; spin: number;
+    // Physical
+    speed: number; agility: number; strength: number; endurance: number;
+    vertical: number; flexibility: number; torque: number; balance: number;
+    // Mental
+    leadership: number; teamwork: number; concentration: number; pressure: number;
+    consistency: number; vision: number; game_iq: number; intimidation: number;
+    country: string;
 }
 
 interface SimLineup { OH1: SimPlayer | null; MB1: SimPlayer | null; OPP: SimPlayer | null; S: SimPlayer | null; MB2: SimPlayer | null; OH2: SimPlayer | null; L: SimPlayer | null; }
@@ -101,14 +109,20 @@ function buildStrengths(lu: SimLineup): TeamStrengths {
     const attackers = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
     const blockers  = [lu.MB1, lu.MB2, lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
     const receivers = [lu.L, lu.OH1, lu.OH2].filter(Boolean) as SimPlayer[];
-    const setterBonus = lu.S ? lu.S.setting * 0.04 : 0;
+    // Setter quality: setting + playmaking + vision
+    const setterBonus = lu.S ? (lu.S.setting * 0.5 + lu.S.playmaking * 0.3 + lu.S.vision * 0.2) * 0.04 : 0;
 
     return {
-        serve:   avg(all.map(p => p.serve * 0.5 + p.jump_serve * 0.3 + p.float_serve * 0.2)),
-        attack:  avg(attackers.map(p => p.attack * 0.4 + p.spike_power * 0.35 + p.spike_accuracy * 0.25)) + setterBonus,
-        block:   avg(blockers.map(p => p.block * 0.5 + p.block_timing * 0.5)),
-        receive: avg(receivers.map(p => p.receive * 0.5 + p.dig_technique * 0.5)),
-        mental:  avg(all.map(p => p.pressure_handling * 0.5 + p.consistency * 0.5)),
+        // Serve: core serve + technique (spin variety) + spin + agility (jump timing)
+        serve:   avg(all.map(p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15)),
+        // Attack: core attack + precision + flair + strength (power) + vertical (reach)
+        attack:  avg(attackers.map(p => p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10)) + setterBonus,
+        // Block: core block + positioning + vertical + concentration
+        block:   avg(blockers.map(p => p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15)),
+        // Receive: core receive + digging + ball_control + flexibility + balance
+        receive: avg(receivers.map(p => p.receive * 0.35 + p.digging * 0.25 + p.ball_control * 0.20 + p.flexibility * 0.10 + p.balance * 0.10)),
+        // Mental: pressure + consistency + game_iq + concentration + vision (team avg)
+        mental:  avg(all.map(p => p.pressure * 0.25 + p.consistency * 0.25 + p.game_iq * 0.20 + p.concentration * 0.15 + p.vision * 0.15)),
         overall: avg(all.map(p => p.overall)),
     };
 }
@@ -120,12 +134,15 @@ function computeChemistry(lu: SimLineup): number {
     const countryCount: Record<string, number> = {};
     for (const p of players) countryCount[p.country] = (countryCount[p.country] ?? 0) + 1;
     const maxGroup = Math.max(...Object.values(countryCount));
-    const cohesion  = maxGroup / players.length;
+    const cohesion = maxGroup / players.length;
 
-    const avgExp    = players.reduce((s, p) => s + p.experience, 0) / players.length;
-    const expBonus  = (avgExp - 50) / 200;
+    // teamwork drives chemistry; leadership amplifies it
+    const avgTeamwork    = players.reduce((s, p) => s + p.teamwork, 0) / players.length;
+    const avgLeadership  = players.reduce((s, p) => s + p.leadership, 0) / players.length;
+    const teamworkBonus  = (avgTeamwork - 50) / 200;
+    const leadershipBonus = (avgLeadership - 50) / 400;
 
-    return Math.min(1.25, Math.max(0.75, 0.75 + cohesion * 0.4 + expBonus));
+    return Math.min(1.25, Math.max(0.75, 0.75 + cohesion * 0.35 + teamworkBonus + leadershipBonus));
 }
 
 /**
@@ -184,32 +201,33 @@ function weightedPick(players: SimPlayer[], weightFn: (p: SimPlayer) => number):
 function pickServer(lu: SimLineup): SimPlayer | null {
     const all = Object.values(lu).filter(Boolean) as SimPlayer[];
     if (!all.length) return null;
-    return weightedPick(all, p => p.serve * 0.5 + p.jump_serve * 0.3 + p.float_serve * 0.2);
+    return weightedPick(all, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15);
 }
 
 function pickReceiver(lu: SimLineup): SimPlayer | null {
     const cands = [lu.L, lu.OH1, lu.OH2].filter(Boolean) as SimPlayer[];
     if (!cands.length) return null;
-    return weightedPick(cands, p => p.receive * 0.5 + p.dig_technique * 0.5);
+    return weightedPick(cands, p => p.receive * 0.35 + p.digging * 0.25 + p.ball_control * 0.20 + p.flexibility * 0.10 + p.balance * 0.10);
 }
 
 function pickAttacker(lu: SimLineup): SimPlayer | null {
     const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
     if (!cands.length) return null;
-    return weightedPick(cands, p => p.attack * 0.4 + p.spike_power * 0.35 + p.spike_accuracy * 0.25);
+    return weightedPick(cands, p => p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10);
 }
 
 function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer | null {
+    const blockWeight = (p: SimPlayer) => p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15;
     if (attackerPos === 'Middle Blocker') {
         const cands = [lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, p => p.block * 0.5 + p.block_timing * 0.5);
+        if (cands.length) return weightedPick(cands, blockWeight);
     } else {
         const cands = [lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, p => p.block * 0.5 + p.block_timing * 0.5);
+        if (cands.length) return weightedPick(cands, blockWeight);
     }
     const all = [lu.MB1, lu.MB2, lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
     if (!all.length) return null;
-    return weightedPick(all, p => p.block * 0.5 + p.block_timing * 0.5);
+    return weightedPick(all, blockWeight);
 }
 
 function pickAnyPlayer(lu: SimLineup): SimPlayer | null {
@@ -326,21 +344,25 @@ function simulateRally(
     const rng = () => Math.random();
 
     const server = pickServer(sLu);
+    // Serve quality: core serve + technique (control) + spin (variety) + agility (timing)
     const serveStat = server
-        ? server.serve * 0.5 + server.jump_serve * 0.3 + server.float_serve * 0.2
+        ? server.serve * 0.40 + server.technique * 0.25 + server.spin * 0.20 + server.agility * 0.15
         : 50;
+    // intimidation adds pressure to the receiver
+    const intimidationBonus = server ? server.intimidation * 0.05 : 0;
 
     const receiver = pickReceiver(rLu);
+    // Receive quality: core receive + digging + ball_control + flexibility + balance
     const receiveStat = receiver
-        ? receiver.receive * 0.5 + receiver.dig_technique * 0.5
+        ? receiver.receive * 0.35 + receiver.digging * 0.25 + receiver.ball_control * 0.20 + receiver.flexibility * 0.10 + receiver.balance * 0.10
         : 50;
 
-    const servePressure = (serveStat - receiveStat) / 120;
+    const servePressure = (serveStat + intimidationBonus - receiveStat) / 120;
 
     const sTeam: 'home' | 'away' = servingIsHome ? 'home' : 'away';
     const rTeam: 'home' | 'away' = servingIsHome ? 'away' : 'home';
 
-    // ── Ace: 3–12% (was 4–9%). Wider window rewards exceptional servers ──────────
+    // ── Ace: 3–12%. Wider window rewards exceptional servers ──────────────────────
     const aceProb = Math.max(0.03, Math.min(0.12,
         0.06 + servePressure * 0.08 + sMomBonus / 600,
     ));
@@ -354,9 +376,10 @@ function simulateRally(
         };
     }
 
-    // ── Serve error: 5–11% ─────────────────────────────────────────────────────
+    // ── Serve error: 5–11% (technique + consistency reduces errors) ───────────────
+    const serverConsistency = server ? (server.consistency * 0.5 + server.technique * 0.5) : 50;
     const errProb = Math.max(0.05, Math.min(0.11,
-        0.08 - (serveStat - 50) / 1200 - sMomBonus / 700,
+        0.08 - (serveStat - 50) / 1200 - (serverConsistency - 50) / 2000 - sMomBonus / 700,
     ));
     if (rng() < errProb) {
         return {
@@ -369,26 +392,36 @@ function simulateRally(
     }
 
     const setter = sLu.S;
-    const setStat = setter ? setter.setting : 50;
-    const setBonus = (setStat - 50) / 100 * 8;
+    // Set quality: setting + playmaking + vision
+    const setStat = setter ? setter.setting * 0.5 + setter.playmaking * 0.3 + setter.vision * 0.2 : 50;
+    const setBonus = (setStat - 50) / 100 * 10;
 
     const attacker = pickAttacker(sLu);
+    // Attack quality: attack + precision + flair + strength + vertical
     const atkStat = attacker
-        ? attacker.attack * 0.4 + attacker.spike_power * 0.35 + attacker.spike_accuracy * 0.25
+        ? attacker.attack * 0.35 + attacker.precision * 0.25 + attacker.flair * 0.15 + attacker.strength * 0.15 + attacker.vertical * 0.10
         : 50;
 
     const blocker = pickBlocker(attacker?.position, rLu);
-    const blkStat = blocker ? blocker.block * 0.5 + blocker.block_timing * 0.5 : 50;
+    // Block quality: block + positioning + vertical + concentration
+    const blkStat = blocker
+        ? blocker.block * 0.40 + blocker.positioning * 0.25 + blocker.vertical * 0.20 + blocker.concentration * 0.15
+        : 50;
 
-    const digger   = pickReceiver(rLu);
-    const digStat  = digger ? digger.receive * 0.5 + digger.dig_technique * 0.5 : 50;
+    const digger  = pickReceiver(rLu);
+    // Dig quality: receive + digging + ball_control + flexibility + balance
+    const digStat = digger
+        ? digger.receive * 0.35 + digger.digging * 0.25 + digger.ball_control * 0.20 + digger.flexibility * 0.10 + digger.balance * 0.10
+        : 50;
 
     const cAttacker = pickAttacker(rLu);
     const cAtkStat  = cAttacker
-        ? cAttacker.attack * 0.4 + cAttacker.spike_power * 0.35 + cAttacker.spike_accuracy * 0.25
+        ? cAttacker.attack * 0.35 + cAttacker.precision * 0.25 + cAttacker.flair * 0.15 + cAttacker.strength * 0.15 + cAttacker.vertical * 0.10
         : 50;
     const cBlocker = pickBlocker(cAttacker?.position, sLu);
-    const cBlkStat = cBlocker ? cBlocker.block * 0.5 + cBlocker.block_timing * 0.5 : 50;
+    const cBlkStat = cBlocker
+        ? cBlocker.block * 0.40 + cBlocker.positioning * 0.25 + cBlocker.vertical * 0.20 + cBlocker.concentration * 0.15
+        : 50;
 
     // ── INCREASED VARIANCE: V=220 instead of 140. Huge per-rally swings possible ─
     const V    = 220;
@@ -460,13 +493,18 @@ function simulateRally(
             }, rName, sName),
             players: { attacker: attacker?.player_name, digger: digger?.player_name },
             teams: { attackerTeam: sTeam, receiverTeam: rTeam },
-            attackerRef: attacker ?? undefined, diggerRef: digger ?? undefined,
+            attackerRef: cAttacker ?? undefined, diggerRef: digger ?? undefined,
         };
     }
 
-    // ── Long rally — chemistry-weighted mental battle (±80 RNG, was ±60) ────────
-    const sMental = sStr.mental * (1 + (sChem - 1) * 0.1);
-    const rMental = rStr.mental * (1 + (rChem - 1) * 0.1);
+    // ── Long rally — chemistry + mental battle (game_iq, vision, leadership, endurance factor in) ──
+    // game_iq & vision give edge in reading play; leadership & teamwork improve team cohesion under pressure
+    const sRallyBonus = sLu.S ? (sLu.S.vision * 0.5 + sLu.S.game_iq * 0.5) * 0.02 : 0;
+    const rRallyBonus = rLu.S ? (rLu.S.vision * 0.5 + rLu.S.game_iq * 0.5) * 0.02 : 0;
+    const sEndurance = avg(Object.values(sLu).filter(Boolean).map((p) => (p as SimPlayer).endurance));
+    const rEndurance = avg(Object.values(rLu).filter(Boolean).map((p) => (p as SimPlayer).endurance));
+    const sMental = (sStr.mental + sRallyBonus + sEndurance * 0.05) * (1 + (sChem - 1) * 0.1);
+    const rMental = (rStr.mental + rRallyBonus + rEndurance * 0.05) * (1 + (rChem - 1) * 0.1);
     const mentalAdv = (sMental - rMental) * 0.4 + (rng() - 0.5) * 80;
     if (mentalAdv > 0) {
         return { servingWins: true, eventType: 'rally', text: describePoint('rally', {}, sName, rName), players: { server: server?.player_name }, teams: { serverTeam: sTeam }, serverRef: server ?? undefined };
@@ -555,10 +593,17 @@ function computeNextPoint(
         p.blocks++; p.points++;
         newStats[rTeam].blocks++;
     }
-    if (eventType === 'dig_winner' && result.diggerRef) {
-        const p = ensurePlayer(newStats[rTeam], result.diggerRef);
-        p.digs++; p.points++;
-        newStats[rTeam].digs++;
+    if (eventType === 'dig_winner') {
+        if (result.diggerRef) {
+            const dp = ensurePlayer(newStats[rTeam], result.diggerRef);
+            dp.digs++;
+            newStats[rTeam].digs++;
+        }
+        if (result.attackerRef) {
+            const ap = ensurePlayer(newStats[rTeam], result.attackerRef);
+            ap.spikes++; ap.points++;
+            newStats[rTeam].spikes++;
+        }
     }
     if (eventType === 'attack_error' && result.attackerRef) {
         const p = ensurePlayer(newStats[sTeam], result.attackerRef);
@@ -732,7 +777,7 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                                         </div>
                                     </td>
                                     <td className="text-center py-2.5 px-1 text-[9px] font-bold text-gray-600 uppercase">
-                                        {p.position.split(' ').map((w: string) => w[0]).join('')}
+                                        {p.position === 'Opposite Hitter' ? 'OP' : p.position.split(' ').map((w: string) => w[0]).join('')}
                                     </td>
                                     <td className={`text-right py-2.5 px-2 font-black tabular-nums ${idx === 0 ? accent : 'text-gray-300'}`}>
                                         {p.points}

@@ -7,13 +7,16 @@ import PlayerModal from '@/components/player-modal';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
-    id: number; player_name: string; position: string; overall: number; jersey_number: number; age: number; country: string;
+    id: number; player_name: string; position: string; overall: number; jersey_number: number; age: number; country: string; height?: number;
     attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
-    contract_years?: number; monthly_wage?: number; player_value?: number; speed?: number; agility?: number;
-    strength?: number; endurance?: number; height?: number; leadership?: number; teamwork?: number;
-    concentration?: number; pressure_handling?: number; potential?: number; experience?: number; consistency?: number;
-    jump_serve?: number; float_serve?: number; spike_power?: number; spike_accuracy?: number;
-    block_timing?: number; dig_technique?: number; team_id?: number;
+    contract_years?: number; monthly_wage?: number; player_value?: number;
+    precision?: number; flair?: number; digging?: number; positioning?: number;
+    ball_control?: number; technique?: number; playmaking?: number; spin?: number;
+    speed?: number; agility?: number; strength?: number; endurance?: number;
+    vertical?: number; flexibility?: number; torque?: number; balance?: number;
+    leadership?: number; teamwork?: number; concentration?: number; pressure?: number;
+    consistency?: number; vision?: number; game_iq?: number; intimidation?: number;
+    team_id?: number;
 }
 
 const POSITIONS = [
@@ -364,17 +367,18 @@ export default function SquadPage() {
                                 const attackers = [lineup.OH1, lineup.OPP, lineup.MB1, lineup.MB2].filter(Boolean) as Player[];
                                 const blockers  = [lineup.MB1, lineup.MB2, lineup.OH1, lineup.OH2, lineup.OPP].filter(Boolean) as Player[];
                                 const receivers = [lineup.L, lineup.OH1, lineup.OH2].filter(Boolean) as Player[];
-                                const setterBonus = lineup.S ? lineup.S.setting * 0.04 : 0;
-
                                 const avg = (nums: number[]) => nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : 50;
 
+                                const setterBonusAdv = lineup.S
+                                    ? (lineup.S.setting * 0.5 + (lineup.S.playmaking ?? 50) * 0.3 + (lineup.S.vision ?? 50) * 0.2) * 0.04
+                                    : 0;
                                 const stats: Record<string, number> = {
-                                    'Attack':  avg(attackers.map(p => p.attack * 0.4 + (p.spike_power ?? 50) * 0.35 + (p.spike_accuracy ?? 50) * 0.25)) + setterBonus,
+                                    'Attack':  avg(attackers.map(p => p.attack * 0.35 + (p.precision ?? 50) * 0.25 + (p.flair ?? 50) * 0.15 + (p.strength ?? 50) * 0.15 + (p.vertical ?? 50) * 0.10)) + setterBonusAdv,
                                     'Defense': avg(pp.map(p => p.defense)),
-                                    'Serve':   avg(pp.map(p => p.serve * 0.5 + (p.jump_serve ?? 50) * 0.3 + (p.float_serve ?? 50) * 0.2)),
-                                    'Block':   avg(blockers.map(p => p.block * 0.5 + (p.block_timing ?? 50) * 0.5)),
-                                    'Receive': avg(receivers.map(p => p.receive * 0.5 + (p.dig_technique ?? 50) * 0.5)),
-                                    'Chemistry': 75,
+                                    'Serve':   avg(pp.map(p => p.serve * 0.40 + (p.technique ?? 50) * 0.25 + (p.spin ?? 50) * 0.20 + (p.agility ?? 50) * 0.15)),
+                                    'Block':   avg(blockers.map(p => p.block * 0.40 + (p.positioning ?? 50) * 0.25 + (p.vertical ?? 50) * 0.20 + (p.concentration ?? 50) * 0.15)),
+                                    'Receive': avg(receivers.map(p => p.receive * 0.35 + (p.digging ?? 50) * 0.25 + (p.ball_control ?? 50) * 0.20 + (p.flexibility ?? 50) * 0.10 + (p.balance ?? 50) * 0.10)),
+                                    'Mental':  avg(pp.map(p => (p.pressure ?? 50) * 0.25 + (p.consistency ?? 50) * 0.25 + (p.game_iq ?? 50) * 0.20 + (p.concentration ?? 50) * 0.15 + (p.vision ?? 50) * 0.15)),
                                 };
                                 return Object.entries(stats).map(([stat, value], idx) => (
                                     <div key={`stat-${idx}-${stat}`}>
