@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { runSchema } from './schema';
 import { seedDatabase } from './seed';
+import { generateTripleRoundRobin } from '../schedule-engine';
 
 let db: Database.Database | null = null;
 
@@ -117,8 +118,126 @@ export function getDb(): Database.Database {
       // Seed starting lineup for team 6 (Zebrette Udine) so testing works out of the box
       seedTeam6Lineup(db);
     }
+
+    // Migration: seasons, fixtures, game_state tables
+    const seasonsCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='seasons'"
+    ).get();
+
+    if (!seasonsCheck) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS seasons (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+          year INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+          created_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(league_id, year)
+        );
+
+        CREATE TABLE IF NOT EXISTS fixtures (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+          league_id INTEGER NOT NULL REFERENCES leagues(id),
+          home_team_id INTEGER NOT NULL REFERENCES teams(id),
+          away_team_id INTEGER NOT NULL REFERENCES teams(id),
+          game_week INTEGER NOT NULL,
+          scheduled_date TEXT NOT NULL,
+          status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'postponed')),
+          home_sets INTEGER,
+          away_sets INTEGER,
+          home_points INTEGER,
+          away_points INTEGER,
+          played_at TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS game_state (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          current_date TEXT NOT NULL,
+          season_id INTEGER REFERENCES seasons(id),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fixtures_season_id ON fixtures(season_id);
+        CREATE INDEX IF NOT EXISTS idx_fixtures_scheduled_date ON fixtures(scheduled_date);
+        CREATE INDEX IF NOT EXISTS idx_fixtures_home_team ON fixtures(home_team_id);
+        CREATE INDEX IF NOT EXISTS idx_fixtures_away_team ON fixtures(away_team_id);
+        CREATE INDEX IF NOT EXISTS idx_fixtures_status ON fixtures(status);
+      `);
+
+      // Seed initial season + schedule
+      seedInitialSeason(db);
+    }
   }
   return db;
+}
+
+function seedInitialSeason(db: Database.Database) {
+  // Get the first active league
+  const league = db.prepare("SELECT id FROM leagues ORDER BY id LIMIT 1").get() as { id: number } | undefined;
+  if (!league) return;
+
+  // Get all teams in that league
+  const teams = db.prepare("SELECT id FROM teams WHERE league_id = ? ORDER BY id").all(league.id) as { id: number }[];
+  if (teams.length < 2) return;
+
+  const year = 2026;
+  const seasonName = `${year} Season`;
+
+  // Insert season
+  const seasonResult = db.prepare(`
+    INSERT OR IGNORE INTO seasons (league_id, year, name, start_date, end_date)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(league.id, year, seasonName, `${year}-01-01`, `${year}-12-31`);
+
+  let seasonId: number;
+  if (seasonResult.changes === 0) {
+    // Already existed
+    const existing = db.prepare("SELECT id FROM seasons WHERE league_id = ? AND year = ?").get(league.id, year) as { id: number };
+    seasonId = existing.id;
+  } else {
+    seasonId = Number(seasonResult.lastInsertRowid);
+  }
+
+  // Only seed fixtures if none exist for this season
+  const existingFixtures = db.prepare("SELECT COUNT(*) as c FROM fixtures WHERE season_id = ?").get(seasonId) as { c: number };
+  if (existingFixtures.c > 0) {
+    // Set game_state if missing
+    const gs = db.prepare("SELECT id FROM game_state WHERE id = 1").get();
+    if (!gs) {
+      db.prepare("INSERT OR IGNORE INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)").run(`${year}-01-01`, seasonId);
+    }
+    return;
+  }
+
+  // Generate fixtures
+  const teamIds = teams.map(t => t.id);
+  const slots = generateTripleRoundRobin(teamIds, year);
+
+  const insertFixture = db.prepare(`
+    INSERT INTO fixtures (season_id, league_id, home_team_id, away_team_id, game_week, scheduled_date)
+    VALUES (@season_id, @league_id, @home_team_id, @away_team_id, @game_week, @scheduled_date)
+  `);
+  const insertAll = db.transaction(() => {
+    for (const slot of slots) {
+      insertFixture.run({
+        season_id:      seasonId,
+        league_id:      league.id,
+        home_team_id:   slot.home_team_id,
+        away_team_id:   slot.away_team_id,
+        game_week:      slot.game_week,
+        scheduled_date: slot.scheduled_date,
+      });
+    }
+  });
+  insertAll();
+
+  // Initialize game_state to Jan 1 of season year
+  db.prepare("INSERT OR REPLACE INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)").run(`${year}-01-01`, seasonId);
 }
 
 function seedTeam6Lineup(db: Database.Database) {

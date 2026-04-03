@@ -125,6 +125,42 @@ export function runSchema(db: Database.Database) {
       responded_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS seasons (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(league_id, year)
+    );
+
+    CREATE TABLE IF NOT EXISTS fixtures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      league_id INTEGER NOT NULL REFERENCES leagues(id),
+      home_team_id INTEGER NOT NULL REFERENCES teams(id),
+      away_team_id INTEGER NOT NULL REFERENCES teams(id),
+      game_week INTEGER NOT NULL,
+      scheduled_date TEXT NOT NULL,
+      status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'postponed')),
+      home_sets INTEGER,
+      away_sets INTEGER,
+      home_points INTEGER,
+      away_points INTEGER,
+      played_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS game_state (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      current_date TEXT NOT NULL,
+      season_id INTEGER REFERENCES seasons(id),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_teams_league_id ON teams(league_id);
     CREATE INDEX IF NOT EXISTS idx_players_team_id ON players(team_id);
     CREATE INDEX IF NOT EXISTS idx_players_position ON players(position);
@@ -137,5 +173,10 @@ export function runSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_transfer_offers_from_user ON transfer_offers(from_user_id);
     CREATE INDEX IF NOT EXISTS idx_transfer_offers_to_user ON transfer_offers(to_user_id);
     CREATE INDEX IF NOT EXISTS idx_transfer_offers_status ON transfer_offers(status);
+    CREATE INDEX IF NOT EXISTS idx_fixtures_season_id ON fixtures(season_id);
+    CREATE INDEX IF NOT EXISTS idx_fixtures_scheduled_date ON fixtures(scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_fixtures_home_team ON fixtures(home_team_id);
+    CREATE INDEX IF NOT EXISTS idx_fixtures_away_team ON fixtures(away_team_id);
+    CREATE INDEX IF NOT EXISTS idx_fixtures_status ON fixtures(status);
   `);
 }

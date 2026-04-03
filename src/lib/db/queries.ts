@@ -419,6 +419,258 @@ export function getSquadLineupWithPlayers(teamId: number): Record<string, Player
   return result;
 }
 
+// ==================== SEASONS ====================
+export interface Season {
+  id: number;
+  league_id: number;
+  year: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  created_at: string;
+}
+
+export function getSeasons(leagueId?: number): Season[] {
+  if (leagueId) {
+    return getDb().prepare('SELECT * FROM seasons WHERE league_id = ? ORDER BY year DESC').all(leagueId) as Season[];
+  }
+  return getDb().prepare('SELECT * FROM seasons ORDER BY year DESC').all() as Season[];
+}
+
+export function getActiveSeason(leagueId: number): Season | undefined {
+  return getDb().prepare(
+    "SELECT * FROM seasons WHERE league_id = ? AND status = 'active' ORDER BY year DESC LIMIT 1"
+  ).get(leagueId) as Season | undefined;
+}
+
+export function getSeasonById(id: number): Season | undefined {
+  return getDb().prepare('SELECT * FROM seasons WHERE id = ?').get(id) as Season | undefined;
+}
+
+export function createSeason(data: { league_id: number; year: number; name: string; start_date: string; end_date: string }): number {
+  const result = getDb().prepare(`
+    INSERT INTO seasons (league_id, year, name, start_date, end_date)
+    VALUES (@league_id, @year, @name, @start_date, @end_date)
+  `).run(data);
+  return Number(result.lastInsertRowid);
+}
+
+// ==================== FIXTURES ====================
+export interface Fixture {
+  id: number;
+  season_id: number;
+  league_id: number;
+  home_team_id: number;
+  away_team_id: number;
+  game_week: number;
+  scheduled_date: string;
+  status: string;
+  home_sets: number | null;
+  away_sets: number | null;
+  home_points: number | null;
+  away_points: number | null;
+  played_at: string | null;
+  created_at: string;
+  // Joined
+  home_team_name?: string;
+  away_team_name?: string;
+  season_name?: string;
+}
+
+const FIXTURE_JOIN = `
+  SELECT f.*,
+    ht.team_name AS home_team_name,
+    at.team_name AS away_team_name,
+    s.name AS season_name
+  FROM fixtures f
+  JOIN teams ht ON f.home_team_id = ht.id
+  JOIN teams at ON f.away_team_id = at.id
+  JOIN seasons s ON f.season_id = s.id
+`;
+
+export function getFixtures(opts: {
+  seasonId?: number;
+  leagueId?: number;
+  date?: string;
+  teamId?: number;
+  status?: string;
+  gameWeek?: number;
+  limit?: number;
+} = {}): Fixture[] {
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  if (opts.seasonId)  { clauses.push('f.season_id = @seasonId');    params.seasonId  = opts.seasonId; }
+  if (opts.leagueId)  { clauses.push('f.league_id = @leagueId');    params.leagueId  = opts.leagueId; }
+  if (opts.date)      { clauses.push('f.scheduled_date = @date');   params.date      = opts.date; }
+  if (opts.teamId)    { clauses.push('(f.home_team_id = @teamId OR f.away_team_id = @teamId)'); params.teamId = opts.teamId; }
+  if (opts.status)    { clauses.push('f.status = @status');         params.status    = opts.status; }
+  if (opts.gameWeek)  { clauses.push('f.game_week = @gameWeek');    params.gameWeek  = opts.gameWeek; }
+
+  const where  = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const limit  = opts.limit ? `LIMIT ${opts.limit}` : '';
+  const sql    = `${FIXTURE_JOIN} ${where} ORDER BY f.scheduled_date ASC, f.game_week ASC ${limit}`;
+
+  return getDb().prepare(sql).all(params) as Fixture[];
+}
+
+export function getFixtureById(id: number): Fixture | undefined {
+  return getDb().prepare(`${FIXTURE_JOIN} WHERE f.id = ?`).get(id) as Fixture | undefined;
+}
+
+export function getUpcomingFixtures(teamId: number, afterDate: string, limit = 5): Fixture[] {
+  return getDb().prepare(`
+    ${FIXTURE_JOIN}
+    WHERE (f.home_team_id = ? OR f.away_team_id = ?)
+      AND f.status = 'scheduled'
+      AND f.scheduled_date >= ?
+    ORDER BY f.scheduled_date ASC
+    LIMIT ?
+  `).all(teamId, teamId, afterDate, limit) as Fixture[];
+}
+
+export function getRecentResults(teamId: number, limit = 5): Fixture[] {
+  return getDb().prepare(`
+    ${FIXTURE_JOIN}
+    WHERE (f.home_team_id = ? OR f.away_team_id = ?)
+      AND f.status = 'completed'
+    ORDER BY f.played_at DESC
+    LIMIT ?
+  `).all(teamId, teamId, limit) as Fixture[];
+}
+
+export function getFixturesByDate(date: string, leagueId?: number): Fixture[] {
+  if (leagueId) {
+    return getDb().prepare(`
+      ${FIXTURE_JOIN}
+      WHERE f.scheduled_date = ? AND f.league_id = ?
+      ORDER BY f.id ASC
+    `).all(date, leagueId) as Fixture[];
+  }
+  return getDb().prepare(`
+    ${FIXTURE_JOIN}
+    WHERE f.scheduled_date = ?
+    ORDER BY f.id ASC
+  `).all(date) as Fixture[];
+}
+
+export function getScheduledDatesForSeason(seasonId: number): string[] {
+  const rows = getDb().prepare(
+    "SELECT DISTINCT scheduled_date FROM fixtures WHERE season_id = ? ORDER BY scheduled_date ASC"
+  ).all(seasonId) as { scheduled_date: string }[];
+  return rows.map(r => r.scheduled_date);
+}
+
+export function insertFixtures(fixtures: {
+  season_id: number;
+  league_id: number;
+  home_team_id: number;
+  away_team_id: number;
+  game_week: number;
+  scheduled_date: string;
+}[]): void {
+  const stmt = getDb().prepare(`
+    INSERT INTO fixtures (season_id, league_id, home_team_id, away_team_id, game_week, scheduled_date)
+    VALUES (@season_id, @league_id, @home_team_id, @away_team_id, @game_week, @scheduled_date)
+  `);
+  const insertMany = getDb().transaction((rows: typeof fixtures) => {
+    for (const row of rows) stmt.run(row);
+  });
+  insertMany(fixtures);
+}
+
+export function updateFixtureResult(
+  id: number,
+  result: { home_sets: number; away_sets: number; home_points: number; away_points: number },
+): void {
+  getDb().prepare(`
+    UPDATE fixtures
+    SET status = 'completed',
+        home_sets = @home_sets,
+        away_sets = @away_sets,
+        home_points = @home_points,
+        away_points = @away_points,
+        played_at = datetime('now')
+    WHERE id = @id
+  `).run({ ...result, id });
+}
+
+/**
+ * Volleyball points system:
+ *   3-0 or 3-1 win → winner +3 pts, loser +0 pts
+ *   3-2 win        → winner +2 pts, loser +1 pt
+ * goal_diff tracks net sets for the season.
+ */
+export function updateTeamStatsAfterMatch(
+  homeTeamId: number,
+  awayTeamId: number,
+  homeSets: number,
+  awaySets: number,
+): void {
+  const isHomeWin = homeSets > awaySets;
+  const decisive  = Math.abs(homeSets - awaySets) >= 2; // 3-0 or 3-1 vs 3-2
+
+  const homePoints = isHomeWin  ? (decisive ? 3 : 2) : (decisive ? 0 : 1);
+  const awayPoints = !isHomeWin ? (decisive ? 3 : 2) : (decisive ? 0 : 1);
+  const homeSetDiff = homeSets - awaySets;
+  const awaySetDiff = awaySets - homeSets;
+
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE teams SET
+        played    = played + 1,
+        won       = won  + @won,
+        lost      = lost + @lost,
+        points    = points + @pts,
+        goal_diff = goal_diff + @diff
+      WHERE id = @id
+    `).run({ id: homeTeamId, won: isHomeWin ? 1 : 0, lost: isHomeWin ? 0 : 1, pts: homePoints, diff: homeSetDiff });
+
+    db.prepare(`
+      UPDATE teams SET
+        played    = played + 1,
+        won       = won  + @won,
+        lost      = lost + @lost,
+        points    = points + @pts,
+        goal_diff = goal_diff + @diff
+      WHERE id = @id
+    `).run({ id: awayTeamId, won: isHomeWin ? 0 : 1, lost: isHomeWin ? 1 : 0, pts: awayPoints, diff: awaySetDiff });
+  })();
+}
+
+// ==================== GAME STATE ====================
+export interface GameState {
+  id: number;
+  current_date: string;
+  season_id: number | null;
+  updated_at: string;
+}
+
+export function getGameState(): GameState | undefined {
+  return getDb().prepare('SELECT * FROM game_state WHERE id = 1').get() as GameState | undefined;
+}
+
+export function setGameState(currentDate: string, seasonId: number | null): void {
+  const existing = getDb().prepare('SELECT id FROM game_state WHERE id = 1').get();
+  if (existing) {
+    getDb().prepare(`
+      UPDATE game_state SET current_date = ?, season_id = ?, updated_at = datetime('now') WHERE id = 1
+    `).run(currentDate, seasonId);
+  } else {
+    getDb().prepare(`
+      INSERT INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)
+    `).run(currentDate, seasonId);
+  }
+}
+
+export function advanceGameDate(newDate: string): void {
+  getDb().prepare(`
+    UPDATE game_state SET current_date = ?, updated_at = datetime('now') WHERE id = 1
+  `).run(newDate);
+}
+
 // ==================== DATA SUMMARY ====================
 export function getDataSummary() {
     const db = getDb();
