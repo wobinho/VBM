@@ -3,6 +3,78 @@ import { getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch, getSqua
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
 import { getDb } from '@/lib/db';
 
+/**
+ * PATCH /api/fixtures/[id] — Save the user's manually-simulated match result,
+ * then simulate all other fixtures/playoff games on the same date.
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const fixtureId = Number(id);
+    const db = getDb();
+    const { homeSets, awaySets, homePoints, awayPoints } = await req.json();
+
+    // Look up the fixture to get its date and team IDs
+    const fixture = getFixtureById(fixtureId);
+    if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+
+    // Save the user's fixture result and update standings
+    updateFixtureResult(fixtureId, {
+      home_sets:   homeSets,
+      away_sets:   awaySets,
+      home_points: homePoints ?? 0,
+      away_points: awayPoints ?? 0,
+    });
+    updateTeamStatsAfterMatch(
+      fixture.home_team_id, fixture.away_team_id,
+      homeSets, awaySets,
+      homePoints ?? 0, awayPoints ?? 0,
+    );
+
+    const targetDate = fixture.scheduled_date;
+
+    // Simulate all remaining regular fixtures on the same date
+    const dayFixtures = getFixtures({ date: targetDate });
+    for (const f of dayFixtures) {
+      if (f.status === 'completed' || f.id === fixtureId) continue;
+      const homeLu = buildLineup(f.home_team_id);
+      const awayLu = buildLineup(f.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      updateFixtureResult(f.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+      updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+    }
+
+    // Simulate all remaining playoff games on the same date
+    const dayPlayoffGames = getPlayoffGamesByDate(targetDate);
+    for (const pg of dayPlayoffGames) {
+      if (pg.status === 'completed') continue;
+      const homeLu = buildLineup(pg.home_team_id);
+      const awayLu = buildLineup(pg.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      recordPlayoffGameResult(pg.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Error saving match result:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 /** GET /api/fixtures/[id] — fetch a single fixture */
 export async function GET(
   _req: Request,

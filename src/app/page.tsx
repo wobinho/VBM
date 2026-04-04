@@ -7,6 +7,7 @@ import {
   AlertCircle, CheckCircle2, X, Loader2, ArrowUpDown,
 } from 'lucide-react';
 import Image from 'next/image';
+import MatchSimModal from '@/components/match-sim-modal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,9 @@ export default function DashboardPage() {
 
   // Quick-sim state
   const [simming, setSimming] = useState(false);
+
+  // Match sim modal state
+  const [matchSimFixtureId, setMatchSimFixtureId] = useState<number | null>(null);
 
   // Simulate-to-date state
   const [simToDate, setSimToDate] = useState(false);
@@ -789,6 +793,7 @@ export default function DashboardPage() {
               userTeamId={team?.id ?? null}
               isToday={!!gameState?.userFixtureToday}
               onQuickSim={handleQuickSim}
+              onPlayMatch={(id) => setMatchSimFixtureId(id)}
               simming={simming}
             />
           ) : (
@@ -837,6 +842,16 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {matchSimFixtureId && (
+        <MatchSimModal
+          fixtureId={matchSimFixtureId}
+          onClose={() => setMatchSimFixtureId(null)}
+          onMatchComplete={async () => {
+            await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -844,12 +859,13 @@ export default function DashboardPage() {
 // ─── Next Match Card ──────────────────────────────────────────────────────────
 
 function NextMatchCard({
-  fixture, userTeamId, isToday, onQuickSim, simming,
+  fixture, userTeamId, isToday, onQuickSim, onPlayMatch, simming,
 }: {
   fixture: Fixture;
   userTeamId: number | null;
   isToday: boolean;
   onQuickSim: (id: number) => void;
+  onPlayMatch: (id: number) => void;
   simming: boolean;
 }) {
   const userIsHome = fixture.home_team_id === userTeamId;
@@ -956,13 +972,14 @@ function NextMatchCard({
               </>
             ) : (
               <>
-                <a href={`/match?fixtureId=${fixture.id}`}
+                <button
+                  onClick={() => onPlayMatch(fixture.id)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
                     bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
                     transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
                   <Play size={11} fill="currentColor" />
                   Play Match
-                </a>
+                </button>
                 <button
                   onClick={() => onQuickSim(fixture.id)}
                   disabled={simming}

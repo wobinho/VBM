@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { Lock } from 'lucide-react';
 import {
     Swords, Play, Trophy, RotateCcw, Zap, FastForward, SkipForward, ChevronRight,
     AlertCircle, Users, Activity, Shield, Star, TrendingUp, Award, Target,
@@ -1516,6 +1517,18 @@ function MatchPageContent() {
 }
 
 export default function MatchPage() {
+    const { isAdmin } = useAuth();
+
+    if (!isAdmin) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+                <Lock size={48} className="text-gray-600" />
+                <h2 className="text-2xl font-bold text-white">Admin Only</h2>
+                <p className="text-gray-400">The Match Simulation page is restricted to administrators.</p>
+            </div>
+        );
+    }
+
     return (
         <Suspense fallback={<div className="p-10 text-white text-center">Loading match data...</div>}>
             <MatchPageContent />

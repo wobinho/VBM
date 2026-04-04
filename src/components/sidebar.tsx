@@ -2,26 +2,28 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy } from 'lucide-react';
+import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/squad', label: 'Squad Selection', icon: Users },
-    { href: '/team', label: 'Team Management', icon: UserCircle },
-    { href: '/office', label: 'Office', icon: Briefcase },
-    { href: '/standings', label: 'Standings', icon: ListOrdered },
-    { href: '/playoffs', label: 'Playoffs', icon: Trophy },
-    { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart },
-    { href: '/match', label: 'Match Simulation', icon: Swords },
-    { href: '/admin', label: 'Database Admin', icon: Database },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+    { href: '/squad', label: 'Squad Selection', icon: Users, adminOnly: false },
+    { href: '/team', label: 'Team Management', icon: UserCircle, adminOnly: false },
+    { href: '/office', label: 'Office', icon: Briefcase, adminOnly: false },
+    { href: '/standings', label: 'Standings', icon: ListOrdered, adminOnly: false },
+    { href: '/playoffs', label: 'Playoffs', icon: Trophy, adminOnly: false },
+    { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart, adminOnly: false },
+    { href: '/match', label: 'Match Simulation', icon: Swords, adminOnly: true },
+    { href: '/admin', label: 'Database Admin', icon: Database, adminOnly: true },
+    { href: '/player-admin', label: 'Player Admin', icon: UserCog, adminOnly: true },
+    { href: '/team-admin', label: 'Team Admin', icon: Shield, adminOnly: true },
 ];
 
 export default function Sidebar() {
     const pathname = usePathname();
     const { user, team, logout, isAdmin } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const visibleNavItems = navItems.filter(item => item.href !== '/admin' || isAdmin);
+    const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
     return (
         <>
