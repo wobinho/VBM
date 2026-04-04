@@ -7,6 +7,7 @@ import {
   getFixtures, getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch,
   getSeasonById, getUpcomingFixtures, getRecentResults,
   getSquadLineup, getPlayers, getUserTeam,
+  getPlayoffGamesByDate, PlayoffGame, Fixture,
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
 
@@ -124,6 +125,30 @@ export async function POST() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function playoffGameAsFixture(pg: PlayoffGame): Fixture & { is_playoff: true; playoff_game_id: number } {
+  return {
+    id: pg.id,
+    season_id: 0,
+    league_id: 1,
+    home_team_id: pg.home_team_id,
+    away_team_id: pg.away_team_id,
+    game_week: 0,
+    scheduled_date: pg.scheduled_date,
+    status: pg.status,
+    home_sets: pg.home_sets,
+    away_sets: pg.away_sets,
+    home_points: pg.home_points,
+    away_points: pg.away_points,
+    played_at: pg.played_at,
+    created_at: pg.created_at,
+    home_team_name: pg.home_team_name,
+    away_team_name: pg.away_team_name,
+    season_name: 'Playoffs',
+    is_playoff: true,
+    playoff_game_id: pg.id,
+  };
+}
+
 function buildLineup(teamId: number): SimLineup {
   const saved   = getSquadLineup(teamId);
   const players = getPlayers(teamId) as unknown as SimPlayer[];
@@ -171,7 +196,18 @@ async function buildStatePayload(
       teamId: userTeamId,
       status: 'scheduled',
     });
-    userFixtureToday = todayFixtures.length ? getFixtureById(todayFixtures[0].id) ?? null : null;
+    if (todayFixtures.length) {
+      userFixtureToday = getFixtureById(todayFixtures[0].id) ?? null;
+    } else {
+      // Check if the user has a playoff game today
+      const todayPlayoffGames = getPlayoffGamesByDate(state.current_date);
+      const userPlayoffGame = todayPlayoffGames.find(
+        pg => pg.home_team_id === userTeamId || pg.away_team_id === userTeamId
+      ) ?? null;
+      if (userPlayoffGame) {
+        userFixtureToday = playoffGameAsFixture(userPlayoffGame);
+      }
+    }
   }
 
   return {

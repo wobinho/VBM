@@ -7,7 +7,7 @@ import {
     TrendingUp, TrendingDown, DollarSign, Users, Calendar,
     Building2, Star, ShieldCheck, BarChart3, ChevronUp, ChevronDown,
     Wifi, Trophy, Zap, ArrowUpDown, FileSignature, X, Plus, Minus,
-    CheckCircle,
+    CheckCircle, Receipt,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -22,6 +22,22 @@ interface Player {
     contract_years: number;
     monthly_wage: number;
     player_value: number;
+}
+
+interface FinancialTransaction {
+    id: number;
+    team_id: number;
+    month: string;
+    income_matchday: number;
+    income_sponsorship: number;
+    income_merchandise: number;
+    income_broadcast: number;
+    income_other: number;
+    expense_wages: number;
+    expense_staff: number;
+    expense_other: number;
+    net: number;
+    created_at: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -227,6 +243,94 @@ function PatienceDots({ patience }: { patience: number }) {
                         }`}
                 />
             ))}
+        </div>
+    );
+}
+
+// ─── Cash Flow Breakdown Modal ────────────────────────────────────────────────
+
+function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () => void }) {
+    const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
+    const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
+    const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+
+    const incomeRows = [
+        { label: 'Matchday Revenue', value: tx.income_matchday },
+        { label: 'Shirt Sponsorship', value: tx.income_sponsorship },
+        { label: 'Merchandise Sales', value: tx.income_merchandise },
+        { label: 'Broadcast Rights', value: tx.income_broadcast },
+        ...(tx.income_other > 0 ? [{ label: 'Other Income', value: tx.income_other }] : []),
+    ];
+
+    const expenseRows = [
+        { label: 'Player Wages', value: tx.expense_wages },
+        { label: 'Staff Costs', value: tx.expense_staff },
+        ...(tx.expense_other > 0 ? [{ label: 'Other Expenses', value: tx.expense_other }] : []),
+    ];
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+            onClick={onClose}>
+            <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+                onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
+                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                    <button onClick={onClose}
+                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+                        <X size={14} />
+                    </button>
+                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-1">Cash Flow Breakdown</p>
+                    <h2 className="text-xl font-bold text-white">{monthLabel}</h2>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                    {/* Income */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest mb-2">Income</p>
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 overflow-hidden">
+                            {incomeRows.map((row, i) => (
+                                <div key={row.label} className={`flex items-center justify-between px-4 py-2.5 ${i < incomeRows.length - 1 ? 'border-b border-white/5' : ''}`}>
+                                    <span className="text-sm text-gray-400">{row.label}</span>
+                                    <span className="text-sm font-semibold text-emerald-400">{formatMoney(row.value)}</span>
+                                </div>
+                            ))}
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-500/5 border-t border-emerald-500/20">
+                                <span className="text-sm font-bold text-white">Total Income</span>
+                                <span className="text-sm font-black text-emerald-400">{formatMoney(totalIncome)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Expenses */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-red-400 uppercase tracking-widest mb-2">Expenses</p>
+                        <div className="rounded-xl bg-white/[0.03] border border-white/8 overflow-hidden">
+                            {expenseRows.map((row, i) => (
+                                <div key={row.label} className={`flex items-center justify-between px-4 py-2.5 ${i < expenseRows.length - 1 ? 'border-b border-white/5' : ''}`}>
+                                    <span className="text-sm text-gray-400">{row.label}</span>
+                                    <span className="text-sm font-semibold text-red-400">-{formatMoney(row.value)}</span>
+                                </div>
+                            ))}
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-red-500/5 border-t border-red-500/20">
+                                <span className="text-sm font-bold text-white">Total Expenses</span>
+                                <span className="text-sm font-black text-red-400">-{formatMoney(totalExpenses)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Net */}
+                    <div className={`rounded-xl px-4 py-3 border flex items-center justify-between ${tx.net >= 0 ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-red-500/10 border-red-500/25'}`}>
+                        <span className="text-sm font-bold text-white">Net Cash Flow</span>
+                        <span className={`text-lg font-black ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -486,6 +590,8 @@ export default function OfficePage() {
     const [sortBy, setSortBy] = useState<SortKey>('monthly_wage');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [negotiating, setNegotiating] = useState<Player | null>(null);
+    const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+    const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
 
     const fetchData = useCallback(() => {
         if (!team) return;
@@ -497,6 +603,9 @@ export default function OfficePage() {
             .then((data) => {
                 if (data?.team_money !== undefined) setTeamMoney(data.team_money);
             });
+        fetch('/api/finances')
+            .then(r => r.json())
+            .then((data: FinancialTransaction[]) => { if (Array.isArray(data)) setTransactions(data); });
     }, [team]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
@@ -696,6 +805,50 @@ export default function OfficePage() {
                 ))}
             </div>
 
+            {/* Cash Flow History */}
+            <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/10 flex items-center gap-2">
+                    <Receipt size={16} className="text-amber-400" />
+                    <h2 className="text-sm font-semibold text-white">Monthly Cash Flow</h2>
+                </div>
+
+                {transactions.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                        <p className="text-sm text-gray-600">No transactions yet — cash flow updates on the 1st of each month.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-white/5">
+                        {/* Column headers */}
+                        <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
+                            <span>Period</span>
+                            <span className="text-right">Income</span>
+                            <span className="text-right">Expenses</span>
+                            <span className="text-right">Net</span>
+                        </div>
+                        {transactions.map(tx => {
+                            const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
+                            const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
+                            const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+                            return (
+                                <div key={tx.id}
+                                    onClick={() => setSelectedTx(tx)}
+                                    className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3.5 items-center cursor-pointer hover:bg-white/[0.03] transition-colors">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                        <span className="text-sm font-medium text-white">{monthLabel}</span>
+                                    </div>
+                                    <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(totalIncome)}</span>
+                                    <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
+                                    <span className={`text-sm font-black text-right ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
             {/* Player Contracts Table */}
             <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 overflow-hidden">
                 <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
@@ -840,6 +993,11 @@ export default function OfficePage() {
                     onClose={() => setNegotiating(null)}
                     onSigned={handleSigned}
                 />
+            )}
+
+            {/* Cash Flow Breakdown Modal */}
+            {selectedTx && (
+                <CashFlowModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
             )}
         </div>
     );

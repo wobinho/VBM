@@ -58,6 +58,44 @@ export async function POST(
   return NextResponse.json({ fixture: updated, result });
 }
 
+/**
+ * PATCH /api/fixtures/[id] — persist the result of a client-side simulated match.
+ *
+ * Body: { homeSets, awaySets, homePoints, awayPoints }
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const fixtureId = Number(id);
+
+  const fixture = getFixtureById(fixtureId);
+  if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+  if (fixture.status === 'completed') {
+    return NextResponse.json({ error: 'Fixture already played', fixture }, { status: 409 });
+  }
+
+  const result = await req.json();
+
+  updateFixtureResult(fixtureId, {
+    home_sets:   result.homeSets,
+    away_sets:   result.awaySets,
+    home_points: result.homePoints,
+    away_points: result.awayPoints,
+  });
+
+  updateTeamStatsAfterMatch(
+    fixture.home_team_id,
+    fixture.away_team_id,
+    result.homeSets,
+    result.awaySets,
+  );
+
+  const updated = getFixtureById(fixtureId);
+  return NextResponse.json({ fixture: updated });
+}
+
 // ─── Helper: load or auto-generate a team's lineup ───────────────────────────
 
 async function buildLineup(teamId: number): Promise<SimLineup> {

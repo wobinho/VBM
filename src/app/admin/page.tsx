@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Edit2, Save, X, ArrowRight, Eye, EyeOff, Search, SlidersHorizontal, UserPlus, Database } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, ArrowRight, Eye, EyeOff, Search, SlidersHorizontal, UserPlus, Database, RotateCcw, AlertTriangle, CheckCircle2, Loader2, ArrowUpDown } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
@@ -193,6 +193,22 @@ export default function AdminPage() {
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorSuccess, setEditorSuccess] = useState(false);
 
+  // Season reset
+  const [resetConfirm, setResetConfirm]   = useState(false);
+  const [resetting,    setResetting]      = useState(false);
+  const [resetResult,  setResetResult]    = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Promotion / relegation
+  const [promoConfirm, setPromoConfirm]   = useState(false);
+  const [promoting,    setPromoting]      = useState(false);
+  const [promoResult,  setPromoResult]    = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Team league transfer tool
+  const [transferLeague, setTransferLeague] = useState<{ teamId: string; leagueId: string; region: string }>({ teamId: '', leagueId: '', region: '' });
+  const [transferLeagueLoading, setTransferLeagueLoading] = useState(false);
+  const [transferLeagueResult, setTransferLeagueResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [allLeagues, setAllLeagues] = useState<RowData[]>([]);
+
   if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
@@ -221,6 +237,7 @@ export default function AdminPage() {
     setReferenceData(refs);
     setAllPlayers(refs.players ?? []);
     setAllTeams(refs.teams ?? []);
+    setAllLeagues(refs.leagues ?? []);
   };
 
   const fetchTables = async () => {
@@ -561,12 +578,181 @@ export default function AdminPage() {
     );
   };
 
+  // ── Season reset ────────────────────────────────────────────────────────────
+  const handleResetSeason = async () => {
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const res = await fetch('/api/admin/reset-season', { method: 'POST' });
+      const data = await res.json();
+      setResetResult({ ok: res.ok, message: data.message ?? data.error ?? 'Unknown response' });
+      if (res.ok) {
+        fetchTables(); // refresh row counts
+        setResetConfirm(false);
+      }
+    } catch (e: any) {
+      setResetResult({ ok: false, message: e.message ?? 'Network error' });
+    }
+    setResetting(false);
+  };
+
+  // ── Team league transfer ────────────────────────────────────────────────────
+  const handleTransferLeague = async () => {
+    if (!transferLeague.teamId || !transferLeague.leagueId) return;
+    setTransferLeagueLoading(true);
+    setTransferLeagueResult(null);
+    try {
+      const body: Record<string, unknown> = {
+        league_id: Number(transferLeague.leagueId),
+      };
+      if (transferLeague.region) body.region = transferLeague.region;
+      const res = await fetch(`/api/admin/table/teams/${transferLeague.teamId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const team = allTeams.find(t => String(t.id) === transferLeague.teamId);
+        const league = allLeagues.find(l => String(l.id) === transferLeague.leagueId);
+        setTransferLeagueResult({ ok: true, message: `${team?.team_name ?? 'Team'} moved to ${league?.league_name ?? `League ${transferLeague.leagueId}`}${transferLeague.region ? ` (${transferLeague.region})` : ''}.` });
+        setAllTeams(prev => prev.map(t => String(t.id) === transferLeague.teamId ? { ...t, league_id: Number(transferLeague.leagueId), ...(transferLeague.region ? { region: transferLeague.region } : {}) } : t));
+        fetchTables();
+      } else {
+        const data = await res.json();
+        setTransferLeagueResult({ ok: false, message: data.error ?? 'Transfer failed' });
+      }
+    } catch (e: any) {
+      setTransferLeagueResult({ ok: false, message: e.message ?? 'Network error' });
+    }
+    setTransferLeagueLoading(false);
+  };
+
+  // ── Promotion / relegation ──────────────────────────────────────────────────
+  const handleProcessPromotion = async () => {
+    setPromoting(true);
+    setPromoResult(null);
+    try {
+      const res = await fetch('/api/admin/process-promotion', { method: 'POST' });
+      const data = await res.json();
+      setPromoResult({ ok: res.ok, message: data.message ?? data.error ?? 'Unknown response' });
+      if (res.ok) {
+        fetchTables();
+        setPromoConfirm(false);
+      }
+    } catch (e: any) {
+      setPromoResult({ ok: false, message: e.message ?? 'Network error' });
+    }
+    setPromoting(false);
+  };
+
   // ── JSX ─────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Database Admin</h1>
-        <p className="text-gray-400 mt-1">Manage tables and records • {tables.length} tables available</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Database Admin</h1>
+          <p className="text-gray-400 mt-1">Manage tables and records • {tables.length} tables available</p>
+        </div>
+
+        {/* ── Reset Season ──────────────────────────────────────────────────── */}
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {!resetConfirm ? (
+            <button
+              onClick={() => { setResetConfirm(true); setResetResult(null); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold
+                bg-red-500/10 border border-red-500/30 text-red-400
+                hover:bg-red-500/20 hover:text-red-300 transition-all cursor-pointer active:scale-95"
+            >
+              <RotateCcw size={14} />
+              Reset Season
+            </button>
+          ) : (
+            <div className="flex flex-col items-end gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30">
+              <div className="flex items-center gap-2 text-red-300 text-sm font-semibold">
+                <AlertTriangle size={14} className="text-red-400" />
+                This clears ALL match results, playoffs, and rewinds the calendar. Continue?
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setResetConfirm(false); setResetResult(null); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetSeason}
+                  disabled={resetting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold
+                    bg-red-500/20 border border-red-500/40 text-red-300
+                    hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  {resetting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                  {resetting ? 'Resetting…' : 'Confirm Reset'}
+                </button>
+              </div>
+            </div>
+          )}
+          {resetResult && (
+            <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border ${
+              resetResult.ok
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              {resetResult.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+              {resetResult.message}
+            </div>
+          )}
+        </div>
+
+        {/* ── Promotion / Relegation ────────────────────────────────────────── */}
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {!promoConfirm ? (
+            <button
+              onClick={() => { setPromoConfirm(true); setPromoResult(null); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold
+                bg-amber-500/10 border border-amber-500/30 text-amber-400
+                hover:bg-amber-500/20 hover:text-amber-300 transition-all cursor-pointer active:scale-95"
+            >
+              <ArrowUpDown size={14} />
+              Process Promotion / Relegation
+            </button>
+          ) : (
+            <div className="flex flex-col items-end gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <div className="flex items-center gap-2 text-amber-300 text-sm font-semibold">
+                <AlertTriangle size={14} className="text-amber-400" />
+                This moves teams between leagues based on current standings. Continue?
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setPromoConfirm(false); setPromoResult(null); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleProcessPromotion}
+                  disabled={promoting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold
+                    bg-amber-500/20 border border-amber-500/40 text-amber-300
+                    hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  {promoting ? <Loader2 size={12} className="animate-spin" /> : <ArrowUpDown size={12} />}
+                  {promoting ? 'Processing…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          )}
+          {promoResult && (
+            <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border ${
+              promoResult.ok
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              {promoResult.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+              {promoResult.message}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Table Browser ──────────────────────────────────────────────────── */}
@@ -1061,6 +1247,92 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* ── Team League Transfer ────────────────────────────────────────────── */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
+            <ArrowUpDown size={20} className="text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Move Team Between Leagues</h2>
+            <p className="text-sm text-gray-400">Manually transfer any team to a different league and update its conference region</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Team picker */}
+          <div className="space-y-1.5">
+            <label className={LABEL_CLS}>Team</label>
+            <select
+              value={transferLeague.teamId}
+              onChange={e => setTransferLeague(prev => ({ ...prev, teamId: e.target.value }))}
+              className={SELECT_CLS}
+            >
+              <option value="">— select team —</option>
+              {[...allTeams].sort((a, b) => String(a.team_name).localeCompare(String(b.team_name))).map(t => (
+                <option key={t.id} value={String(t.id)}>
+                  {t.team_name} (League {t.league_id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Target league picker */}
+          <div className="space-y-1.5">
+            <label className={LABEL_CLS}>Move to League</label>
+            <select
+              value={transferLeague.leagueId}
+              onChange={e => setTransferLeague(prev => ({ ...prev, leagueId: e.target.value }))}
+              className={SELECT_CLS}
+            >
+              <option value="">— select league —</option>
+              {allLeagues.map(l => (
+                <option key={l.id} value={String(l.id)}>{l.league_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Region (optional, only relevant for league 1) */}
+          <div className="space-y-1.5">
+            <label className={LABEL_CLS}>Conference Region <span className="text-gray-600 normal-case">(Premier only)</span></label>
+            <select
+              value={transferLeague.region}
+              onChange={e => setTransferLeague(prev => ({ ...prev, region: e.target.value }))}
+              className={SELECT_CLS}
+            >
+              <option value="">— unchanged —</option>
+              <option value="north">North</option>
+              <option value="south">South</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTransferLeague}
+            disabled={transferLeagueLoading || !transferLeague.teamId || !transferLeague.leagueId}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
+              bg-amber-500/20 border border-amber-500/30 text-amber-400
+              hover:bg-amber-500/30 hover:text-amber-300
+              disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
+          >
+            {transferLeagueLoading ? <Loader2 size={14} className="animate-spin" /> : <ArrowUpDown size={14} />}
+            {transferLeagueLoading ? 'Moving…' : 'Move Team'}
+          </button>
+
+          {transferLeagueResult && (
+            <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border ${
+              transferLeagueResult.ok
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              {transferLeagueResult.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+              {transferLeagueResult.message}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

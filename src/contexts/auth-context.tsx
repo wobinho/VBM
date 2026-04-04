@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface User { id: string; email: string; username: string; displayName: string; isAdmin?: boolean; }
-interface Team { id: number; name: string; }
+interface Team { id: number; name: string; league_id: number; }
 interface League { id: number; league_name: string; }
 interface AuthContextType {
     user: User | null;

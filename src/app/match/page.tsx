@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import {
     Swords, Play, Trophy, RotateCcw, Zap, FastForward, SkipForward, ChevronRight,
@@ -900,8 +901,11 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MatchPage() {
+function MatchPageContent() {
     const { team } = useAuth();
+    const searchParams = useSearchParams();
+    const fixtureIdParam = searchParams.get('fixtureId');
+    const fixtureId = fixtureIdParam ? parseInt(fixtureIdParam) : null;
 
     const [opponents, setOpponents] = useState<Team[]>([]);
     const [selectedOpp, setSelectedOpp] = useState<Team | null>(null);
@@ -942,7 +946,8 @@ export default function MatchPage() {
         Promise.all([
             fetch(`/api/squad?teamId=${team.id}`).then(r => r.json()),
             fetch('/api/teams').then(r => r.json()),
-        ]).then(([lineupData, teams]: [Record<string, SimPlayer | null>, Team[]]) => {
+            fixtureId ? fetch(`/api/fixtures/${fixtureId}`).then(r => r.json()) : Promise.resolve(null),
+        ]).then(([lineupData, teams, fixtureRes]: [Record<string, SimPlayer | null>, Team[], any]) => {
             const hasPlayers = Object.values(lineupData).some(Boolean);
             if (hasPlayers) {
                 const lu = lineupData as unknown as SimLineup;
@@ -952,10 +957,20 @@ export default function MatchPage() {
             } else {
                 setLineupError('No starting lineup set. Go to Squad Selection to set your lineup.');
             }
-            setOpponents(teams.filter((t: Team) => t.id !== team.id));
+            
+            const availableTeams = teams.filter((t: Team) => t.id !== team.id);
+            setOpponents(availableTeams);
+            
+            if (fixtureRes && !fixtureRes.error) {
+                const isHome = fixtureRes.home_team_id === team.id;
+                const oppId = isHome ? fixtureRes.away_team_id : fixtureRes.home_team_id;
+                const opp = availableTeams.find(t => t.id === oppId);
+                if (opp) setSelectedOpp(opp);
+            }
+            
             setLoadingLineup(false);
         });
-    }, [team]);
+    }, [team, fixtureId]);
 
     useEffect(() => {
         if (!selectedOpp) { setOppStr(null); return; }
@@ -984,6 +999,24 @@ export default function MatchPage() {
     const stopTimer = useCallback(() => {
         if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     }, []);
+
+    const persistMatchResult = useCallback(async (finalState: MatchSimState) => {
+        if (!fixtureId) return;
+        try {
+            await fetch(`/api/fixtures/${fixtureId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    homeSets: finalState.homeSetsWon,
+                    awaySets: finalState.awaySetsWon,
+                    homePoints: finalState.matchStats.home.totalPoints,
+                    awayPoints: finalState.matchStats.away.totalPoints,
+                }),
+            });
+        } catch (err) {
+            console.error('Failed to save match result:', err);
+        }
+    }, [fixtureId]);
 
     const stepSim = useCallback(() => {
         const state = matchRef.current;
@@ -1020,11 +1053,12 @@ export default function MatchPage() {
 
         if (newState.done) {
             setPhase('done');
+            persistMatchResult(newState);
         } else {
             const ms = SPEED_MS[speedRef.current];
             timerRef.current = setTimeout(stepSim, ms);
         }
-    }, []);
+    }, [persistMatchResult]);
 
     const startMatch = useCallback(async () => {
         if (!team || !myLineup || !selectedOpp) return;
@@ -1085,6 +1119,7 @@ export default function MatchPage() {
         }
     }, [stepSim]);
 
+
     const handleSkipSet = useCallback(() => {
         stopTimer();
         setActiveHighlight(null);
@@ -1101,10 +1136,11 @@ export default function MatchPage() {
         setDisplayState({ ...newState });
         if (newState.done) {
             setPhase('done');
+            persistMatchResult(newState);
         } else {
             timerRef.current = setTimeout(stepSim, SPEED_MS[speedRef.current]);
         }
-    }, [stopTimer, stepSim]);
+    }, [stopTimer, stepSim, persistMatchResult]);
 
     const handleSkipGame = useCallback(() => {
         stopTimer();
@@ -1121,22 +1157,20 @@ export default function MatchPage() {
         matchRef.current = newState;
         setDisplayState({ ...newState });
         setPhase('done');
-    }, [stopTimer]);
+        persistMatchResult(newState);
+    }, [stopTimer, persistMatchResult]);
 
     const handleReset = useCallback(async () => {
         stopTimer();
-        if (displayState?.done && team && displayState.winner) {
-            const myWon = displayState.winner === 'home';
-            await fetch(`/api/teams/${team.id}`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ played: 1, won: myWon ? 1 : 0, lost: myWon ? 0 : 1 }),
-            });
+        if (fixtureId) {
+            window.location.href = '/';
+            return;
         }
         matchRef.current = null;
         setDisplayState(null);
         setSelectedOpp(null);
         setPhase('setup');
-    }, [stopTimer, displayState, team]);
+    }, [stopTimer, fixtureId]);
 
     useEffect(() => () => stopTimer(), [stopTimer]);
 
@@ -1201,7 +1235,7 @@ export default function MatchPage() {
 
                     <div className="text-center">
                         <div className="text-3xl font-black text-gray-600">VS</div>
-                        <div className="mt-2 text-[10px] text-gray-700 uppercase tracking-widest">Select opponent</div>
+                        <div className="mt-2 text-[10px] text-gray-700 uppercase tracking-widest">{fixtureId ? 'Scheduled Opponent' : 'Select opponent'}</div>
                     </div>
 
                     <div className="p-6 rounded-2xl bg-gradient-to-br from-red-500/10 to-rose-500/5 border border-red-500/20 text-center shadow-lg shadow-red-900/10">
@@ -1243,30 +1277,32 @@ export default function MatchPage() {
                                 )}
                             </>
                         ) : (
-                            <p className="text-gray-500 py-6 text-sm">Select an opponent</p>
+                            <p className="text-gray-500 py-6 text-sm">{fixtureId ? 'Loading opponent...' : 'Select an opponent'}</p>
                         )}
                     </div>
                 </div>
 
                 {/* Opponent picker */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {opponents.map(opp => (
-                        <button key={opp.id} onClick={() => setSelectedOpp(opp)}
-                            className={`p-3 rounded-xl text-left transition-all cursor-pointer ${selectedOpp?.id === opp.id
-                                ? 'bg-gradient-to-br from-red-500/20 to-rose-500/10 border border-red-500/40 text-red-400 shadow-md shadow-red-900/20'
-                                : 'bg-white/5 border border-white/10 text-gray-300 hover:border-white/20 hover:bg-white/8'}`}>
-                            <p className="font-semibold text-sm truncate">{opp.team_name}</p>
-                            <p className="text-xs text-gray-500">{opp.won}W – {opp.lost}L</p>
-                        </button>
-                    ))}
-                </div>
+                {!fixtureId && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {opponents.map(opp => (
+                            <button key={opp.id} onClick={() => setSelectedOpp(opp)}
+                                className={`p-3 rounded-xl text-left transition-all ${selectedOpp?.id === opp.id
+                                    ? 'bg-gradient-to-br from-red-500/20 to-rose-500/10 border border-red-500/40 text-red-400 shadow-md shadow-red-900/20'
+                                    : 'bg-white/5 border border-white/10 text-gray-300 hover:border-white/20 hover:bg-white/8 cursor-pointer'}`}>
+                                <p className="font-semibold text-sm truncate">{opp.team_name}</p>
+                                <p className="text-xs text-gray-500">{opp.won}W – {opp.lost}L</p>
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <button
                     onClick={startMatch}
                     disabled={!selectedOpp || !!lineupError || loadingLineup}
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-lg disabled:opacity-30 hover:from-amber-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-900/30 cursor-pointer"
                 >
-                    <Play size={20} />Play Match
+                    <Play size={20} />{fixtureId ? 'Play Official Match' : 'Play Exhibition Match'}
                 </button>
             </div>
         );
@@ -1471,10 +1507,18 @@ export default function MatchPage() {
                 <div className="flex gap-3 justify-center">
                     <button onClick={handleReset}
                         className="px-6 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all flex items-center gap-2 cursor-pointer">
-                        <RotateCcw size={16} />New Match
+                        {fixtureId ? <><RotateCcw size={16} />Return to Dashboard</> : <><RotateCcw size={16} />New Match</>}
                     </button>
                 </div>
             )}
         </div>
+    );
+}
+
+export default function MatchPage() {
+    return (
+        <Suspense fallback={<div className="p-10 text-white text-center">Loading match data...</div>}>
+            <MatchPageContent />
+        </Suspense>
     );
 }
