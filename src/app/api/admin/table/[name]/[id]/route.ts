@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
-import { calculateOverall } from '@/lib/db/queries';
+import { calculateOverall } from '@/lib/overall';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 
 export async function PUT(
@@ -30,14 +30,11 @@ export async function PUT(
     if (name === 'players') {
       const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id) as Record<string, number | string | null> | undefined;
       if (player) {
-        const n = (k: string) => Number(player[k] ?? 50);
-        const overall = calculateOverall(
-          n('attack'), n('defense'), n('serve'), n('block'), n('receive'), n('setting'),
-          n('speed'), n('agility'), n('strength'), n('endurance'), n('vertical'), n('flexibility'), n('torque'), n('balance'),
-          n('leadership'), n('teamwork'), n('concentration'), n('pressure'), n('consistency'), n('vision'), n('game_iq'), n('intimidation'),
-          String(player.position ?? ''),
-          n('precision'), n('flair'), n('digging'), n('positioning'), n('ball_control'), n('technique'), n('playmaking'), n('spin'),
-        );
+        const stats: Record<string, number> = {};
+        for (const k of ['attack','defense','serve','block','receive','setting','precision','flair','digging','positioning','ball_control','technique','playmaking','spin','speed','agility','strength','endurance','vertical','flexibility','torque','balance','leadership','teamwork','concentration','pressure','consistency','vision','game_iq','intimidation']) {
+          stats[k] = Number(player[k] ?? 50);
+        }
+        const overall = calculateOverall(stats, String(player.position ?? ''));
         db.prepare('UPDATE players SET overall = ? WHERE id = ?').run(overall, id);
       }
     }

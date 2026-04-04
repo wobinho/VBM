@@ -14,7 +14,7 @@ interface TeamData {
   id: number; team_name: string;
   played: number; won: number; lost: number; points: number;
   sets_won: number; sets_lost: number;
-  goal_diff: number; team_money: number; league_id: number;
+  score_diff: number; team_money: number; league_id: number;
 }
 
 interface Fixture {
@@ -54,8 +54,6 @@ interface AdvanceDayResult {
 
 interface SimMatchdayResult {
   date: string;
-  userFixtureId: number | null;
-  userFixture: Fixture | null;
   simulatedCount: number;
   simulated: SimResult[];
 }
@@ -240,19 +238,6 @@ export default function DashboardPage() {
     }
   };
 
-  // ─── Simulate match day (AI matches only, user fixture stays scheduled) ────
-
-  const handleSimulateMatchday = async () => {
-    setSimulatingMatchday(true);
-    setMatchdayResult(null);
-    setShowResultsBanner(false);
-    const res = await fetch('/api/simulate-matchday', { method: 'POST' });
-    const data: SimMatchdayResult = await res.json();
-    setMatchdayResult(data);
-    setShowResultsBanner(true);
-    await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
-    setSimulatingMatchday(false);
-  };
 
   // ─── Simulate to a target date (all matches, incl. user's) ───────────────
 
@@ -328,12 +313,38 @@ export default function DashboardPage() {
     setProceedingNextSeason(false);
   };
 
-  // ─── Quick-sim user fixture ────────────────────────────────────────────────
+  // ─── Quick-sim all games for today ────────────────────────────────────────
 
   const handleQuickSim = async (fixtureId: number) => {
     setSimming(true);
-    await fetch(`/api/fixtures/${fixtureId}`, { method: 'POST' });
-    await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
+    setMatchdayResult(null);
+    setShowResultsBanner(false);
+    try {
+      console.log('Starting Quick Sim for fixture:', fixtureId);
+      const res = await fetch(`/api/fixtures/${fixtureId}`, { method: 'POST' });
+      console.log('Response status:', res.status, res.statusText);
+      const text = await res.text();
+      console.log('Response text:', text);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { raw: text };
+      }
+      if (!res.ok) {
+        console.error('Quick Sim error:', { status: res.status, statusText: res.statusText, data });
+        setMatchdayResult(null);
+      } else {
+        console.log('Quick Sim successful');
+        // Show results banner
+        setMatchdayResult(data);
+        setShowResultsBanner(true);
+        // Reload game state
+        await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
+      }
+    } catch (e) {
+      console.error('Quick Sim fetch error:', e);
+    }
     setSimming(false);
   };
 
@@ -468,22 +479,6 @@ export default function DashboardPage() {
             </button>
           ) : (
             <>
-              {/* Simulate Match Day — only visible when today has fixtures and not yet simulated */}
-              {gameState?.userFixtureToday && !matchdayResult && (
-                <button
-                  onClick={handleSimulateMatchday}
-                  disabled={simulatingMatchday}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-150
-                    bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:from-sky-400 hover:to-indigo-400
-                    disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-sky-500/20 active:scale-95 cursor-pointer"
-                >
-                  {simulatingMatchday ? (
-                    <><Loader2 size={14} className="animate-spin" /> Simulating…</>
-                  ) : (
-                    <><Zap size={14} /> Simulate Match Day</>
-                  )}
-                </button>
-              )}
               <button
                 onClick={handleAdvanceDay}
                 disabled={advancing}
@@ -582,14 +577,6 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
-            {matchdayResult.userFixtureId && (
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 col-span-full">
-                <AlertCircle size={14} className="text-amber-400 shrink-0" />
-                <span className="text-xs text-amber-300 font-medium">
-                  Your match vs {matchdayResult.userFixture?.away_team_name ?? matchdayResult.userFixture?.home_team_name} is ready — play it below!
-                </span>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -949,13 +936,24 @@ function NextMatchCard({
         {isToday && (
           <div className="flex gap-2">
             {fixture.is_playoff ? (
-              <a href="/playoffs"
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
-                  bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
-                  transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
-                <Play size={11} fill="currentColor" />
-                Play Playoff Game
-              </a>
+              <>
+                <a href="/playoffs"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
+                    bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
+                    transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
+                  <Play size={11} fill="currentColor" />
+                  Play Playoff Game
+                </a>
+                <button
+                  onClick={() => onQuickSim(fixture.id)}
+                  disabled={simming}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
+                    bg-white/[0.05] border border-white/[0.08] text-slate-300 hover:bg-white/10 hover:text-white
+                    transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  {simming ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                  Quick Sim
+                </button>
+              </>
             ) : (
               <>
                 <a href={`/match?fixtureId=${fixture.id}`}

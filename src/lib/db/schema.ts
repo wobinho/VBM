@@ -20,7 +20,7 @@ export function runSchema(db: Database.Database) {
       won INTEGER DEFAULT 0,
       lost INTEGER DEFAULT 0,
       points INTEGER DEFAULT 0,
-      goal_diff INTEGER DEFAULT 0
+      score_diff INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS players (

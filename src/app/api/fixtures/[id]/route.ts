@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch, getSquadLineup, getPlayers } from '@/lib/db/queries';
+import { getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch, getSquadLineup, getPlayers, recordPlayoffGameResult, getGameState, getFixtures, getPlayoffGamesByDate } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { getDb } from '@/lib/db';
 
 /** GET /api/fixtures/[id] — fetch a single fixture */
 export async function GET(
@@ -14,91 +15,127 @@ export async function GET(
 }
 
 /**
- * POST /api/fixtures/[id] — simulate this fixture and persist the result.
+ * POST /api/fixtures/[id] — Quick Sim: simulate the target fixture AND all other
+ * fixtures/playoff games on the same date, then persist all results.
  *
- * Body: optional `{ homeLineup?, awayLineup? }` — if not provided, lineups
- * are loaded from squad_lineups or auto-generated from the team's roster.
+ * This behaves like simulate-matchday but includes the user's game.
  */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const fixtureId = Number(id);
+  try {
+    const { id } = await params;
+    const gameId = Number(id);
+    const db = getDb();
 
-  const fixture = getFixtureById(fixtureId);
-  if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
-  if (fixture.status === 'completed') {
-    return NextResponse.json({ error: 'Fixture already played', fixture }, { status: 409 });
+    const state = getGameState();
+    if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
+
+    const currentDate = state.current_date;
+
+    // Determine if this is a regular fixture or playoff game
+    let targetFixture = getFixtureById(gameId);
+    let isPlayoffGame = false;
+    let targetPlayoffGame: any = null;
+    let targetDate: string;
+
+    if (!targetFixture) {
+      targetPlayoffGame = db.prepare(`
+        SELECT pg.*,
+          ht.team_name AS home_team_name,
+          at.team_name AS away_team_name
+        FROM playoff_games pg
+        JOIN teams ht ON pg.home_team_id = ht.id
+        JOIN teams at ON pg.away_team_id = at.id
+        WHERE pg.id = ?
+      `).get(gameId) as any;
+
+      if (!targetPlayoffGame) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+      isPlayoffGame = true;
+      targetDate = targetPlayoffGame.scheduled_date;
+    } else {
+      targetDate = targetFixture.scheduled_date;
+    }
+
+    // ── Simulate all regular fixtures on this date ───────────────────────────────
+    const dayFixtures = getFixtures({ date: targetDate });
+    const simulatedRegular = [];
+
+    for (const f of dayFixtures) {
+      if (f.status === 'completed') continue;
+
+      const homeLu = buildLineup(f.home_team_id);
+      const awayLu = buildLineup(f.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+
+      updateFixtureResult(f.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+      updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+
+      const updated = getFixtureById(f.id);
+      simulatedRegular.push({
+        id:       f.id,
+        homeTeam: updated?.home_team_name ?? f.home_team_id.toString(),
+        awayTeam: updated?.away_team_name ?? f.away_team_id.toString(),
+        homeSets: result.homeSets,
+        awaySets: result.awaySets,
+        winner:   result.winner,
+        type:     'regular',
+      });
+    }
+
+    // ── Simulate all playoff games on this date ─────────────────────────────────
+    const dayPlayoffGames = getPlayoffGamesByDate(targetDate);
+    const simulatedPlayoff = [];
+
+    for (const pg of dayPlayoffGames) {
+      if (pg.status === 'completed') continue;
+
+      const homeLu = buildLineup(pg.home_team_id);
+      const awayLu = buildLineup(pg.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+
+      recordPlayoffGameResult(pg.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+
+      simulatedPlayoff.push({
+        id:       pg.id,
+        homeTeam: pg.home_team_name ?? pg.home_team_id.toString(),
+        awayTeam: pg.away_team_name ?? pg.away_team_id.toString(),
+        homeSets: result.homeSets,
+        awaySets: result.awaySets,
+        winner:   result.winner,
+        type:     'playoff',
+      });
+    }
+
+    const allSimulated = [...simulatedRegular, ...simulatedPlayoff];
+
+    return NextResponse.json({
+      date: targetDate,
+      simulatedCount: allSimulated.length,
+      simulated: allSimulated,
+    });
+  } catch (error) {
+    console.error('Error simulating fixture:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  // Build lineups
-  const homeLu = await buildLineup(fixture.home_team_id);
-  const awayLu = await buildLineup(fixture.away_team_id);
-
-  // Run simulation
-  const result = runFullMatch(homeLu, awayLu);
-
-  // Persist result + update standings in a single transaction
-  updateFixtureResult(fixtureId, {
-    home_sets:   result.homeSets,
-    away_sets:   result.awaySets,
-    home_points: result.homeTotalPoints,
-    away_points: result.awayTotalPoints,
-  });
-
-  updateTeamStatsAfterMatch(
-    fixture.home_team_id,
-    fixture.away_team_id,
-    result.homeSets,
-    result.awaySets,
-  );
-
-  const updated = getFixtureById(fixtureId);
-  return NextResponse.json({ fixture: updated, result });
 }
 
-/**
- * PATCH /api/fixtures/[id] — persist the result of a client-side simulated match.
- *
- * Body: { homeSets, awaySets, homePoints, awayPoints }
- */
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const fixtureId = Number(id);
-
-  const fixture = getFixtureById(fixtureId);
-  if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
-  if (fixture.status === 'completed') {
-    return NextResponse.json({ error: 'Fixture already played', fixture }, { status: 409 });
-  }
-
-  const result = await req.json();
-
-  updateFixtureResult(fixtureId, {
-    home_sets:   result.homeSets,
-    away_sets:   result.awaySets,
-    home_points: result.homePoints,
-    away_points: result.awayPoints,
-  });
-
-  updateTeamStatsAfterMatch(
-    fixture.home_team_id,
-    fixture.away_team_id,
-    result.homeSets,
-    result.awaySets,
-  );
-
-  const updated = getFixtureById(fixtureId);
-  return NextResponse.json({ fixture: updated });
-}
 
 // ─── Helper: load or auto-generate a team's lineup ───────────────────────────
 
-async function buildLineup(teamId: number): Promise<SimLineup> {
+function buildLineup(teamId: number): SimLineup {
   const saved = getSquadLineup(teamId);
   const players = getPlayers(teamId) as unknown as SimPlayer[];
 

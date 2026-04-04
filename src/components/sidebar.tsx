@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
     { href: '/team', label: 'Team Management', icon: UserCircle },
     { href: '/office', label: 'Office', icon: Briefcase },
     { href: '/standings', label: 'Standings', icon: ListOrdered },
+    { href: '/playoffs', label: 'Playoffs', icon: Trophy },
     { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart },
     { href: '/match', label: 'Match Simulation', icon: Swords },
     { href: '/admin', label: 'Database Admin', icon: Database },

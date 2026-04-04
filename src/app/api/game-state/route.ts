@@ -94,7 +94,7 @@ export async function POST() {
       home_points: result.homeTotalPoints,
       away_points: result.awayTotalPoints,
     });
-    updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets);
+    updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
 
     const updated = getFixtureById(f.id);
     simulated.push({

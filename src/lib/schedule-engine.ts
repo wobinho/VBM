@@ -306,24 +306,45 @@ export function getPlayoffRoundStartDates(year: number): { round1: string; round
   const saturdays    = getSaturdaysInRange(playoffStart, playoffEnd);
 
   return {
-    round1: saturdays[0]  ?? `${year}-09-06`,
-    round2: saturdays[5]  ?? `${year}-10-11`,
-    round3: saturdays[10] ?? `${year}-11-15`,
+    round1: saturdays[0] ?? `${year}-09-06`,
+    round2: saturdays[3] ?? `${year}-09-27`,
+    round3: saturdays[6] ?? `${year}-10-18`,
   };
 }
 
 /**
- * Get the 5 Saturday dates for a given round's games in a year.
+ * Get the 5 game dates for a given round's games in a year.
+ * Games 1-3: consecutive Saturdays (pre-scheduled minimum).
+ * Game 4: the Tuesday immediately following game 3's Saturday.
+ * Game 5: the Saturday immediately following game 4's Tuesday.
+ *
+ * If a series ends on game 4 (Tuesday), the next round still starts on
+ * the next Saturday, which is exactly game 5's Saturday slot — so the
+ * Saturday-based round-start cadence is naturally preserved.
  */
 export function getPlayoffRoundDates(year: number, round: 1 | 2 | 3): string[] {
   const playoffStart = new Date(year, 8, 1);
   const playoffEnd   = new Date(year, 10, 30);
   const saturdays    = getSaturdaysInRange(playoffStart, playoffEnd);
 
-  const startIdx = (round - 1) * 5;
-  const result: string[] = [];
-  for (let i = 0; i < 5; i++) {
-    result.push(saturdays[Math.min(startIdx + i, saturdays.length - 1)]);
-  }
-  return result;
+  // Each round occupies a block of 3 Saturdays (games 1-3).
+  // Round 1 starts at saturdays[0], round 2 at saturdays[3], round 3 at saturdays[6].
+  const startIdx = (round - 1) * 3;
+
+  const sat1 = saturdays[startIdx];
+  const sat2 = saturdays[startIdx + 1] ?? sat1;
+  const sat3 = saturdays[startIdx + 2] ?? sat2;
+
+  // Game 4: Tuesday (3 days after game 3's Saturday)
+  const game3Date = new Date(sat3);
+  const game4Date = new Date(game3Date);
+  game4Date.setDate(game3Date.getDate() + 3); // Saturday + 3 = Tuesday
+
+  // Game 5: Saturday (4 days after that Tuesday)
+  const game5Date = new Date(game4Date);
+  game5Date.setDate(game4Date.getDate() + 4); // Tuesday + 4 = Saturday
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  return [sat1, sat2, sat3, fmt(game4Date), fmt(game5Date)];
 }

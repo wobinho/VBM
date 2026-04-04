@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { AVAILABLE_COUNTRY_CODES } from '../country-codes';
+import { calculateOverall } from '../overall';
 
 function clamp(val: number, min: number, max: number) {
     return Math.max(min, Math.min(max, Math.round(val)));
@@ -7,35 +8,6 @@ function clamp(val: number, min: number, max: number) {
 
 function rand(min: number, max: number) {
     return Math.random() * (max - min) + min;
-}
-
-function coreSkillByPosition(
-    position: string,
-    attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
-): number {
-    switch (position) {
-        case 'Libero':          return receive * 0.40 + defense * 0.40 + setting * 0.20;
-        case 'Setter':          return setting * 0.50 + attack * 0.10 + defense * 0.10 + serve * 0.10 + block * 0.10;
-        case 'Middle Blocker':  return attack * 0.30 + defense * 0.30 + block * 0.25 + serve * 0.10 + setting * 0.05;
-        case 'Outside Hitter':
-        case 'Opposite Hitter': return attack * 0.25 + defense * 0.25 + serve * 0.15 + block * 0.15 + receive * 0.15 + setting * 0.05;
-        default:                return (attack + defense + serve + block + receive + setting) / 6;
-    }
-}
-
-function calculateOverall(
-    attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
-    speed: number, agility: number, strength: number, endurance: number, vertical: number, flexibility: number, torque: number, balance: number,
-    leadership: number, teamwork: number, concentration: number, pressure: number, consistency: number, vision: number, game_iq: number, intimidation: number,
-    position: string,
-    precision: number, flair: number, digging: number, positioning: number,
-    ball_control: number, technique: number, playmaking: number, spin: number,
-): number {
-    const coreSkill    = coreSkillByPosition(position, attack, defense, serve, block, receive, setting);
-    const technicalAvg = (precision + flair + digging + positioning + ball_control + technique + playmaking + spin) / 8;
-    const physicalAvg  = (speed + agility + strength + endurance + vertical + flexibility + torque + balance) / 8;
-    const mentalAvg    = (leadership + teamwork + concentration + pressure + consistency + vision + game_iq + intimidation) / 8;
-    return Math.max(1, Math.min(100, Math.round(coreSkill * 0.55 + technicalAvg * 0.15 + physicalAvg * 0.15 + mentalAvg * 0.15)));
 }
 
 function calculatePlayerValue(overall: number, age: number) {
@@ -102,13 +74,12 @@ function generatePlayer(teamId: number | null, jerseyNumber: number, overallTarg
     const game_iq      = s(0.60, 1.35);
     const intimidation = s(0.50, 1.40);
 
-    const overall = calculateOverall(
+    const overall = calculateOverall({
         attack, defense, serve, block, receive, setting,
+        precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
         speed, agility, strength, endurance, vertical, flexibility, torque, balance,
         leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
-        position,
-        precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
-    );
+    }, position);
 
     const contractYears = clamp(Math.round(rand(1, 5)), 1, 10);
     const monthlyWage = Math.round(overall * rand(50, 200));
@@ -141,7 +112,7 @@ export function seedDatabase(db: Database.Database) {
     const league2 = db.prepare("SELECT id FROM leagues WHERE league_name = 'VBL Division 2'").get() as { id: number };
 
     const insertTeam = db.prepare(
-        'INSERT INTO teams (team_name, league_id, team_money, stadium, capacity, founded, played, won, lost, points, goal_diff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO teams (team_name, league_id, team_money, stadium, capacity, founded, played, won, lost, points, score_diff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
     const teams = [

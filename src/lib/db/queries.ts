@@ -1,9 +1,10 @@
 import { getDb } from './index';
 import { generateTripleRoundRobin, generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
+import { calculateOverall as calcOvr, ALL_STAT_KEYS } from '../overall';
 
 // ==================== TYPES ====================
 export interface League { id: number; league_name: string; created_at: string; updated_at: string; }
-export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; goal_diff: number; stadium: string; capacity: number; founded: string; nation?: string; region?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
+export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number; stadium: string; capacity: number; founded: string; nation?: string; region?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
 export interface Player {
     id: number; player_name: string; team_id: number | null; position: string; age: number; country: string;
     jersey_number: number; overall: number; height?: number; potential?: number;
@@ -28,26 +29,12 @@ export interface UserTeam { id: number; user_id: string; team_id: number; is_pri
 export interface TransferOffer { id: number; player_id: number; from_user_id: string; to_user_id: string; offer_amount: number; message: string | null; status: string; expires_at: string; created_at: string; updated_at: string; responded_at: string | null; player_name?: string; from_team_name?: string; to_team_name?: string; }
 
 // ==================== OVERALL & PLAYER VALUE ====================
-function coreSkillByPosition(
-    position: string,
-    attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
-): number {
-    switch (position) {
-        case 'Libero':
-            return receive * 0.40 + defense * 0.40 + setting * 0.20;
-        case 'Setter':
-            return setting * 0.50 + attack * 0.10 + defense * 0.10 + serve * 0.10 + block * 0.10;
-        case 'Middle Blocker':
-            return attack * 0.30 + defense * 0.30 + block * 0.25 + serve * 0.10 + setting * 0.05;
-        case 'Outside Hitter':
-        case 'Opposite Hitter':
-            return attack * 0.25 + defense * 0.25 + serve * 0.15 + block * 0.15 + receive * 0.15 + setting * 0.05;
-        default:
-            return (attack + defense + serve + block + receive + setting) / 6;
-    }
-}
+// Position-weighted formula: Main1 40% + Main2 35% + SecondaryAvg 20% + OtherAvg 5%
+// Implemented in src/lib/overall.ts — re-exported here for backward compat.
+export { calculateOverall } from '../overall';
 
-export function calculateOverall(
+/** Legacy-compatible overload: accepts individual stat args and delegates to the shared calc. */
+export function calculateOverallFromArgs(
     attack: number, defense: number, serve: number, block: number, receive: number, setting: number,
     speed: number, agility: number, strength: number, endurance: number, vertical: number, flexibility: number, torque: number, balance: number,
     leadership: number, teamwork: number, concentration: number, pressure: number, consistency: number, vision: number, game_iq: number, intimidation: number,
@@ -55,13 +42,12 @@ export function calculateOverall(
     precision: number, flair: number, digging: number, positioning: number,
     ball_control: number, technique: number, playmaking: number, spin: number,
 ): number {
-    const coreSkill   = coreSkillByPosition(position, attack, defense, serve, block, receive, setting);
-    const technicalAvg = (precision + flair + digging + positioning + ball_control + technique + playmaking + spin) / 8;
-    const physicalAvg = (speed + agility + strength + endurance + vertical + flexibility + torque + balance) / 8;
-    const mentalAvg   = (leadership + teamwork + concentration + pressure + consistency + vision + game_iq + intimidation) / 8;
-    return Math.max(1, Math.min(100, Math.round(
-        coreSkill * 0.55 + technicalAvg * 0.15 + physicalAvg * 0.15 + mentalAvg * 0.15
-    )));
+    return calcOvr({
+        attack, defense, serve, block, receive, setting,
+        precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
+        speed, agility, strength, endurance, vertical, flexibility, torque, balance,
+        leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+    }, position);
 }
 
 export function calculatePlayerValue(overall: number, age: number) {
@@ -76,20 +62,11 @@ export function calculatePlayerValue(overall: number, age: number) {
 }
 
 function recomputeOverall(player: Player): Player {
-    const overall = calculateOverall(
-        player.attack ?? 50, player.defense ?? 50, player.serve ?? 50,
-        player.block ?? 50, player.receive ?? 50, player.setting ?? 50,
-        player.speed ?? 50, player.agility ?? 50, player.strength ?? 50,
-        player.endurance ?? 50, player.vertical ?? 50, player.flexibility ?? 50,
-        player.torque ?? 50, player.balance ?? 50,
-        player.leadership ?? 50, player.teamwork ?? 50, player.concentration ?? 50,
-        player.pressure ?? 50, player.consistency ?? 50, player.vision ?? 50,
-        player.game_iq ?? 50, player.intimidation ?? 50,
-        player.position ?? '',
-        player.precision ?? 50, player.flair ?? 50, player.digging ?? 50,
-        player.positioning ?? 50, player.ball_control ?? 50, player.technique ?? 50,
-        player.playmaking ?? 50, player.spin ?? 50,
-    );
+    const stats: Record<string, number> = {};
+    for (const k of ALL_STAT_KEYS) {
+        stats[k] = (player as unknown as Record<string, number>)[k] ?? 50;
+    }
+    const overall = calcOvr(stats, player.position ?? '');
     return { ...player, overall };
 }
 
@@ -599,15 +576,11 @@ export function updateFixtureResult(
 
 /**
  * Volleyball points system:
- *   Win 3-0 → 9 pts  |  Lose 0-3 → 1 pt
- *   Win 3-1 → 8 pts  |  Lose 1-3 → 2 pts
- *   Win 3-2 → 7 pts  |  Lose 2-3 → 3 pts
+ *   Win 3-0, 3-1, 3-2 → 3 pts  |  Lose 2-3 → 1 pt  |  Lose 0-3, 1-3 → 0 pts
  */
 function matchPoints(winnerSets: number, loserSets: number): { winPts: number; losePts: number } {
-  const diff = winnerSets - loserSets; // 3, 2, or 1
-  if (diff >= 3) return { winPts: 9, losePts: 1 };
-  if (diff === 2) return { winPts: 8, losePts: 2 };
-  return { winPts: 7, losePts: 3 };
+  if (loserSets === 2) return { winPts: 3, losePts: 1 }; // 3-2 / 2-3
+  return { winPts: 3, losePts: 0 };                       // 3-0 or 3-1
 }
 
 export function updateTeamStatsAfterMatch(
@@ -615,6 +588,8 @@ export function updateTeamStatsAfterMatch(
   awayTeamId: number,
   homeSets: number,
   awaySets: number,
+  homeTotalPoints: number = 0,
+  awayTotalPoints: number = 0,
 ): void {
   const isHomeWin = homeSets > awaySets;
   const { winPts, losePts } = matchPoints(
@@ -631,9 +606,10 @@ export function updateTeamStatsAfterMatch(
         lost      = lost + @lost,
         points    = points + @pts,
         sets_won  = sets_won  + @sw,
-        sets_lost = sets_lost + @sl
+        sets_lost = sets_lost + @sl,
+        score_diff = score_diff + @pd
       WHERE id = @id
-    `).run({ id: homeTeamId, won: isHomeWin ? 1 : 0, lost: isHomeWin ? 0 : 1, pts: isHomeWin ? winPts : losePts, sw: homeSets, sl: awaySets });
+    `).run({ id: homeTeamId, won: isHomeWin ? 1 : 0, lost: isHomeWin ? 0 : 1, pts: isHomeWin ? winPts : losePts, sw: homeSets, sl: awaySets, pd: homeTotalPoints - awayTotalPoints });
 
     db.prepare(`
       UPDATE teams SET
@@ -642,9 +618,10 @@ export function updateTeamStatsAfterMatch(
         lost      = lost + @lost,
         points    = points + @pts,
         sets_won  = sets_won  + @sw,
-        sets_lost = sets_lost + @sl
+        sets_lost = sets_lost + @sl,
+        score_diff = score_diff + @pd
       WHERE id = @id
-    `).run({ id: awayTeamId, won: isHomeWin ? 0 : 1, lost: isHomeWin ? 1 : 0, pts: isHomeWin ? losePts : winPts, sw: awaySets, sl: homeSets });
+    `).run({ id: awayTeamId, won: isHomeWin ? 0 : 1, lost: isHomeWin ? 1 : 0, pts: isHomeWin ? losePts : winPts, sw: awaySets, sl: homeSets, pd: awayTotalPoints - homeTotalPoints });
   })();
 }
 
@@ -668,11 +645,12 @@ export function recomputeTeamStatsFromFixtures(seasonId: number): void {
 
   // Replay all completed fixtures
   const completed = db.prepare(`
-    SELECT home_team_id, away_team_id, home_sets, away_sets
+    SELECT home_team_id, away_team_id, home_sets, away_sets,
+           COALESCE(home_points, 0) AS home_points, COALESCE(away_points, 0) AS away_points
     FROM fixtures
     WHERE season_id = ? AND status = 'completed'
       AND home_sets IS NOT NULL AND away_sets IS NOT NULL
-  `).all(seasonId) as { home_team_id: number; away_team_id: number; home_sets: number; away_sets: number }[];
+  `).all(seasonId) as { home_team_id: number; away_team_id: number; home_sets: number; away_sets: number; home_points: number; away_points: number }[];
 
   db.transaction(() => {
     const stmt = db.prepare(`
@@ -682,7 +660,8 @@ export function recomputeTeamStatsFromFixtures(seasonId: number): void {
         lost      = lost + @lost,
         points    = points + @diff,
         sets_won  = sets_won  + @sw,
-        sets_lost = sets_lost + @sl
+        sets_lost = sets_lost + @sl,
+        score_diff = score_diff + @pd
       WHERE id = @id
     `);
     for (const f of completed) {
@@ -691,8 +670,8 @@ export function recomputeTeamStatsFromFixtures(seasonId: number): void {
         isHomeWin ? f.home_sets : f.away_sets,
         isHomeWin ? f.away_sets : f.home_sets,
       );
-      stmt.run({ id: f.home_team_id, won: isHomeWin ? 1 : 0, lost: isHomeWin ? 0 : 1, diff: isHomeWin ? winPts : losePts, sw: f.home_sets, sl: f.away_sets });
-      stmt.run({ id: f.away_team_id, won: isHomeWin ? 0 : 1, lost: isHomeWin ? 1 : 0, diff: isHomeWin ? losePts : winPts, sw: f.away_sets, sl: f.home_sets });
+      stmt.run({ id: f.home_team_id, won: isHomeWin ? 1 : 0, lost: isHomeWin ? 0 : 1, diff: isHomeWin ? winPts : losePts, sw: f.home_sets, sl: f.away_sets, pd: f.home_points - f.away_points });
+      stmt.run({ id: f.away_team_id, won: isHomeWin ? 0 : 1, lost: isHomeWin ? 1 : 0, diff: isHomeWin ? losePts : winPts, sw: f.away_sets, sl: f.home_sets, pd: f.away_points - f.home_points });
     }
   })();
 }
@@ -751,18 +730,52 @@ export function getDataSummary() {
 export function resetSeasonForTesting(): { seasonId: number; startDate: string; fixturesReset: number } {
   const db = getDb();
 
-  const seasons = db.prepare(
-    "SELECT id, league_id, year, start_date FROM seasons WHERE status = 'active' ORDER BY id ASC"
-  ).all() as { id: number; league_id: number; year: number; start_date: string }[];
+  // Find the original (minimum) season year — this is the seed year we want to go back to.
+  const minYearRow = db.prepare('SELECT MIN(year) as y FROM seasons').get() as { y: number | null };
+  if (!minYearRow.y) throw new Error('No seasons found');
+  const originYear = minYearRow.y;
 
-  if (!seasons.length) throw new Error('No active seasons found');
+  // Null out game_state.season_id before deleting newer seasons to avoid FK constraint.
+  db.prepare("UPDATE game_state SET season_id = NULL WHERE id = 1").run();
+
+  // Delete all seasons newer than the origin year (fixtures/playoffs cascade-delete via FK).
+  db.prepare("DELETE FROM seasons WHERE year > ?").run(originYear);
+
+  // Restore original seasons to active.
+  db.prepare("UPDATE seasons SET status = 'active' WHERE year = ?").run(originYear);
+
+  const originSeasons = db.prepare(
+    "SELECT id, league_id, year, start_date FROM seasons WHERE year = ? ORDER BY id ASC"
+  ).all(originYear) as { id: number; league_id: number; year: number; start_date: string }[];
+
+  if (!originSeasons.length) throw new Error('Original seasons not found after restore');
+
+  // Restore each team's league_id to what it was in the original season.
+  // The original season's fixtures know exactly which league_id each team played in.
+  const teamLeagueMap = new Map<number, number>();
+  for (const season of originSeasons) {
+    const fixtureTeams = db.prepare(`
+      SELECT DISTINCT home_team_id as team_id, league_id FROM fixtures WHERE season_id = ?
+      UNION
+      SELECT DISTINCT away_team_id as team_id, league_id FROM fixtures WHERE season_id = ?
+    `).all(season.id, season.id) as { team_id: number; league_id: number }[];
+    for (const row of fixtureTeams) {
+      teamLeagueMap.set(row.team_id, row.league_id);
+    }
+  }
+  const updateTeamLeague = db.prepare('UPDATE teams SET league_id = ? WHERE id = ?');
+  db.transaction(() => {
+    for (const [teamId, leagueId] of teamLeagueMap) {
+      updateTeamLeague.run(leagueId, teamId);
+    }
+  })();
 
   let totalFixturesReset = 0;
 
-  for (const season of seasons) {
-    // Regenerate the schedule to get fresh dates with the new Fri/Tue logic
+  for (const season of originSeasons) {
+    // Regenerate the schedule to get fresh dates
     const teams = db.prepare(
-      "SELECT id FROM teams WHERE league_id = ? ORDER BY id"
+      'SELECT id FROM teams WHERE league_id = ? ORDER BY id'
     ).all(season.league_id) as { id: number }[];
     const teamIds = teams.map(t => t.id);
     const slots = generateTripleRoundRobin(teamIds, season.year);
@@ -775,9 +788,9 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
       }
     }
 
-    // Fetch existing fixtures ordered by game_week so we can re-date them
+    // Reset all fixtures for this season
     const existingFixtures = db.prepare(
-      "SELECT id, game_week FROM fixtures WHERE season_id = ? ORDER BY game_week ASC, id ASC"
+      'SELECT id, game_week FROM fixtures WHERE season_id = ? ORDER BY game_week ASC, id ASC'
     ).all(season.id) as { id: number; game_week: number }[];
 
     const updateFixture = db.prepare(`
@@ -799,15 +812,15 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
 
     totalFixturesReset += existingFixtures.length;
 
-    // Reset all team stats in this league
+    // Reset all team stats
     db.prepare(`
-      UPDATE teams SET played = 0, won = 0, lost = 0, points = 0, sets_won = 0, sets_lost = 0
+      UPDATE teams SET played = 0, won = 0, lost = 0, points = 0, sets_won = 0, sets_lost = 0, score_diff = 0
       WHERE league_id = ?
     `).run(season.league_id);
   }
 
-  // Clear all playoff data for the active seasons
-  for (const season of seasons) {
+  // Clear all playoff data for origin seasons (in case playoffs ran during season 1)
+  for (const season of originSeasons) {
     const seriesIds = db.prepare('SELECT id FROM playoff_series WHERE season_id = ?')
       .all(season.id) as { id: number }[];
     for (const s of seriesIds) {
@@ -816,13 +829,14 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
     db.prepare('DELETE FROM playoff_series WHERE season_id = ?').run(season.id);
   }
 
-  // Rewind game_state to the earliest start_date (Jan 1 of the season year)
-  const startDate = seasons[0].start_date;
+  // Rewind game_state to Jan 1 of the origin year
+  const startDate = `${originYear}-01-01`;
+  const firstSeason = originSeasons[0];
   db.prepare(`
-    UPDATE game_state SET current_date = ?, updated_at = datetime('now') WHERE id = 1
-  `).run(startDate);
+    UPDATE game_state SET current_date = ?, season_id = ?, updated_at = datetime('now') WHERE id = 1
+  `).run(startDate, firstSeason.id);
 
-  return { seasonId: seasons[0].id, startDate, fixturesReset: totalFixturesReset };
+  return { seasonId: firstSeason.id, startDate, fixturesReset: totalFixturesReset };
 }
 
 // ==================== FINANCIAL TRANSACTIONS ====================
@@ -1049,7 +1063,7 @@ export function processPromotionRelegation(): PromotionRelegationResult {
   const northTeams = db.prepare(`
     SELECT id, team_name FROM teams
     WHERE league_id = 1 AND region = 'north'
-    ORDER BY points ASC, (sets_won - sets_lost) ASC, sets_won ASC
+    ORDER BY points ASC, score_diff ASC, (sets_won - sets_lost) ASC
     LIMIT 1
   `).get() as { id: number; team_name: string } | undefined;
 
@@ -1062,7 +1076,7 @@ export function processPromotionRelegation(): PromotionRelegationResult {
   const southTeams = db.prepare(`
     SELECT id, team_name FROM teams
     WHERE league_id = 1 AND region = 'south'
-    ORDER BY points ASC, (sets_won - sets_lost) ASC, sets_won ASC
+    ORDER BY points ASC, score_diff ASC, (sets_won - sets_lost) ASC
     LIMIT 1
   `).get() as { id: number; team_name: string } | undefined;
 
@@ -1075,7 +1089,7 @@ export function processPromotionRelegation(): PromotionRelegationResult {
   const northChampion = db.prepare(`
     SELECT id, team_name FROM teams
     WHERE league_id = 2
-    ORDER BY points DESC, (sets_won - sets_lost) DESC, sets_won DESC
+    ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
     LIMIT 1
   `).get() as { id: number; team_name: string } | undefined;
 
@@ -1088,7 +1102,7 @@ export function processPromotionRelegation(): PromotionRelegationResult {
   const southChampion = db.prepare(`
     SELECT id, team_name FROM teams
     WHERE league_id = 3
-    ORDER BY points DESC, (sets_won - sets_lost) DESC, sets_won DESC
+    ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
     LIMIT 1
   `).get() as { id: number; team_name: string } | undefined;
 
@@ -1265,7 +1279,7 @@ export function generatePlayoffs(seasonId: number): { seriesCreated: number; gam
     const rows = db.prepare(`
       SELECT id FROM teams
       WHERE league_id = 1 AND region = ?
-      ORDER BY points DESC, (sets_won - sets_lost) DESC, sets_won DESC
+      ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
       LIMIT 4
     `).all(conference) as { id: number }[];
     return rows.map(r => r.id);
@@ -1294,7 +1308,8 @@ export function generatePlayoffs(seasonId: number): { seriesCreated: number; gam
   let seriesCreated = 0;
   let gamesScheduled = 0;
 
-  // Helper: create one series and its 5 potential game slots
+  // Helper: create one series and its first 3 guaranteed game slots.
+  // Games 4-5 are created dynamically only if the series needs them.
   function createSeries(
     conference: string,
     seedHigh: number, seedLow: number,
@@ -1314,10 +1329,11 @@ export function generatePlayoffs(seasonId: number): { seriesCreated: number; gam
     const seriesId = Number(res.lastInsertRowid);
     seriesCreated++;
 
-    for (let g = 0; g < 5; g++) {
-      // Games 1,2 at high seed; 3,4 at low seed; 5 at high seed
-      const homeId = g < 2 ? highTeamId : g < 4 ? lowTeamId : highTeamId;
-      const awayId = g < 2 ? lowTeamId  : g < 4 ? highTeamId : lowTeamId;
+    // Only pre-schedule games 1-3 (minimum needed for a best-of-3 sweep)
+    for (let g = 0; g < 3; g++) {
+      // Games 1,2 at high seed (series home); game 3 at low seed (series away)
+      const homeId = g < 2 ? highTeamId : lowTeamId;
+      const awayId = g < 2 ? lowTeamId  : highTeamId;
       insertGame.run({
         series_id: seriesId,
         game_number: g + 1,
@@ -1404,9 +1420,10 @@ export function advancePlayoffRound(seasonId: number): { advanced: boolean; roun
       away_team_id: lowTeamId,
     });
     const seriesId = Number(res.lastInsertRowid);
-    for (let g = 0; g < 5; g++) {
-      const homeId = g < 2 ? highTeamId : g < 4 ? lowTeamId : highTeamId;
-      const awayId = g < 2 ? lowTeamId  : g < 4 ? highTeamId : lowTeamId;
+    // Only pre-schedule games 1-3; games 4-5 added dynamically if needed
+    for (let g = 0; g < 3; g++) {
+      const homeId = g < 2 ? highTeamId : lowTeamId;
+      const awayId = g < 2 ? lowTeamId  : highTeamId;
       insertGame.run({
         series_id: seriesId,
         game_number: g + 1,
@@ -1471,7 +1488,12 @@ export function recordPlayoffGameResult(
   const series = db.prepare('SELECT * FROM playoff_series WHERE id = ?').get(game.series_id) as PlayoffSeries | undefined;
   if (!series) throw new Error('Playoff series not found');
 
-  const isHomeWin = result.home_sets > result.away_sets;
+  // Determine which SERIES side won — game home/away may differ from series home/away
+  // (e.g. games 3-4 are hosted by the series away team)
+  const gameHomeWon = result.home_sets > result.away_sets;
+  const seriesHomeWonGame = gameHomeWon
+    ? game.home_team_id === series.home_team_id
+    : game.away_team_id === series.home_team_id;
 
   db.transaction(() => {
     // Mark game complete
@@ -1482,8 +1504,8 @@ export function recordPlayoffGameResult(
       WHERE id = ?
     `).run(result.home_sets, result.away_sets, result.home_points, result.away_points, gameId);
 
-    // Increment wins on the series
-    if (isHomeWin) {
+    // Increment wins on the series using SERIES home/away context, not game home/away
+    if (seriesHomeWonGame) {
       db.prepare('UPDATE playoff_series SET home_wins = home_wins + 1 WHERE id = ?').run(series.id);
     } else {
       db.prepare('UPDATE playoff_series SET away_wins = away_wins + 1 WHERE id = ?').run(series.id);
@@ -1516,6 +1538,31 @@ export function recordPlayoffGameResult(
     advancePlayoffRound(seasonId);
 
     return { seriesWinner: winnerId, seriesComplete: true };
+  }
+
+  // Series is still live — schedule the next game if it doesn't exist yet
+  const nextGameNumber = game.game_number + 1;
+  const alreadyScheduled = db.prepare(
+    'SELECT id FROM playoff_games WHERE series_id = ? AND game_number = ?'
+  ).get(series.id, nextGameNumber);
+
+  if (!alreadyScheduled && nextGameNumber <= 5) {
+    // Fetch round dates to get the correct date for this game slot (0-indexed)
+    const seasonRow = db.prepare('SELECT year FROM seasons WHERE id = ?').get(series.season_id) as { year: number };
+    const roundDates = getPlayoffRoundDates(seasonRow.year, series.round as 1 | 2 | 3);
+    const dateIdx = nextGameNumber - 1; // game_number is 1-based
+    const scheduledDate = roundDates[Math.min(dateIdx, roundDates.length - 1)];
+
+    // Home/away rotation: games 1,2 at high seed; 3,4 at low seed; 5 at high seed
+    const homeTeamId = nextGameNumber <= 2 ? series.home_team_id
+      : nextGameNumber <= 4 ? series.away_team_id
+      : series.home_team_id;
+    const awayTeamId = homeTeamId === series.home_team_id ? series.away_team_id : series.home_team_id;
+
+    db.prepare(`
+      INSERT INTO playoff_games (series_id, game_number, home_team_id, away_team_id, scheduled_date, status)
+      VALUES (?, ?, ?, ?, ?, 'scheduled')
+    `).run(series.id, nextGameNumber, homeTeamId, awayTeamId, scheduledDate);
   }
 
   return { seriesWinner: null, seriesComplete: false };

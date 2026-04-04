@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import {
-  getGameState, advanceGameDate, getFixtures,
+  getGameState, advanceGameDate, getFixtures, getPlayoffGamesByDate,
   updateFixtureResult, updateTeamStatsAfterMatch,
-  getSquadLineup, getPlayers, runMonthlyEconomy,
+  getSquadLineup, getPlayers, runMonthlyEconomy, recordPlayoffGameResult,
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
 
@@ -11,7 +11,7 @@ import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib
  * Body: { targetDate: "YYYY-MM-DD" }
  *
  * Fast-forwards the game calendar from the current date to targetDate,
- * simulating ALL fixtures on every match day (including the user's team).
+ * simulating ALL fixtures AND playoff games on every match day (including the user's team).
  * Returns a summary of every day processed.
  */
 export async function POST(req: Request) {
@@ -38,7 +38,9 @@ export async function POST(req: Request) {
   while (cursor <= end) {
     const dateStr = cursor.toISOString().slice(0, 10);
 
+    // ── Simulate regular season fixtures ───────────────────────────────────────
     const fixtures = getFixtures({ date: dateStr, status: 'scheduled' });
+    let daySimulated = 0;
 
     if (fixtures.length > 0) {
       for (const f of fixtures) {
@@ -51,9 +53,33 @@ export async function POST(req: Request) {
           home_points: result.homeTotalPoints,
           away_points: result.awayTotalPoints,
         });
-        updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets);
+        updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+        daySimulated++;
       }
-      summary.push({ date: dateStr, simulated: fixtures.length });
+    }
+
+    // ── Simulate playoff games ────────────────────────────────────────────────
+    const playoffGames = getPlayoffGamesByDate(dateStr);
+    if (playoffGames.length > 0) {
+      for (const pg of playoffGames) {
+        if (pg.status === 'completed') continue;
+
+        const homeLu = buildLineup(pg.home_team_id);
+        const awayLu = buildLineup(pg.away_team_id);
+        const result = runFullMatch(homeLu, awayLu);
+
+        recordPlayoffGameResult(pg.id, {
+          home_sets:   result.homeSets,
+          away_sets:   result.awaySets,
+          home_points: result.homeTotalPoints,
+          away_points: result.awayTotalPoints,
+        });
+        daySimulated++;
+      }
+    }
+
+    if (daySimulated > 0) {
+      summary.push({ date: dateStr, simulated: daySimulated });
     }
 
     // Monthly economy on the 1st

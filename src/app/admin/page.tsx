@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Edit2, Save, X, ArrowRight, Eye, EyeOff, Search, SlidersHorizontal, UserPlus, Database, RotateCcw, AlertTriangle, CheckCircle2, Loader2, ArrowUpDown } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Trash2, Edit2, Save, X, ArrowRight, Eye, EyeOff, Search, SlidersHorizontal, UserPlus, Database, RotateCcw, AlertTriangle, CheckCircle2, Loader2, ArrowUpDown, Shuffle } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
+import { calculateOverall, POSITION_GROUPINGS, getOtherStats, ALL_STAT_KEYS, type StatKey, type PositionGrouping } from '@/lib/overall';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Column {
@@ -20,7 +21,7 @@ interface RowData { [key: string]: any; }
 // Players table: show ALL columns (we handle them all properly now)
 const DISPLAY_COLUMNS: Record<string, string[]> = {
   leagues:   ['id', 'league_name', 'nation'],
-  teams:     ['id', 'team_name', 'league_id', 'nation', 'team_money', 'played', 'won', 'lost', 'points', 'goal_diff'],
+  teams:     ['id', 'team_name', 'league_id', 'nation', 'team_money', 'played', 'won', 'lost', 'points', 'score_diff'],
   players:   [
     'id', 'player_name', 'team_id', 'position', 'age', 'country', 'jersey_number', 'height', 'potential', 'overall',
     'attack', 'defense', 'serve', 'block', 'receive', 'setting',
@@ -101,35 +102,19 @@ const STAT_GROUPS = [
   },
 ];
 
-// ── Overall calculation — must match queries.ts exactly ───────────────────────
-// Core 55% (position-weighted) + Technical 15% + Physical 15% + Mental 15%
-function coreSkillByPosition(position: string, s: Record<string, number>): number {
-  const { attack: a, defense: d, serve: sv, block: b, receive: r, setting: st } = s;
-  switch (position) {
-    case 'Libero':           return r * 0.40 + d * 0.40 + st * 0.20;
-    case 'Setter':           return st * 0.50 + a * 0.10 + d * 0.10 + sv * 0.10 + b * 0.10;
-    case 'Middle Blocker':   return a * 0.30 + d * 0.30 + b * 0.25 + sv * 0.10 + st * 0.05;
-    case 'Outside Hitter':
-    case 'Opposite Hitter':  return a * 0.25 + d * 0.25 + sv * 0.15 + b * 0.15 + r * 0.15 + st * 0.05;
-    default:                 return (a + d + sv + b + r + st) / 6;
-  }
-}
+// ── Overall calculation imported from @/lib/overall ───────────────────────────
+// Position-weighted: Main1 40% + Main2 35% + SecondaryAvg 20% + OtherAvg 5%
 
-function calculateOverall(s: Record<string, number>, position: string): number {
-  const core = coreSkillByPosition(position, s);
-  const technical =
-    (s.precision + s.flair + s.digging + s.positioning +
-     s.ball_control + s.technique + s.playmaking + s.spin) / 8;
-  const physical =
-    (s.speed + s.agility + s.strength + s.endurance +
-     s.vertical + s.flexibility + s.torque + s.balance) / 8;
-  const mental =
-    (s.leadership + s.teamwork + s.concentration + s.pressure +
-     s.consistency + s.vision + s.game_iq + s.intimidation) / 8;
-  return Math.min(99, Math.max(1, Math.round(
-    core * 0.55 + technical * 0.15 + physical * 0.15 + mental * 0.15
-  )));
-}
+// Human-readable label for a stat key
+const STAT_LABEL: Record<string, string> = {
+  attack: 'Attack', defense: 'Defense', serve: 'Serve', block: 'Block', receive: 'Receive', setting: 'Setting',
+  precision: 'Precision', flair: 'Flair', digging: 'Digging', positioning: 'Positioning',
+  ball_control: 'Ball Control', technique: 'Technique', playmaking: 'Playmaking', spin: 'Spin',
+  speed: 'Speed', agility: 'Agility', strength: 'Strength', endurance: 'Endurance',
+  vertical: 'Vertical', flexibility: 'Flexibility', torque: 'Torque', balance: 'Balance',
+  leadership: 'Leadership', teamwork: 'Teamwork', concentration: 'Concentration', pressure: 'Pressure',
+  consistency: 'Consistency', vision: 'Vision', game_iq: 'Game IQ', intimidation: 'Intimidation',
+};
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function StatSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
@@ -155,6 +140,21 @@ const SELECT_CLS = 'w-full px-3 py-2 bg-[#1a1a2e] border border-white/10 rounded
 const LABEL_CLS = 'text-xs font-semibold text-gray-400 uppercase tracking-wider';
 
 const DEFAULT_QUICK_ADD = { player_id: '', player_name: '', team_id: '', position: '', age: '', country: '', jersey_number: '' };
+
+/** Build a stats record with every stat set to `value`. */
+function defaultStats(value = 75): Record<string, number> {
+  const s: Record<string, number> = {};
+  for (const k of ALL_STAT_KEYS) s[k] = value;
+  return s;
+}
+
+/** Clamp a stat value to [1, 99]. */
+function clampStat(v: number): number { return Math.max(1, Math.min(99, Math.round(v))); }
+
+/** Add a random int in [-5, +5] to a value, clamped to [1, 99]. */
+function nudgeStat(v: number): number {
+  return clampStat(v + Math.floor(Math.random() * 11) - 5);
+}
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AdminPage() {
@@ -182,6 +182,7 @@ export default function AdminPage() {
 
   // Quick Add Player
   const [quickAdd, setQuickAdd] = useState(DEFAULT_QUICK_ADD);
+  const [quickAddStats, setQuickAddStats] = useState<Record<string, number>>(defaultStats);
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [quickAddSuccess, setQuickAddSuccess] = useState(false);
 
@@ -384,6 +385,17 @@ export default function AdminPage() {
   };
 
   // ── Quick Add Player ────────────────────────────────────────────────────────
+  const quickAddGrouping = POSITION_GROUPINGS[quickAdd.position] ?? null;
+  const quickAddOvr = quickAddGrouping ? calculateOverall(quickAddStats, quickAdd.position) : null;
+
+  const randomizeGroup = useCallback((keys: string[]) => {
+    setQuickAddStats(prev => {
+      const next = { ...prev };
+      for (const k of keys) next[k] = nudgeStat(prev[k] ?? 75);
+      return next;
+    });
+  }, []);
+
   const handleQuickAddPlayer = async () => {
     const { player_id, player_name, position, age, country, jersey_number } = quickAdd;
     if (!player_name || !position || !age || !country || !jersey_number) {
@@ -391,15 +403,13 @@ export default function AdminPage() {
     }
     setQuickAddLoading(true);
     const ageNum = parseInt(age), jerseyNum = parseInt(jersey_number);
+    const overall = calculateOverall(quickAddStats, position);
     const payload = {
       ...(player_id ? { id: parseInt(player_id) } : {}),
       player_name, position, age: ageNum, country, jersey_number: jerseyNum,
       team_id: quickAdd.team_id ? parseInt(quickAdd.team_id) : null,
-      overall: 50,
-      attack: 50, defense: 50, serve: 50, block: 50, receive: 50, setting: 50,
-      precision: 50, flair: 50, digging: 50, positioning: 50, ball_control: 50, technique: 50, playmaking: 50, spin: 50,
-      speed: 50, agility: 50, strength: 50, endurance: 50, vertical: 50, flexibility: 50, torque: 50, balance: 50,
-      leadership: 50, teamwork: 50, concentration: 50, pressure: 50, consistency: 50, vision: 50, game_iq: 50, intimidation: 50,
+      overall,
+      ...quickAddStats,
       contract_years: 1,
       monthly_wage: 5000,
       player_value: 250000,
@@ -412,6 +422,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         setQuickAdd(DEFAULT_QUICK_ADD);
+        setQuickAddStats(defaultStats());
         await refreshPlayers();
         if (selectedTable === 'players') fetchTableData('players');
         setQuickAddSuccess(true);
@@ -929,32 +940,41 @@ export default function AdminPage() {
 
       {/* ── Quick Add Player ────────────────────────────────────────────────── */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
-            <UserPlus size={20} className="text-amber-400" />
+        {/* Header + live OVR */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
+              <UserPlus size={20} className="text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Quick Add Player</h2>
+              <p className="text-sm text-gray-400">Select a position, randomize stats, then save</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Quick Add Player</h2>
-            <p className="text-sm text-gray-400">Creates a player with all stats defaulting to 50 — fine-tune in the editor below</p>
-          </div>
+          {quickAddOvr !== null && (
+            <div className={`flex flex-col items-center px-6 py-3 rounded-xl border shrink-0 ${
+              quickAddOvr >= 80 ? 'bg-emerald-500/10 border-emerald-500/30' :
+              quickAddOvr >= 60 ? 'bg-amber-500/10 border-amber-500/30' :
+              'bg-red-500/10 border-red-500/30'
+            }`}>
+              <span className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">Overall</span>
+              <span className={`text-4xl font-black tabular-nums leading-none ${
+                quickAddOvr >= 80 ? 'text-emerald-400' : quickAddOvr >= 60 ? 'text-amber-400' : 'text-red-400'
+              }`}>{quickAddOvr}</span>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            { key: 'player_id', label: 'Player ID (Optional)', type: 'number', placeholder: 'Auto-assigned if empty' },
-            { key: 'player_name', label: 'Player Name *', type: 'text', placeholder: 'Full name' },
-          ].map(f => (
-            <div key={f.key} className="space-y-1.5">
-              <label className={LABEL_CLS}>{f.label}</label>
-              <input
-                type={f.type}
-                value={(quickAdd as any)[f.key]}
-                onChange={e => setQuickAdd(prev => ({ ...prev, [f.key]: e.target.value }))}
-                placeholder={f.placeholder}
-                className={INPUT_CLS}
-              />
-            </div>
-          ))}
+        {/* Player identity fields */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-1.5">
+            <label className={LABEL_CLS}>Player ID (Optional)</label>
+            <input type="number" value={quickAdd.player_id} onChange={e => setQuickAdd(prev => ({ ...prev, player_id: e.target.value }))} placeholder="Auto-assigned if empty" className={INPUT_CLS} />
+          </div>
+          <div className="space-y-1.5">
+            <label className={LABEL_CLS}>Player Name *</label>
+            <input type="text" value={quickAdd.player_name} onChange={e => setQuickAdd(prev => ({ ...prev, player_name: e.target.value }))} placeholder="Full name" className={INPUT_CLS} />
+          </div>
           <div className="space-y-1.5">
             <label className={LABEL_CLS}>Team</label>
             <select value={quickAdd.team_id} onChange={e => setQuickAdd(prev => ({ ...prev, team_id: e.target.value }))} className={SELECT_CLS}>
@@ -970,7 +990,7 @@ export default function AdminPage() {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className={LABEL_CLS}>Age * (16–50)</label>
+            <label className={LABEL_CLS}>Age * (16-50)</label>
             <input type="number" min={16} max={50} value={quickAdd.age} onChange={e => setQuickAdd(prev => ({ ...prev, age: e.target.value }))} placeholder="e.g. 22" className={INPUT_CLS} />
           </div>
           <div className="space-y-1.5">
@@ -978,21 +998,75 @@ export default function AdminPage() {
             <input type="text" value={quickAdd.country} onChange={e => setQuickAdd(prev => ({ ...prev, country: e.target.value }))} placeholder="e.g. Japan" className={INPUT_CLS} />
           </div>
           <div className="space-y-1.5">
-            <label className={LABEL_CLS}>Jersey # * (1–99)</label>
+            <label className={LABEL_CLS}>Jersey # * (1-99)</label>
             <input type="number" min={1} max={99} value={quickAdd.jersey_number} onChange={e => setQuickAdd(prev => ({ ...prev, jersey_number: e.target.value }))} placeholder="e.g. 7" className={INPUT_CLS} />
           </div>
         </div>
 
+        {/* Position-grouped stat roller */}
+        {quickAddGrouping ? (() => {
+          const otherKeys = getOtherStats(quickAddGrouping);
+          const groups: { title: string; color: string; border: string; weight: string; keys: StatKey[] }[] = [
+            { title: 'Main 1', color: 'text-red-400', border: 'border-red-500/30', weight: '40%', keys: [quickAddGrouping.main1] },
+            { title: 'Main 2', color: 'text-orange-400', border: 'border-orange-500/30', weight: '35%', keys: [quickAddGrouping.main2] },
+            { title: 'Secondary', color: 'text-cyan-400', border: 'border-cyan-500/30', weight: '20%', keys: quickAddGrouping.secondary },
+            { title: 'Other', color: 'text-gray-400', border: 'border-white/10', weight: '5%', keys: otherKeys },
+          ];
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {groups.map(g => (
+                <div key={g.title} className={`p-4 rounded-xl bg-white/[0.03] border ${g.border} space-y-3`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-xs font-bold uppercase tracking-widest ${g.color}`}>{g.title}</h3>
+                      <span className="text-[10px] text-gray-600 font-mono">{g.weight}</span>
+                    </div>
+                    <button
+                      onClick={() => randomizeGroup(g.keys)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all
+                        bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 ${g.color} cursor-pointer active:scale-95`}
+                    >
+                      <Shuffle size={12} /> Randomize
+                    </button>
+                  </div>
+                  <div className={`space-y-2.5 ${g.keys.length > 6 ? 'max-h-[320px] overflow-y-auto pr-1' : ''}`}>
+                    {g.keys.map(k => (
+                      <StatSlider
+                        key={k}
+                        label={STAT_LABEL[k] ?? k}
+                        value={quickAddStats[k] ?? 75}
+                        onChange={v => setQuickAddStats(prev => ({ ...prev, [k]: clampStat(v) }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })() : (
+          <div className="flex flex-col items-center justify-center py-10 text-gray-600 border border-white/5 rounded-xl">
+            <UserPlus size={28} className="mb-2 opacity-30" />
+            <p className="text-sm">Select a position above to reveal stats</p>
+          </div>
+        )}
+
+        {/* Action bar */}
         <div className="flex items-center gap-4 pt-1">
           <button
             onClick={handleQuickAddPlayer}
-            disabled={quickAddLoading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 text-black rounded-lg text-sm font-semibold transition-all shadow-lg shadow-amber-500/20"
+            disabled={quickAddLoading || !quickAdd.position}
+            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 text-black rounded-lg text-sm font-semibold transition-all shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
           >
             <UserPlus size={16} />
-            {quickAddLoading ? 'Creating…' : 'Add Player'}
+            {quickAddLoading ? 'Creating...' : 'Add Player'}
           </button>
-          {quickAddSuccess && <span className="text-sm text-emerald-400 font-medium">✓ Player created — find them in the editor below</span>}
+          <button
+            onClick={() => { setQuickAddStats(defaultStats()); }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-sm font-medium transition-all cursor-pointer"
+          >
+            <RotateCcw size={14} /> Reset to 75
+          </button>
+          {quickAddSuccess && <span className="text-sm text-emerald-400 font-medium">Player created — find them in the editor below</span>}
         </div>
       </div>
 
