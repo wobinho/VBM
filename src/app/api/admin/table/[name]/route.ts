@@ -43,7 +43,17 @@ export async function POST(
 
     // Get columns from table schema
     const columns = db.prepare(`PRAGMA table_info(${name})`).all() as any[];
-    const columnNames = columns.map(c => c.name).filter(c => c !== 'id');
+    
+    // Filter columns to include 'id' only if it's in the body, 
+    // and only include columns that are actually present in the request body.
+    const columnNames = columns.map(c => c.name).filter(c => {
+      if (c === 'id') return body.id !== undefined;
+      return body[c] !== undefined;
+    });
+
+    if (columnNames.length === 0) {
+      return NextResponse.json({ error: 'No data provided' }, { status: 400 });
+    }
 
     const placeholders = columnNames.map(() => '?').join(', ');
     const values = columnNames.map(c => body[c]);

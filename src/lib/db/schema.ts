@@ -5,7 +5,8 @@ export function runSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS leagues (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       league_name TEXT NOT NULL UNIQUE,
-      nation TEXT DEFAULT 'US',
+      country TEXT DEFAULT 'Italy',
+      tier INTEGER DEFAULT 2,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -14,11 +15,13 @@ export function runSchema(db: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       team_name TEXT NOT NULL UNIQUE,
       league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
-      nation TEXT DEFAULT 'US',
+      country TEXT DEFAULT 'Italy',
       team_money REAL DEFAULT 1000000.00,
       played INTEGER DEFAULT 0,
       won INTEGER DEFAULT 0,
       lost INTEGER DEFAULT 0,
+      sets_won INTEGER DEFAULT 0,
+      sets_lost INTEGER DEFAULT 0,
       points INTEGER DEFAULT 0,
       score_diff INTEGER DEFAULT 0
     );
@@ -178,5 +181,28 @@ export function runSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_fixtures_home_team ON fixtures(home_team_id);
     CREATE INDEX IF NOT EXISTS idx_fixtures_away_team ON fixtures(away_team_id);
     CREATE INDEX IF NOT EXISTS idx_fixtures_status ON fixtures(status);
+
+    CREATE TABLE IF NOT EXISTS league_configs (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      league_id  INTEGER NOT NULL UNIQUE REFERENCES leagues(id) ON DELETE CASCADE,
+      config     TEXT    NOT NULL,
+      created_at TEXT    DEFAULT (datetime('now')),
+      updated_at TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_league_configs_league_id ON league_configs(league_id);
+
+    CREATE TABLE IF NOT EXISTS league_links (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_league_id  INTEGER NOT NULL REFERENCES leagues(id),
+      to_league_id    INTEGER NOT NULL REFERENCES leagues(id),
+      from_condition  TEXT    NOT NULL,
+      to_condition    TEXT    NOT NULL,
+      priority        INTEGER DEFAULT 0,
+      created_at      TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_league_links_from ON league_links(from_league_id);
+    CREATE INDEX IF NOT EXISTS idx_league_links_to   ON league_links(to_league_id);
   `);
 }

@@ -2,10 +2,9 @@
 import { useState, useEffect } from 'react';
 import {
   Plus, Edit2, Save, X, CheckCircle2, Loader2, AlertTriangle,
-  ArrowUpDown, Shield, Globe, Trophy
+  ArrowUpDown, Shield, Globe, Trophy, Trash2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { getCountryCode, getCountryName } from '@/lib/country-codes';
 
 interface RowData { [key: string]: any; }
 
@@ -49,16 +48,23 @@ function ResultBanner({ result }: { result: { ok: boolean; message: string } | n
 // ── Add Team ──────────────────────────────────────────────────────────────────
 function AddTeam({ leagues, onDone }: { leagues: RowData[]; onDone: () => void }) {
   const [form, setForm] = useState({
-    id: '', team_name: '', league_id: '', nation: '', region: '', team_money: '1000000',
+    id: '', team_name: '', league_id: '', country: '', region: '', team_money: '1000000',
   });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
+  // Auto-fill country from the selected league
+  const handleLeagueChange = (leagueId: string) => {
+    set('league_id', leagueId);
+    const league = leagues.find(l => String(l.id) === leagueId);
+    if (league?.country) set('country', league.country);
+  };
+
   const handleSubmit = async () => {
-    if (!form.id || !form.team_name || !form.league_id || !form.nation) {
-      setResult({ ok: false, message: 'Team ID, name, league, and country are required.' });
+    if (!form.id || !form.team_name || !form.league_id) {
+      setResult({ ok: false, message: 'Team ID, name, and league are required.' });
       return;
     }
     setLoading(true);
@@ -68,9 +74,10 @@ function AddTeam({ leagues, onDone }: { leagues: RowData[]; onDone: () => void }
         id: Number(form.id),
         team_name: form.team_name.trim(),
         league_id: Number(form.league_id),
-        nation: form.nation.trim(),
+        country: form.country.trim() || null,
         team_money: Number(form.team_money) || 1000000,
         played: 0, won: 0, lost: 0, points: 0, score_diff: 0,
+        sets_won: 0, sets_lost: 0,
       };
       if (form.region.trim()) body.region = form.region.trim();
       const res = await fetch('/api/admin/table/teams', {
@@ -80,7 +87,7 @@ function AddTeam({ leagues, onDone }: { leagues: RowData[]; onDone: () => void }
       });
       if (res.ok) {
         setResult({ ok: true, message: `Team "${form.team_name}" created successfully.` });
-        setForm({ id: '', team_name: '', league_id: '', nation: '', region: '', team_money: '1000000' });
+        setForm({ id: '', team_name: '', league_id: '', country: '', region: '', team_money: '1000000' });
         onDone();
       } else {
         const e = await res.json().catch(() => ({}));
@@ -105,14 +112,14 @@ function AddTeam({ leagues, onDone }: { leagues: RowData[]; onDone: () => void }
         </div>
         <div className="space-y-1.5">
           <label className={LABEL_CLS}>League</label>
-          <select value={form.league_id} onChange={e => set('league_id', e.target.value)} className={SELECT_CLS}>
+          <select value={form.league_id} onChange={e => handleLeagueChange(e.target.value)} className={SELECT_CLS}>
             <option value="">— select league —</option>
             {leagues.map(l => <option key={l.id} value={l.id}>{l.league_name}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className={LABEL_CLS}>Country (ISO code)</label>
-          <input type="text" value={form.nation} onChange={e => set('nation', e.target.value)} placeholder="e.g. jp" maxLength={3} className={INPUT_CLS} />
+          <label className={LABEL_CLS}>Country <span className="text-gray-600 normal-case font-normal">(auto-filled from league)</span></label>
+          <input type="text" value={form.country} onChange={e => set('country', e.target.value)} placeholder="e.g. Italy" className={INPUT_CLS} />
         </div>
         <div className="space-y-1.5">
           <label className={LABEL_CLS}>Region <span className="text-gray-600 normal-case font-normal">(Premier only)</span></label>
@@ -150,12 +157,15 @@ function TeamEditor({ teams, leagues, onDone }: { teams: RowData[]; leagues: Row
   const [form, setForm] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const set = (k: string, v: any) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
     setResult(null);
+    setDeleteConfirm(false);
     const t = teams.find(t => String(t.id) === id);
     if (t) setForm({ ...t });
     else setForm({});
@@ -169,7 +179,7 @@ function TeamEditor({ teams, leagues, onDone }: { teams: RowData[]; leagues: Row
       const body: Record<string, any> = {
         team_name: form.team_name,
         league_id: Number(form.league_id),
-        nation: form.nation,
+        country: form.country ?? null,
         team_money: Number(form.team_money),
       };
       if (form.region !== undefined) body.region = form.region;
@@ -189,6 +199,24 @@ function TeamEditor({ teams, leagues, onDone }: { teams: RowData[]; leagues: Row
       setResult({ ok: false, message: e.message ?? 'Network error.' });
     }
     setLoading(false);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/table/teams/${selectedId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSelectedId(''); setForm({}); setDeleteConfirm(false);
+        onDone();
+      } else {
+        const e = await res.json().catch(() => ({}));
+        setResult({ ok: false, message: e.error ?? 'Failed to delete team.' });
+      }
+    } catch (e: any) {
+      setResult({ ok: false, message: e.message ?? 'Network error.' });
+    }
+    setDeleting(false);
   };
 
   return (
@@ -218,8 +246,8 @@ function TeamEditor({ teams, leagues, onDone }: { teams: RowData[]; leagues: Row
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className={LABEL_CLS}>Country (ISO code)</label>
-              <input type="text" value={form.nation ?? ''} onChange={e => set('nation', e.target.value)} maxLength={3} className={INPUT_CLS} />
+              <label className={LABEL_CLS}>Country</label>
+              <input type="text" value={form.country ?? ''} onChange={e => set('country', e.target.value)} placeholder="e.g. Italy" className={INPUT_CLS} />
             </div>
             <div className="space-y-1.5">
               <label className={LABEL_CLS}>Region</label>
@@ -234,24 +262,37 @@ function TeamEditor({ teams, leagues, onDone }: { teams: RowData[]; leagues: Row
               <input type="number" value={form.team_money ?? ''} onChange={e => set('team_money', e.target.value)} className={INPUT_CLS} />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
-                bg-amber-500/20 border border-amber-500/30 text-amber-400
-                hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {loading ? 'Saving…' : 'Save Changes'}
-            </button>
-            <button
-              onClick={() => { setSelectedId(''); setForm({}); setResult(null); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
-            >
-              <X size={14} /> Clear
-            </button>
-            <ResultBanner result={result} />
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={handleSave} disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-40 transition-all cursor-pointer active:scale-95">
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {loading ? 'Saving…' : 'Save Changes'}
+              </button>
+              <button onClick={() => { setSelectedId(''); setForm({}); setResult(null); setDeleteConfirm(false); }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer">
+                <X size={14} /> Clear
+              </button>
+              <ResultBanner result={result} />
+            </div>
+            {!deleteConfirm ? (
+              <button onClick={() => setDeleteConfirm(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer">
+                <Trash2 size={14} /> Delete Team
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-red-400 font-semibold">Delete {form.team_name}?</span>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-all cursor-pointer">
+                  <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button onClick={() => setDeleteConfirm(false)}
+                  className="px-3 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-all cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -341,15 +382,15 @@ function MoveTeamLeague({ teams, leagues, onDone }: { teams: RowData[]; leagues:
 
 // ── League Creator ────────────────────────────────────────────────────────────
 function LeagueCreator({ onDone }: { onDone: () => void }) {
-  const [form, setForm] = useState({ id: '', league_name: '', nation: '' });
+  const [form, setForm] = useState({ id: '', league_name: '', country: '', tier: '2' });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleCreate = async () => {
-    if (!form.id || !form.league_name || !form.nation) {
-      setResult({ ok: false, message: 'League ID, name, and country are required.' });
+    if (!form.id || !form.league_name) {
+      setResult({ ok: false, message: 'League ID and name are required.' });
       return;
     }
     setLoading(true);
@@ -361,12 +402,13 @@ function LeagueCreator({ onDone }: { onDone: () => void }) {
         body: JSON.stringify({
           id: Number(form.id),
           league_name: form.league_name.trim(),
-          nation: form.nation.trim(),
+          country: form.country.trim() || null,
+          tier: Number(form.tier) || 2,
         }),
       });
       if (res.ok) {
         setResult({ ok: true, message: `League "${form.league_name}" created successfully.` });
-        setForm({ id: '', league_name: '', nation: '' });
+        setForm({ id: '', league_name: '', country: '', tier: '2' });
         onDone();
       } else {
         const e = await res.json().catch(() => ({}));
@@ -380,7 +422,7 @@ function LeagueCreator({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="space-y-1.5">
           <label className={LABEL_CLS}>League ID</label>
           <input type="number" value={form.id} onChange={e => set('id', e.target.value)} placeholder="e.g. 5" className={INPUT_CLS} />
@@ -390,8 +432,12 @@ function LeagueCreator({ onDone }: { onDone: () => void }) {
           <input type="text" value={form.league_name} onChange={e => set('league_name', e.target.value)} placeholder="e.g. Japan Premier League" className={INPUT_CLS} />
         </div>
         <div className="space-y-1.5">
-          <label className={LABEL_CLS}>Country (ISO code)</label>
-          <input type="text" value={form.nation} onChange={e => set('nation', e.target.value)} placeholder="e.g. jp" maxLength={3} className={INPUT_CLS} />
+          <label className={LABEL_CLS}>Country</label>
+          <input type="text" value={form.country} onChange={e => set('country', e.target.value)} placeholder="e.g. Japan" className={INPUT_CLS} />
+        </div>
+        <div className="space-y-1.5">
+          <label className={LABEL_CLS}>Tier <span className="text-gray-600 normal-case font-normal">(1=top)</span></label>
+          <input type="number" min={1} max={10} value={form.tier} onChange={e => set('tier', e.target.value)} placeholder="2" className={INPUT_CLS} />
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -417,12 +463,15 @@ function LeagueEditor({ leagues, onDone }: { leagues: RowData[]; onDone: () => v
   const [form, setForm] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const set = (k: string, v: any) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
     setResult(null);
+    setDeleteConfirm(false);
     const l = leagues.find(l => String(l.id) === id);
     if (l) setForm({ ...l });
     else setForm({});
@@ -438,7 +487,8 @@ function LeagueEditor({ leagues, onDone }: { leagues: RowData[]; onDone: () => v
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           league_name: form.league_name,
-          nation: form.nation,
+          country: form.country ?? null,
+          tier: Number(form.tier) || 2,
         }),
       });
       if (res.ok) {
@@ -454,6 +504,24 @@ function LeagueEditor({ leagues, onDone }: { leagues: RowData[]; onDone: () => v
     setLoading(false);
   };
 
+  const handleDelete = async () => {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/table/leagues/${selectedId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSelectedId(''); setForm({}); setDeleteConfirm(false);
+        onDone();
+      } else {
+        const e = await res.json().catch(() => ({}));
+        setResult({ ok: false, message: e.error ?? 'Failed to delete league.' });
+      }
+    } catch (e: any) {
+      setResult({ ok: false, message: e.message ?? 'Network error.' });
+    }
+    setDeleting(false);
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
@@ -466,34 +534,51 @@ function LeagueEditor({ leagues, onDone }: { leagues: RowData[]; onDone: () => v
 
       {selectedId && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className={LABEL_CLS}>League Name</label>
               <input type="text" value={form.league_name ?? ''} onChange={e => set('league_name', e.target.value)} className={INPUT_CLS} />
             </div>
             <div className="space-y-1.5">
-              <label className={LABEL_CLS}>Country (ISO code)</label>
-              <input type="text" value={form.nation ?? ''} onChange={e => set('nation', e.target.value)} maxLength={3} className={INPUT_CLS} />
+              <label className={LABEL_CLS}>Country</label>
+              <input type="text" value={form.country ?? ''} onChange={e => set('country', e.target.value)} placeholder="e.g. Italy" className={INPUT_CLS} />
+            </div>
+            <div className="space-y-1.5">
+              <label className={LABEL_CLS}>Tier <span className="text-gray-600 normal-case font-normal">(1=top flight)</span></label>
+              <input type="number" min={1} max={10} value={form.tier ?? 2} onChange={e => set('tier', e.target.value)} className={INPUT_CLS} />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
-                bg-amber-500/20 border border-amber-500/30 text-amber-400
-                hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {loading ? 'Saving…' : 'Save Changes'}
-            </button>
-            <button
-              onClick={() => { setSelectedId(''); setForm({}); setResult(null); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
-            >
-              <X size={14} /> Clear
-            </button>
-            <ResultBanner result={result} />
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={handleSave} disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-40 transition-all cursor-pointer active:scale-95">
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {loading ? 'Saving…' : 'Save Changes'}
+              </button>
+              <button onClick={() => { setSelectedId(''); setForm({}); setResult(null); setDeleteConfirm(false); }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer">
+                <X size={14} /> Clear
+              </button>
+              <ResultBanner result={result} />
+            </div>
+            {!deleteConfirm ? (
+              <button onClick={() => setDeleteConfirm(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer">
+                <Trash2 size={14} /> Delete League
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-red-400 font-semibold">Delete {form.league_name}?</span>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-all cursor-pointer">
+                  <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button onClick={() => setDeleteConfirm(false)}
+                  className="px-3 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-all cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

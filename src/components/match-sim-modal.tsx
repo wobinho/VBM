@@ -476,6 +476,8 @@ export default function MatchSimModal({ fixtureId, onClose, onMatchComplete }: M
     const [speed, setSpeed] = useState<SimSpeed>('slow');
     const [activeHighlight, setActiveHighlight] = useState<RallyHighlight | null>(null);
     const [homeChemistry, setHomeChemistry] = useState<number>(1.0);
+    const [userIsHome, setUserIsHome] = useState<boolean>(true);
+
 
     const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
     const speedRef    = useRef<SimSpeed>('slow');
@@ -511,6 +513,7 @@ export default function MatchSimModal({ fixtureId, onClose, onMatchComplete }: M
 
             if (fixtureRes && !fixtureRes.error) {
                 const isHome = fixtureRes.home_team_id === team.id;
+                setUserIsHome(isHome);
                 const oppId = isHome ? fixtureRes.away_team_id : fixtureRes.home_team_id;
                 const oppName = isHome ? fixtureRes.away_team_name : fixtureRes.home_team_name;
                 setSelectedOpp({ id: oppId, team_name: oppName });
@@ -569,18 +572,26 @@ export default function MatchSimModal({ fixtureId, onClose, onMatchComplete }: M
 
     const persistMatchResult = useCallback(async (finalState: MatchSimState) => {
         try {
+            // The sim always places the user's team as "home" internally.
+            // When the user is the away team in the fixture, we must swap the sets/points
+            // so they map to the correct home/away columns in the database.
+            const fixtureHomeSets   = userIsHome ? finalState.homeSetsWon : finalState.awaySetsWon;
+            const fixtureAwaySets   = userIsHome ? finalState.awaySetsWon : finalState.homeSetsWon;
+            const fixtureHomePoints = userIsHome ? finalState.matchStats.home.totalPoints : finalState.matchStats.away.totalPoints;
+            const fixtureAwayPoints = userIsHome ? finalState.matchStats.away.totalPoints : finalState.matchStats.home.totalPoints;
+
             await fetch(`/api/fixtures/${fixtureId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    homeSets: finalState.homeSetsWon,
-                    awaySets: finalState.awaySetsWon,
-                    homePoints: finalState.matchStats.home.totalPoints,
-                    awayPoints: finalState.matchStats.away.totalPoints,
+                    homeSets:   fixtureHomeSets,
+                    awaySets:   fixtureAwaySets,
+                    homePoints: fixtureHomePoints,
+                    awayPoints: fixtureAwayPoints,
                 }),
             });
         } catch (err) { console.error('Failed to save match result:', err); }
-    }, [fixtureId]);
+    }, [fixtureId, userIsHome]);
 
     const handleClose = useCallback(async () => {
         await onMatchComplete();

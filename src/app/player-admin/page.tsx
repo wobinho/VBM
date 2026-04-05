@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, SlidersHorizontal, UserPlus, RotateCcw, CheckCircle2, Loader2, Shuffle, Save, X } from 'lucide-react';
+import { Search, SlidersHorizontal, UserPlus, RotateCcw, CheckCircle2, Loader2, Shuffle, Save, X, Trash2, Upload, AlertCircle, Download } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { calculateOverall, POSITION_GROUPINGS, getOtherStats, ALL_STAT_KEYS, type StatKey } from '@/lib/overall';
 import { Lock } from 'lucide-react';
@@ -132,6 +132,13 @@ export default function PlayerAdminPage() {
   const [editorStats, setEditorStats] = useState<Record<string, number>>({});
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorSuccess, setEditorSuccess] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Bulk Import
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkResults, setBulkResults] = useState<any>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   if (!isAdmin) {
     return (
@@ -225,6 +232,7 @@ export default function PlayerAdminPage() {
   const selectPlayerForEdit = (player: RowData) => {
     setEditorPlayer(player);
     setEditorSearch('');
+    setDeleteConfirm(false);
     setEditorInfo({
       player_name:    player.player_name ?? '',
       team_id:        player.team_id ?? '',
@@ -297,9 +305,64 @@ export default function PlayerAdminPage() {
     setEditorSaving(false);
   };
 
+  const handleDeletePlayer = async () => {
+    if (!editorPlayer) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/players/${editorPlayer.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setAllPlayers(prev => prev.filter(p => p.id !== editorPlayer.id));
+        setEditorPlayer(null);
+        setEditorStats({});
+        setEditorInfo({});
+        setDeleteConfirm(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Failed to delete: ' + (err.error ?? res.statusText));
+      }
+    } catch { alert('Error deleting player'); }
+    setDeleting(false);
+  };
+
   const liveOverall = editorPlayer
     ? calculateOverall(editorStats, editorInfo.position || editorPlayer.position)
     : null;
+
+  // ── Bulk Import ─────────────────────────────────────────────────────────────
+  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBulkImporting(true);
+    setBulkError(null);
+    setBulkResults(null);
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      const res = await fetch('/api/players/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setBulkError(result.error || 'Import failed');
+      } else {
+        setBulkResults(result);
+        await refreshPlayers();
+      }
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : 'Failed to parse JSON file');
+    } finally {
+      setBulkImporting(false);
+      // Reset the input
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
   return (
@@ -605,23 +668,186 @@ export default function PlayerAdminPage() {
               ))}
             </div>
 
-            {/* Save bar */}
-            <div className="flex items-center gap-3 pt-1">
-              <button
-                onClick={handleSavePlayer}
-                disabled={editorSaving}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-purple-500/20"
-              >
-                <Save size={16} />
-                {editorSaving ? 'Saving…' : 'Save Player'}
-              </button>
-              {editorSuccess && <span className="text-sm text-emerald-400 font-medium">✓ Saved successfully</span>}
+            {/* Save / Delete bar */}
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSavePlayer}
+                  disabled={editorSaving}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-purple-500/20 cursor-pointer"
+                >
+                  <Save size={16} />
+                  {editorSaving ? 'Saving…' : 'Save Player'}
+                </button>
+                {editorSuccess && <span className="text-sm text-emerald-400 font-medium flex items-center gap-1"><CheckCircle2 size={14} /> Saved</span>}
+              </div>
+              {/* Delete — confirm-then-act pattern */}
+              {!deleteConfirm ? (
+                <button
+                  onClick={() => setDeleteConfirm(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50 text-red-400 rounded-lg text-sm font-semibold transition-all cursor-pointer"
+                >
+                  <Trash2 size={15} /> Delete Player
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-400 font-semibold">Permanently delete {editorPlayer?.player_name}?</span>
+                  <button
+                    onClick={handleDeletePlayer}
+                    disabled={deleting}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-all cursor-pointer"
+                  >
+                    <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Confirm Delete'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(false)}
+                    className="px-3 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-gray-600">
             <SlidersHorizontal size={36} className="mb-3 opacity-30" />
             <p className="text-sm">Search for a player above to start editing</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Bulk Import ──────────────────────────────────────────────────────── */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+            <Upload size={20} className="text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Bulk Import Players</h2>
+            <p className="text-sm text-gray-400">Import players from a JSON file created with the VBM player builder</p>
+          </div>
+        </div>
+
+        {/* Upload area */}
+        <div className="relative">
+          <input
+            type="file"
+            accept=".json"
+            onChange={handleBulkImport}
+            disabled={bulkImporting}
+            className="hidden"
+            id="bulk-import-input"
+          />
+          <label
+            htmlFor="bulk-import-input"
+            className={`flex items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
+              bulkImporting
+                ? 'border-gray-600 bg-white/[0.02]'
+                : 'border-blue-500/30 bg-blue-500/5 hover:border-blue-500/50 hover:bg-blue-500/10'
+            }`}
+          >
+            <div className="text-center">
+              {bulkImporting ? (
+                <>
+                  <Loader2 size={24} className="text-blue-400 mb-2 animate-spin mx-auto" />
+                  <p className="text-sm text-white font-medium">Processing import...</p>
+                </>
+              ) : (
+                <>
+                  <Download size={24} className="text-blue-400 mb-2 mx-auto" />
+                  <p className="text-sm text-white font-medium">Click to select JSON file</p>
+                  <p className="text-xs text-gray-400 mt-1">or drag and drop</p>
+                </>
+              )}
+            </div>
+          </label>
+        </div>
+
+        {/* Error display */}
+        {bulkError && (
+          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
+            <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-400">Import Failed</p>
+              <p className="text-sm text-red-300 mt-1">{bulkError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Results display */}
+        {bulkResults && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-emerald-400">Import Successful</p>
+                <span className={`text-2xl font-bold ${bulkResults.created > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                  +{bulkResults.created}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-300">
+                Created {bulkResults.created} player{bulkResults.created !== 1 ? 's' : ''}
+                {bulkResults.failed > 0 && ` • ${bulkResults.failed} failed`}
+              </p>
+            </div>
+
+            {/* Success results table */}
+            {bulkResults.results && bulkResults.results.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Player</th>
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">ID</th>
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkResults.results.map((r: any, i: number) => (
+                      <tr key={i} className="border-b border-white/5 hover:bg-white/[0.03]">
+                        <td className="py-2 px-3 text-white">{r.player_name}</td>
+                        <td className="py-2 px-3 text-gray-400">#{r.player_id}</td>
+                        <td className="py-2 px-3">
+                          <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                            <CheckCircle2 size={12} /> Created
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Error results table */}
+            {bulkResults.errors && bulkResults.errors.length > 0 && (
+              <div className="overflow-x-auto">
+                <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Failed Imports</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-red-500/20">
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Player</th>
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkResults.errors.map((err: any, i: number) => (
+                      <tr key={i} className="border-b border-red-500/10">
+                        <td className="py-2 px-3 text-white">{err.player_name}</td>
+                        <td className="py-2 px-3 text-red-400 text-xs">{err.error}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <button
+              onClick={() => { setBulkResults(null); setBulkError(null); }}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition-all cursor-pointer"
+            >
+              Clear Results
+            </button>
           </div>
         )}
       </div>

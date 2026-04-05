@@ -133,12 +133,21 @@ export async function POST() {
     monthlyEconomyRan = true;
   }
 
-  // Auto-generate playoffs when the last regular-season fixture has been played
-  // (checks the Premier Division season linked to game_state)
+  // Auto-generate playoffs for any tier-2 league season that just had its last fixture played
   let playoffsGenerated = false;
-  if (state.season_id && shouldGeneratePlayoffs(state.season_id)) {
-    generatePlayoffs(state.season_id);
-    playoffsGenerated = true;
+  {
+    const db = getDb();
+    const tier2Seasons = db.prepare(`
+      SELECT s.id FROM seasons s
+      JOIN leagues l ON s.league_id = l.id
+      WHERE s.status = 'active' AND l.tier = 2
+    `).all() as { id: number }[];
+    for (const { id: sid } of tier2Seasons) {
+      if (shouldGeneratePlayoffs(sid)) {
+        generatePlayoffs(sid);
+        playoffsGenerated = true;
+      }
+    }
   }
 
   // Check if the new date has any fixtures or playoff games

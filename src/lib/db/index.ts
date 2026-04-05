@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { runSchema } from './schema';
 import { seedDatabase } from './seed';
-import { generateTripleRoundRobin } from '../schedule-engine';
+import type { LeagueConfig } from '../league-engine';
+import { generateScheduleForLeague } from '../league-engine';
 
 let db: Database.Database | null = null;
 
@@ -226,6 +227,36 @@ export function getDb(): Database.Database {
       `);
     }
 
+    // Migration: league_configs and league_links tables
+    const leagueConfigsCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='league_configs'"
+    ).get();
+    if (!leagueConfigsCheck) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS league_configs (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          league_id  INTEGER NOT NULL UNIQUE REFERENCES leagues(id) ON DELETE CASCADE,
+          config     TEXT    NOT NULL,
+          created_at TEXT    DEFAULT (datetime('now')),
+          updated_at TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_league_configs_league_id ON league_configs(league_id);
+
+        CREATE TABLE IF NOT EXISTS league_links (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_league_id  INTEGER NOT NULL REFERENCES leagues(id),
+          to_league_id    INTEGER NOT NULL REFERENCES leagues(id),
+          from_condition  TEXT    NOT NULL,
+          to_condition    TEXT    NOT NULL,
+          priority        INTEGER DEFAULT 0,
+          created_at      TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_league_links_from ON league_links(from_league_id);
+        CREATE INDEX IF NOT EXISTS idx_league_links_to   ON league_links(to_league_id);
+      `);
+      seedLeagueConfigs(db);
+    }
+
     // Migration: seasons, fixtures, game_state tables
     const seasonsCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='seasons'"
@@ -316,7 +347,7 @@ function seedMissingLeagueSeasons(db: Database.Database) {
     if (existing.c > 0) continue;
 
     const teamIds = teams.map(t => t.id);
-    const slots = generateTripleRoundRobin(teamIds, year);
+    const slots = generateScheduleForLeague(league.id, teamIds, year);
 
     const insertAll = db.transaction(() => {
       for (const slot of slots) {
@@ -376,7 +407,7 @@ function seedInitialSeason(db: Database.Database) {
 
     // Generate fixtures for this league
     const teamIds = teams.map(t => t.id);
-    const slots = generateTripleRoundRobin(teamIds, year);
+    const slots = generateScheduleForLeague(league.id, teamIds, year);
 
     const insertAll = db.transaction(() => {
       for (const slot of slots) {
@@ -398,6 +429,111 @@ function seedInitialSeason(db: Database.Database) {
   if (!gs && primarySeasonId !== null) {
     db.prepare("INSERT OR IGNORE INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)").run(`${year}-01-01`, primarySeasonId);
   }
+}
+
+function seedLeagueConfigs(db: Database.Database) {
+  // Look up leagues by tier to avoid fragile name-string lookups
+  const tier2League = db.prepare("SELECT id FROM leagues WHERE tier = 2 LIMIT 1").get() as { id: number } | undefined;
+  const tier3Leagues = db.prepare("SELECT id FROM leagues WHERE tier = 3 ORDER BY id").all() as { id: number }[];
+
+  const div2NorthLeague = tier3Leagues[0];
+  const div2SouthLeague = tier3Leagues[1];
+
+  const premierConfig: LeagueConfig = {
+    team_count: 16,
+    format: {
+      type: 'multi_conference',
+      conferences: [
+        { name: 'north', region_tag: 'north', size: 8 },
+        { name: 'south', region_tag: 'south', size: 8 },
+      ],
+    },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 8, end_day: 31 },
+    post_season: {
+      type: 'conference_playoffs',
+      start_month: 9,
+      start_day: 1,
+      series_length: 5,
+      rounds: [
+        { name: 'Conference Semifinals', scope: 'per_conference', teams_per_conference: 4, matchup_pattern: 'top_vs_bottom' },
+        { name: 'Conference Finals', scope: 'per_conference', matchup_pattern: 'top_vs_bottom' },
+        { name: 'Grand Final', scope: 'cross_conference' },
+      ],
+    },
+    tiebreakers: ['points', 'score_diff', 'set_diff'],
+  };
+
+  const div2Config: LeagueConfig = {
+    team_count: 16,
+    format: { type: 'single_table' },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 8, end_day: 31 },
+    post_season: { type: 'none' },
+    tiebreakers: ['points', 'score_diff', 'set_diff'],
+  };
+
+  const superligaPolska = db.prepare("SELECT id FROM leagues WHERE league_name = 'Superliga Polska' LIMIT 1").get() as { id: number } | undefined;
+
+  const superligaPolskaConfig: LeagueConfig = {
+    team_count: 20,
+    format: { type: 'single_table' },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 11, end_day: 30 },
+    post_season: { type: 'none' },
+    tiebreakers: ['points', 'score_diff', 'set_diff'],
+  };
+
+  const insertConfig = db.prepare("INSERT OR IGNORE INTO league_configs (league_id, config) VALUES (?, ?)");
+
+  if (tier2League) {
+    insertConfig.run(tier2League.id, JSON.stringify(premierConfig));
+  }
+  if (div2NorthLeague) {
+    insertConfig.run(div2NorthLeague.id, JSON.stringify(div2Config));
+  }
+  if (div2SouthLeague) {
+    insertConfig.run(div2SouthLeague.id, JSON.stringify(div2Config));
+  }
+  if (superligaPolska) {
+    insertConfig.run(superligaPolska.id, JSON.stringify(superligaPolskaConfig));
+  }
+
+  // Seed league_links only if none exist
+  const existingLinks = db.prepare("SELECT COUNT(*) as c FROM league_links").get() as { c: number };
+  if (existingLinks.c > 0) return;
+
+  if (!tier2League || !div2NorthLeague || !div2SouthLeague) return;
+
+  const insertLink = db.prepare(
+    "INSERT INTO league_links (from_league_id, to_league_id, from_condition, to_condition, priority) VALUES (?, ?, ?, ?, ?)"
+  );
+
+  // 1. Relegate bottom 1 of north conference from Premier → Div2 North
+  insertLink.run(
+    tier2League.id, div2NorthLeague.id,
+    JSON.stringify({ scope: 'conference', conference: 'north', position: 'bottom', count: 1 }),
+    JSON.stringify({ region: 'north', position: 'any' }),
+    1
+  );
+  // 2. Relegate bottom 1 of south conference from Premier → Div2 South
+  insertLink.run(
+    tier2League.id, div2SouthLeague.id,
+    JSON.stringify({ scope: 'conference', conference: 'south', position: 'bottom', count: 1 }),
+    JSON.stringify({ region: 'south', position: 'any' }),
+    2
+  );
+  // 3. Promote top 1 of Div2 North whole table → Premier, region=north
+  insertLink.run(
+    div2NorthLeague.id, tier2League.id,
+    JSON.stringify({ scope: 'whole_table', position: 'top', count: 1 }),
+    JSON.stringify({ region: 'north', position: 'any' }),
+    3
+  );
+  // 4. Promote top 1 of Div2 South whole table → Premier, region=south
+  insertLink.run(
+    div2SouthLeague.id, tier2League.id,
+    JSON.stringify({ scope: 'whole_table', position: 'top', count: 1 }),
+    JSON.stringify({ region: 'south', position: 'any' }),
+    4
+  );
 }
 
 function seedTeam6Lineup(db: Database.Database) {

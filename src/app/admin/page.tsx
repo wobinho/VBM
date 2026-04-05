@@ -21,8 +21,8 @@ interface RowData { [key: string]: any; }
 // ── Column visibility config ──────────────────────────────────────────────────
 // Players table: show ALL columns (we handle them all properly now)
 const DISPLAY_COLUMNS: Record<string, string[]> = {
-  leagues:   ['id', 'league_name', 'nation'],
-  teams:     ['id', 'team_name', 'league_id', 'nation', 'team_money', 'played', 'won', 'lost', 'points', 'score_diff'],
+  leagues:   ['id', 'league_name', 'country', 'tier'],
+  teams:     ['id', 'team_name', 'league_id', 'country', 'team_money', 'played', 'won', 'lost', 'points', 'score_diff'],
   players:   [
     'id', 'player_name', 'team_id', 'position', 'age', 'country', 'jersey_number', 'height', 'potential', 'overall',
     'attack', 'defense', 'serve', 'block', 'receive', 'setting',
@@ -253,8 +253,7 @@ export default function AdminPage() {
         </div>
       );
     }
-    if (((tableName === 'leagues' || tableName === 'teams') && col.name === 'nation' && value) ||
-        (tableName === 'players' && col.name === 'country' && value)) {
+    if ((tableName === 'leagues' || tableName === 'teams' || tableName === 'players') && col.name === 'country' && value) {
       const code = value.length > 2 ? getCountryCode(value) : value.toLowerCase();
       return (
         <div className="flex items-center gap-2">

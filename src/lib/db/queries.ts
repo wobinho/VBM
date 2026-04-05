@@ -1,10 +1,11 @@
 import { getDb } from './index';
-import { generateTripleRoundRobin, generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
+import { generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
+import { generateScheduleForLeague, generatePostSeason, shouldGeneratePostSeason, processPromotionRelegationByConfig } from '../league-engine';
 import { calculateOverall as calcOvr, ALL_STAT_KEYS } from '../overall';
 
 // ==================== TYPES ====================
-export interface League { id: number; league_name: string; created_at: string; updated_at: string; }
-export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number; stadium: string; capacity: number; founded: string; nation?: string; region?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
+export interface League { id: number; league_name: string; country?: string; tier?: number; created_at: string; updated_at: string; }
+export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number; stadium: string; capacity: number; founded: string; country?: string; region?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
 export interface Player {
     id: number; player_name: string; team_id: number | null; position: string; age: number; country: string;
     jersey_number: number; overall: number; height?: number; potential?: number;
@@ -778,7 +779,7 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
       'SELECT id FROM teams WHERE league_id = ? ORDER BY id'
     ).all(season.league_id) as { id: number }[];
     const teamIds = teams.map(t => t.id);
-    const slots = generateTripleRoundRobin(teamIds, season.year);
+    const slots = generateScheduleForLeague(season.league_id, teamIds, season.year);
 
     // Build a map from game_week → scheduled_date for fast lookup
     const dateByWeek = new Map<number, string>();
@@ -952,18 +953,21 @@ export function endSeason(): EndSeasonResult {
   const oldYear = activeSeasons[0].year;
   const newYear = oldYear + 1;
 
-  // Guard: playoffs must be fully complete before ending the season
-  const premierSeason = activeSeasons.find(s => s.league_id === 1);
-  if (premierSeason) {
+  // Guard: playoffs must be fully complete for all tier-2 leagues before ending the season
+  const tier2SeasonIds = (db.prepare(`
+    SELECT s.id FROM seasons s
+    JOIN leagues l ON s.league_id = l.id
+    WHERE s.status = 'active' AND l.tier = 2
+  `).all() as { id: number }[]).map(r => r.id);
+
+  for (const sid of tier2SeasonIds) {
+    const totalSeries = db.prepare('SELECT COUNT(*) as c FROM playoff_series WHERE season_id = ?').get(sid) as { c: number };
+    if (totalSeries.c === 0) continue; // playoffs not generated yet — ok to skip
     const incompleteSeries = db.prepare(`
-      SELECT COUNT(*) as c FROM playoff_series
-      WHERE season_id = ? AND status != 'completed'
-    `).get(premierSeason.id) as { c: number };
-    const totalSeries = db.prepare(`
-      SELECT COUNT(*) as c FROM playoff_series WHERE season_id = ?
-    `).get(premierSeason.id) as { c: number };
-    if (totalSeries.c > 0 && incompleteSeries.c > 0) {
-      throw new Error('Playoffs are not yet complete. End season only after the Grand Final is decided.');
+      SELECT COUNT(*) as c FROM playoff_series WHERE season_id = ? AND status != 'completed'
+    `).get(sid) as { c: number };
+    if (incompleteSeries.c > 0) {
+      throw new Error('Playoffs are not yet complete. End season only after all Grand Finals are decided.');
     }
   }
 
@@ -1000,7 +1004,7 @@ export function endSeason(): EndSeasonResult {
     seasonsCreated++;
 
     const teamIds = teams.map((t: { id: number }) => t.id);
-    const slots = generateTripleRoundRobin(teamIds, newYear);
+    const slots = generateScheduleForLeague(league.id, teamIds, newYear);
 
     db.transaction(() => {
       for (const slot of slots) {
@@ -1054,64 +1058,7 @@ export interface PromotionRelegationResult {
  *   - Top team → promoted to IVL Premier Division (league_id: 1), region = 'south'
  */
 export function processPromotionRelegation(): PromotionRelegationResult {
-  const db = getDb();
-
-  const relegated: PromotionRelegationResult['relegated'] = [];
-  const promoted:  PromotionRelegationResult['promoted']  = [];
-
-  // ── 1. Relegate bottom of North conference in Premier ──────────────────────
-  const northTeams = db.prepare(`
-    SELECT id, team_name FROM teams
-    WHERE league_id = 1 AND region = 'north'
-    ORDER BY points ASC, score_diff ASC, (sets_won - sets_lost) ASC
-    LIMIT 1
-  `).get() as { id: number; team_name: string } | undefined;
-
-  if (northTeams) {
-    db.prepare("UPDATE teams SET league_id = 2 WHERE id = ?").run(northTeams.id);
-    relegated.push({ teamId: northTeams.id, teamName: northTeams.team_name, fromLeague: 1, toLeague: 2 });
-  }
-
-  // ── 2. Relegate bottom of South conference in Premier ──────────────────────
-  const southTeams = db.prepare(`
-    SELECT id, team_name FROM teams
-    WHERE league_id = 1 AND region = 'south'
-    ORDER BY points ASC, score_diff ASC, (sets_won - sets_lost) ASC
-    LIMIT 1
-  `).get() as { id: number; team_name: string } | undefined;
-
-  if (southTeams) {
-    db.prepare("UPDATE teams SET league_id = 3 WHERE id = ?").run(southTeams.id);
-    relegated.push({ teamId: southTeams.id, teamName: southTeams.team_name, fromLeague: 1, toLeague: 3 });
-  }
-
-  // ── 3. Promote top of IVL North to Premier ────────────────────────────────
-  const northChampion = db.prepare(`
-    SELECT id, team_name FROM teams
-    WHERE league_id = 2
-    ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
-    LIMIT 1
-  `).get() as { id: number; team_name: string } | undefined;
-
-  if (northChampion) {
-    db.prepare("UPDATE teams SET league_id = 1, region = 'north' WHERE id = ?").run(northChampion.id);
-    promoted.push({ teamId: northChampion.id, teamName: northChampion.team_name, fromLeague: 2, toLeague: 1 });
-  }
-
-  // ── 4. Promote top of IVL South to Premier ───────────────────────────────
-  const southChampion = db.prepare(`
-    SELECT id, team_name FROM teams
-    WHERE league_id = 3
-    ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
-    LIMIT 1
-  `).get() as { id: number; team_name: string } | undefined;
-
-  if (southChampion) {
-    db.prepare("UPDATE teams SET league_id = 1, region = 'south' WHERE id = ?").run(southChampion.id);
-    promoted.push({ teamId: southChampion.id, teamName: southChampion.team_name, fromLeague: 3, toLeague: 1 });
-  }
-
-  return { relegated, promoted };
+  return processPromotionRelegationByConfig();
 }
 
 // ==================== PLAYOFFS ====================
@@ -1265,95 +1212,9 @@ export function getPlayoffBracket(seasonId: number): PlayoffBracket {
  * fixture date passes (Aug 31).
  */
 export function generatePlayoffs(seasonId: number): { seriesCreated: number; gamesScheduled: number } {
-  const db = getDb();
-
-  // Idempotent: don't create if already exists
-  const existing = db.prepare('SELECT COUNT(*) as c FROM playoff_series WHERE season_id = ?').get(seasonId) as { c: number };
-  if (existing.c > 0) return { seriesCreated: 0, gamesScheduled: 0 };
-
-  const season = db.prepare('SELECT * FROM seasons WHERE id = ?').get(seasonId) as { id: number; league_id: number; year: number } | undefined;
-  if (!season) throw new Error('Season not found');
-
-  // Get top 4 from each conference by points (then set-diff, then sets won)
-  const getTop4 = (conference: string): number[] => {
-    const rows = db.prepare(`
-      SELECT id FROM teams
-      WHERE league_id = 1 AND region = ?
-      ORDER BY points DESC, score_diff DESC, (sets_won - sets_lost) DESC
-      LIMIT 4
-    `).all(conference) as { id: number }[];
-    return rows.map(r => r.id);
-  };
-
-  const north = getTop4('north');
-  const south = getTop4('south');
-
-  if (north.length < 4 || south.length < 4) {
-    throw new Error('Not enough teams in each conference for playoffs (need 4)');
-  }
-
-  const roundDates = getPlayoffRoundDates(season.year, 1);
-
-  const insertSeries = db.prepare(`
-    INSERT INTO playoff_series
-      (season_id, league_id, round, conference, seed_high, seed_low, home_team_id, away_team_id, status)
-    VALUES (@season_id, @league_id, @round, @conference, @seed_high, @seed_low, @home_team_id, @away_team_id, 'scheduled')
-  `);
-  const insertGame = db.prepare(`
-    INSERT INTO playoff_games
-      (series_id, game_number, home_team_id, away_team_id, scheduled_date, status)
-    VALUES (@series_id, @game_number, @home_team_id, @away_team_id, @scheduled_date, 'scheduled')
-  `);
-
-  let seriesCreated = 0;
-  let gamesScheduled = 0;
-
-  // Helper: create one series and its first 3 guaranteed game slots.
-  // Games 4-5 are created dynamically only if the series needs them.
-  function createSeries(
-    conference: string,
-    seedHigh: number, seedLow: number,
-    highTeamId: number, lowTeamId: number,
-  ) {
-    const s = season!;
-    const res = insertSeries.run({
-      season_id: s.id,
-      league_id: s.league_id,
-      round: 1,
-      conference,
-      seed_high: seedHigh,
-      seed_low: seedLow,
-      home_team_id: highTeamId,
-      away_team_id: lowTeamId,
-    });
-    const seriesId = Number(res.lastInsertRowid);
-    seriesCreated++;
-
-    // Only pre-schedule games 1-3 (minimum needed for a best-of-3 sweep)
-    for (let g = 0; g < 3; g++) {
-      // Games 1,2 at high seed (series home); game 3 at low seed (series away)
-      const homeId = g < 2 ? highTeamId : lowTeamId;
-      const awayId = g < 2 ? lowTeamId  : highTeamId;
-      insertGame.run({
-        series_id: seriesId,
-        game_number: g + 1,
-        home_team_id: homeId,
-        away_team_id: awayId,
-        scheduled_date: roundDates[g],
-      });
-      gamesScheduled++;
-    }
-  }
-
-  db.transaction(() => {
-    createSeries('north', 1, 4, north[0], north[3]);
-    createSeries('north', 2, 3, north[1], north[2]);
-    createSeries('south', 1, 4, south[0], south[3]);
-    createSeries('south', 2, 3, south[1], south[2]);
-  })();
-
-  return { seriesCreated, gamesScheduled };
+  return generatePostSeason(seasonId);
 }
+
 
 /**
  * After all Round 1 (or Round 2) series in a conference complete, generate the
@@ -1574,17 +1435,5 @@ export function recordPlayoffGameResult(
  * Used by advance-day to auto-trigger playoff generation.
  */
 export function shouldGeneratePlayoffs(seasonId: number): boolean {
-  const db = getDb();
-
-  // Already generated?
-  const existing = db.prepare('SELECT COUNT(*) as c FROM playoff_series WHERE season_id = ?').get(seasonId) as { c: number };
-  if (existing.c > 0) return false;
-
-  // Any regular-season fixtures still scheduled?
-  const pending = db.prepare(`
-    SELECT COUNT(*) as c FROM fixtures
-    WHERE season_id = ? AND status = 'scheduled'
-  `).get(seasonId) as { c: number };
-
-  return pending.c === 0;
+  return shouldGeneratePostSeason(seasonId);
 }

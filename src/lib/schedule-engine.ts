@@ -11,21 +11,24 @@
  *   Round 2 – Conference Finals       (2 series): North, South
  *   Round 3 – Grand Final             (1 series): North champ vs South champ
  *
- *   Each series is best-of-5 (first to 3 wins). Games are scheduled one per week
- *   on Saturdays. Subsequent rounds are scheduled after enough weeks for the
- *   previous round to complete (5 weeks per round worst-case).
+ *   Each series is best-of-5 (first to 3 wins). Only the first 3 games are
+ *   pre-scheduled (minimum needed for a 3-0 sweep). Games 4-5 are scheduled
+ *   dynamically only if the series needs them.
  *
- *   Game schedule within a series:
- *     Game 1: week 0
- *     Game 2: week 1
- *     Game 3: week 2
- *     Game 4: week 3 (if needed)
- *     Game 5: week 4 (if needed)
+ *   Games alternate Friday / Tuesday:
+ *     Game 1: Friday   (round start)
+ *     Game 2: Tuesday  (+4 days)
+ *     Game 3: Friday   (+7 days from game 1)
+ *     Game 4: Tuesday  (+11 days from game 1) — scheduled only if needed
+ *     Game 5: Friday   (+14 days from game 1) — scheduled only if needed
  *
- *   Round 1 starts Sep 6 (first Saturday in Sep).
- *   Round 2 starts 5 Saturdays later (Oct 11).
- *   Round 3 starts 5 Saturdays later (Nov 15).
- *   All rounds finish by Nov 30.
+ *   Next round starts on Tuesday (+18 days from round's game-1 Friday, i.e. 4 days
+ *   after the worst-case game-5 Friday). The next round's game 1 is that Tuesday,
+ *   then Friday, Tuesday, … following the same pattern offset from that anchor.
+ *
+ *   Round 1 starts on the first Friday of September.
+ *   Round 2 starts once ALL Round 1 series are complete (next round generated dynamically).
+ *   Round 3 starts once ALL Round 2 series are complete (next round generated dynamically).
  */
 
 export interface FixtureSlot {
@@ -148,41 +151,39 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
- * Generate a triple round-robin schedule spread across Jan 1 – Aug 31.
+ * Generate a round-robin schedule for any number of rounds, spread across a given date range.
  *
  * RNG is applied in two ways so each season looks different:
  *   1. The team array is shuffled before scheduling — changes who faces who each week.
- *   2. The order of the 3 passes is shuffled — changes which pass runs first/second/third,
+ *   2. The order of passes is shuffled — changes which pass runs first/second/third,
  *      altering the home/away distribution across the calendar.
  *
- * @param teamIds - array of team IDs (even count)
- * @param year    - the season calendar year
+ * @param teamIds   - array of team IDs (even count)
+ * @param rounds    - number of round-robin passes (1=single, 2=double, 3=triple)
+ * @param startDate - first day of the regular season
+ * @param endDate   - last day of the regular season (strict cutoff)
  */
-export function generateTripleRoundRobin(
+export function generateRoundRobinSchedule(
   teamIds: number[],
-  year: number,
+  rounds: number,
+  startDate: Date,
+  endDate: Date,
 ): FixtureSlot[] {
   const n = teamIds.length;
   if (n < 2 || n % 2 !== 0) throw new Error('Team count must be an even number ≥ 2');
 
-  // Regular season: Jan 1 – Aug 31 (strict cutoff)
-  const seasonStart = new Date(year, 0, 1);   // Jan 1
-  const seasonEnd   = new Date(year, 7, 31);  // Aug 31
+  const totalRounds = rounds * (n - 1);
 
-  const totalRounds = 3 * (n - 1); // 45 for n=16
-
-  // Build date pool using Fridays (primary) and Tuesdays (fallback), sorted chronologically.
-  // This allows some weeks to have 2 games (Tue + Fri) to fit all 45 rounds before Aug 31.
-  const datePool = getRegularSeasonMatchdays(seasonStart, seasonEnd, totalRounds);
+  const datePool = getRegularSeasonMatchdays(startDate, endDate, totalRounds);
   if (datePool.length < totalRounds) {
-    throw new Error(`Not enough matchdays before Aug 31 for ${totalRounds} rounds (found ${datePool.length})`);
+    throw new Error(`Not enough matchdays before season end for ${totalRounds} rounds (found ${datePool.length})`);
   }
 
   // RNG #1: shuffle team order so matchup pairings differ each season
   const shuffledTeams = shuffle([...teamIds]);
 
   // RNG #2: shuffle pass order so home/away patterns vary across the calendar
-  const passOrder = shuffle([0, 1, 2]);
+  const passOrder = shuffle(Array.from({ length: rounds }, (_, i) => i));
 
   const fixtures: FixtureSlot[] = [];
   let gameWeek = 1;
@@ -205,6 +206,25 @@ export function generateTripleRoundRobin(
   }
 
   return fixtures;
+}
+
+/**
+ * Generate a triple round-robin schedule spread across Jan 1 – Aug 31.
+ * Thin wrapper around generateRoundRobinSchedule for backwards compatibility.
+ *
+ * @param teamIds - array of team IDs (even count)
+ * @param year    - the season calendar year
+ */
+export function generateTripleRoundRobin(
+  teamIds: number[],
+  year: number,
+): FixtureSlot[] {
+  return generateRoundRobinSchedule(
+    teamIds,
+    3,
+    new Date(year, 0, 1),  // Jan 1
+    new Date(year, 7, 31), // Aug 31
+  );
 }
 
 /**
@@ -297,54 +317,63 @@ export function generatePlayoffSchedule(
 }
 
 /**
- * Get the starting Saturday dates for each playoff round in a given year.
- * Used by queries.ts when creating rounds 2 and 3 after results come in.
+ * Get the anchor (game-1) dates for each playoff round in a given year.
+ * Round 1 starts on the first Friday of September.
+ * Round 2 starts 18 days later (Tuesday).
+ * Round 3 starts 17 days after Round 2 (Friday).
  */
 export function getPlayoffRoundStartDates(year: number): { round1: string; round2: string; round3: string } {
-  const playoffStart = new Date(year, 8, 1);
-  const playoffEnd   = new Date(year, 10, 30);
-  const saturdays    = getSaturdaysInRange(playoffStart, playoffEnd);
-
-  return {
-    round1: saturdays[0] ?? `${year}-09-06`,
-    round2: saturdays[3] ?? `${year}-09-27`,
-    round3: saturdays[6] ?? `${year}-10-18`,
-  };
+  const [r1, , , , ] = getPlayoffRoundDates(year, 1);
+  const [r2, , , , ] = getPlayoffRoundDates(year, 2);
+  const [r3, , , , ] = getPlayoffRoundDates(year, 3);
+  return { round1: r1, round2: r2, round3: r3 };
 }
 
 /**
- * Get the 5 game dates for a given round's games in a year.
- * Games 1-3: consecutive Saturdays (pre-scheduled minimum).
- * Game 4: the Tuesday immediately following game 3's Saturday.
- * Game 5: the Saturday immediately following game 4's Tuesday.
+ * Get the 5 game dates for a given playoff round.
  *
- * If a series ends on game 4 (Tuesday), the next round still starts on
- * the next Saturday, which is exactly game 5's Saturday slot — so the
- * Saturday-based round-start cadence is naturally preserved.
+ * Round 1 anchor: first Friday of September.
+ * Round 2 anchor: Tuesday, 18 days after Round 1's game-1 Friday
+ *                 (4 days after the worst-case game-5 Friday of Round 1).
+ * Round 3 anchor: Friday, 17 days after Round 2's game-1 Tuesday
+ *                 (3 days after the worst-case game-5 Tuesday of Round 2).
+ *
+ * Game offsets from anchor (days):
+ *   Game 1: +0
+ *   Game 2: +4   (Fri→Tue or Tue→Fri)
+ *   Game 3: +7   (back to anchor weekday)
+ *   Game 4: +11  (if needed)
+ *   Game 5: +14  (if needed)
  */
 export function getPlayoffRoundDates(year: number, round: 1 | 2 | 3): string[] {
-  const playoffStart = new Date(year, 8, 1);
-  const playoffEnd   = new Date(year, 10, 30);
-  const saturdays    = getSaturdaysInRange(playoffStart, playoffEnd);
+  // Round 1 anchor: first Friday (day 5) on or after Sep 1
+  const sep1 = new Date(year, 8, 1);
+  while (sep1.getDay() !== 5) sep1.setDate(sep1.getDate() + 1);
+  const round1Fri = new Date(sep1);
 
-  // Each round occupies a block of 3 Saturdays (games 1-3).
-  // Round 1 starts at saturdays[0], round 2 at saturdays[3], round 3 at saturdays[6].
-  const startIdx = (round - 1) * 3;
+  // Round 2 anchor: Tuesday 18 days after Round 1's game-1 Friday
+  // (Round 1 worst-case ends on Fri +14; next Tuesday is +18)
+  const round2Tue = new Date(round1Fri);
+  round2Tue.setDate(round1Fri.getDate() + 18);
 
-  const sat1 = saturdays[startIdx];
-  const sat2 = saturdays[startIdx + 1] ?? sat1;
-  const sat3 = saturdays[startIdx + 2] ?? sat2;
+  // Round 3 anchor: Friday 17 days after Round 2's game-1 Tuesday
+  // (Round 2 worst-case ends on Tue +14; next Friday is +17)
+  const round3Fri = new Date(round2Tue);
+  round3Fri.setDate(round2Tue.getDate() + 17);
 
-  // Game 4: Tuesday (3 days after game 3's Saturday)
-  const game3Date = new Date(sat3);
-  const game4Date = new Date(game3Date);
-  game4Date.setDate(game3Date.getDate() + 3); // Saturday + 3 = Tuesday
+  const anchor = round === 1 ? round1Fri : round === 2 ? round2Tue : round3Fri;
 
-  // Game 5: Saturday (4 days after that Tuesday)
-  const game5Date = new Date(game4Date);
-  game5Date.setDate(game4Date.getDate() + 4); // Tuesday + 4 = Saturday
+  // Offsets depend on anchor weekday:
+  //   Anchor=Friday (rounds 1 & 3): Fri→Tue is +4, Tue→Fri is +3 → [0, 4, 7, 11, 14]
+  //   Anchor=Tuesday (round 2):     Tue→Fri is +3, Fri→Tue is +4 → [0, 3, 7, 10, 14]
+  const anchorIsFriday = anchor.getDay() === 5;
+  const offsets = anchorIsFriday
+    ? [0, 4, 7, 11, 14]
+    : [0, 3, 7, 10, 14];
 
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-
-  return [sat1, sat2, sat3, fmt(game4Date), fmt(game5Date)];
+  return offsets.map(offset => {
+    const d = new Date(anchor);
+    d.setDate(anchor.getDate() + offset);
+    return toLocalDateString(d);
+  });
 }

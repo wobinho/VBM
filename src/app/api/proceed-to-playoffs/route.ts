@@ -3,7 +3,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 import {
-  getGameState, advanceGameDate, getActiveSeason,
+  getGameState, advanceGameDate,
   generatePlayoffs, getUserTeam,
 } from '@/lib/db/queries';
 
@@ -11,8 +11,8 @@ import {
  * POST /api/proceed-to-playoffs
  *
  * Called on Aug 31 after all regular-season fixtures are complete.
- * - For Premier Division (league 1): generates the playoff bracket, advances to Sep 1.
- * - For other leagues: advances to Sep 1 (vacation / off-season).
+ * - Generates playoff brackets for ALL active tier-2 league seasons.
+ * - Advances calendar to Sep 1.
  *
  * Returns: { qualified: boolean, playoffsGenerated: boolean, newDate: string }
  */
@@ -20,7 +20,7 @@ export async function POST() {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
 
   const { getDb } = await import('@/lib/db');
-  getDb();
+  const db = getDb();
 
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
@@ -34,28 +34,35 @@ export async function POST() {
   if (session.userId) {
     const ut = getUserTeam(session.userId);
     if (ut) {
-      const db = getDb();
       const teamRow = db.prepare('SELECT league_id FROM teams WHERE id = ?').get(ut.team_id) as { league_id: number } | undefined;
       userLeagueId = teamRow?.league_id ?? null;
     }
   }
 
-  // Generate playoffs for the Premier season (idempotent — safe to call even if already generated)
-  let playoffsGenerated = false;
-  if (state.season_id) {
-    const premierSeason = getActiveSeason(1);
-    if (premierSeason) {
-      const result = generatePlayoffs(premierSeason.id);
-      playoffsGenerated = result.seriesCreated > 0;
-    }
+  // Generate playoffs for ALL active tier-2 league seasons (idempotent — safe to call even if already generated)
+  const tier2Seasons = db.prepare(`
+    SELECT s.id FROM seasons s
+    JOIN leagues l ON s.league_id = l.id
+    WHERE s.status = 'active' AND l.tier = 2
+  `).all() as { id: number }[];
+
+  let totalSeriesCreated = 0;
+  for (const { id: seasonId } of tier2Seasons) {
+    const result = generatePlayoffs(seasonId);
+    totalSeriesCreated += result.seriesCreated;
   }
+  const playoffsGenerated = totalSeriesCreated > 0;
 
   // Advance to Sep 1
   const year = state.current_date.slice(0, 4);
   const newDate = `${year}-09-01`;
   advanceGameDate(newDate);
 
-  const qualified = userLeagueId === 1;
+  // User qualifies for playoffs if their league is tier-2
+  const userLeagueTier = userLeagueId
+    ? (db.prepare('SELECT tier FROM leagues WHERE id = ?').get(userLeagueId) as { tier: number } | undefined)?.tier ?? null
+    : null;
+  const qualified = userLeagueTier === 2;
 
   return NextResponse.json({
     qualified,

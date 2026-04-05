@@ -25,7 +25,7 @@ interface Player {
 }
 
 interface League { id: number; league_name: string; }
-interface TeamInfo { id: number; team_name: string; league_id: number; nation?: string; }
+interface TeamInfo { id: number; team_name: string; league_id: number; country?: string; }
 interface Offer {
     id: number; player_name: string; offer_amount: number; status: string;
     from_team_name: string; to_team_name: string; created_at: string;
@@ -668,13 +668,20 @@ export default function TransfersPage() {
 
     function handleShortlist(player: Player) {
         setShortlist(prev => {
-            if (prev.some(p => p.id === player.id)) return prev;
+            if (prev.some(p => p.id === player.id)) {
+                // Toggle: remove if already shortlisted
+                return prev.filter(p => p.id !== player.id);
+            }
             return [...prev, player];
         });
     }
 
     function removeFromShortlist(playerId: number) {
         setShortlist(prev => prev.filter(p => p.id !== playerId));
+    }
+
+    function isShortlisted(playerId: number) {
+        return shortlist.some(p => p.id === playerId);
     }
 
     // ── Sign flow ─────────────────────────────────────────────────────────────
@@ -921,7 +928,8 @@ export default function TransfersPage() {
                                 <PlayerCard key={p.id} player={p as any}
                                     onClick={() => setSelectedPlayer(p as any)}
                                     onSign={handleSignPlayer as any}
-                                    onShortlist={handleShortlist as any} />
+                                    onShortlist={handleShortlist as any}
+                                    shortlistLabel={isShortlisted(p.id) ? '✓ Shortlisted' : '+ Shortlist'} />
                             ))}
                         </div>
 

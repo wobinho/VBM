@@ -246,7 +246,11 @@ export default function PlayerCard({ player, onClick, compact = false, onSign, o
                         {onShortlist && (
                             <button
                                 onClick={e => { e.stopPropagation(); onShortlist(player); }}
-                                className="py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white transition-all duration-150 cursor-pointer"
+                                className={`py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all duration-150 cursor-pointer ${
+                                    shortlistLabel && shortlistLabel.startsWith('✓')
+                                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400'
+                                        : 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white'
+                                }`}
                             >
                                 {shortlistLabel ?? '+ Shortlist'}
                             </button>

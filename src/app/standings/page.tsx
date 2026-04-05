@@ -2,14 +2,15 @@
 import { useState, useEffect } from 'react';
 import {
     Trophy, TrendingUp, TrendingDown, X, MapPin, Users, Calendar,
-    BarChart2, Gamepad2, Shield, Swords, DollarSign,
+    BarChart2, Gamepad2, Shield, Swords, DollarSign, ChevronDown, Globe,
 } from 'lucide-react';
 import Image from 'next/image';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
 import PlayerModal from '@/components/player-modal';
+import GameSummaryModal from '@/components/game-summary-modal';
 import { useAuth } from '@/contexts/auth-context';
 
-interface League { id: number; league_name: string; }
+interface League { id: number; league_name: string; format_type?: string | null; }
 interface Team {
     id: number; team_name: string; league_id: number; league_name: string; country?: string; region?: string;
     played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number;
@@ -40,23 +41,62 @@ export default function StandingsPage() {
     const { team: userTeam } = useAuth();
     const [leagues, setLeagues] = useState<League[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
-    const [selectedLeague, setSelectedLeague] = useState<number | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<TeamWithRank | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
     const [showConference, setShowConference] = useState(false);
 
+    // Country → open/closed
+    const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+    // Country → selected league id
+    const [selectedLeagueByCountry, setSelectedLeagueByCountry] = useState<Record<string, number>>({});
+
     useEffect(() => {
-        fetch('/api/leagues').then(r => r.json()).then((data: League[]) => { setLeagues(data); if (data.length) setSelectedLeague(data[0].id); });
+        fetch('/api/leagues').then(r => r.json()).then((data: League[]) => {
+            setLeagues(data);
+            
+            const typedData = data as (League & { country?: string })[];
+            const userLeague = userTeam?.league_id ? typedData.find(l => l.id === userTeam.league_id) : undefined;
+            const userTeamCountry = userLeague?.country;
+
+            // Default: close all countries, but open user's team's country
+            const perCountry: Record<string, number> = {};
+            for (const l of typedData) {
+                const c = l.country ?? 'Unknown';
+                // Always set to user's league for their country
+                if (c === userTeamCountry && userTeam?.league_id) {
+                    perCountry[c] = userTeam.league_id;
+                } else if (!perCountry[c]) {
+                    perCountry[c] = l.id;
+                }
+            }
+            setSelectedLeagueByCountry(perCountry);
+
+            // Only expand user's team country
+            if (userTeamCountry) {
+                setExpandedCountries(new Set([userTeamCountry]));
+            }
+        });
         fetch('/api/teams').then(r => r.json()).then(setTeams);
-    }, []);
+    }, [userTeam?.league_id]);
 
-    const leagueTeams = teams
-        .filter(t => !selectedLeague || t.league_id === selectedLeague)
-        .sort((a, b) => b.points - a.points || b.score_diff - a.score_diff || (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost));
+    // Group leagues by country
+    const countriesWithLeagues: { country: string; leagues: (League & { country?: string })[] }[] = [];
+    const leagueList = leagues as (League & { country?: string })[];
+    const countryMap = new Map<string, (League & { country?: string })[]>();
+    for (const l of leagueList) {
+        const c = l.country ?? 'Unknown';
+        if (!countryMap.has(c)) countryMap.set(c, []);
+        countryMap.get(c)!.push(l);
+    }
+    countryMap.forEach((ls, c) => countriesWithLeagues.push({ country: c, leagues: ls }));
 
-    const northTeams = leagueTeams.filter(t => (t.region ?? 'north') === 'north');
-    const southTeams = leagueTeams.filter(t => t.region === 'south');
-    const hasTwoConf = selectedLeague === 1 && northTeams.length > 0 && southTeams.length > 0;
+    const toggleCountry = (country: string) => {
+        setExpandedCountries(prev => {
+            const next = new Set(prev);
+            if (next.has(country)) next.delete(country); else next.add(country);
+            return next;
+        });
+    };
 
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : `$${(n / 1000).toFixed(0)}K`;
 
@@ -172,45 +212,101 @@ export default function StandingsPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-white">League Standings</h1>
-                <p className="text-sm text-gray-400">{leagueTeams.length} teams</p>
+                <p className="text-sm text-gray-400">{teams.length} teams across {leagues.length} leagues</p>
             </div>
 
-            {/* League filters */}
-            {leagues.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                    {leagues.map(league => (
-                        <button key={league.id} onClick={() => setSelectedLeague(league.id)}
-                            className={`px-3 md:px-4 py-1.5 md:py-2 rounded-xl text-xs md:text-sm font-medium transition-all ${selectedLeague === league.id ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
-                            {league.league_name}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {/* Country groups */}
+            <div className="space-y-4">
+                {countriesWithLeagues.map(({ country, leagues: countryLeagues }) => {
+                    const isExpanded = expandedCountries.has(country);
+                    const selectedLeagueId = selectedLeagueByCountry[country] ?? countryLeagues[0]?.id ?? null;
+                    const selectedLeague = countryLeagues.find(l => l.id === selectedLeagueId) ?? countryLeagues[0];
+                    const leagueTeams = teams
+                        .filter(t => t.league_id === selectedLeagueId)
+                        .sort((a, b) => b.points - a.points || b.score_diff - a.score_diff || (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost));
 
-            {hasTwoConf ? (
-                <div className="space-y-5">
-                    <div className="flex items-center gap-4">
-                        <button type="button" onClick={() => setShowConference(false)}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${!showConference ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
-                            Overall
-                        </button>
-                        <button type="button" onClick={() => setShowConference(true)}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${showConference ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
-                            Conference
-                        </button>
-                    </div>
-                    {showConference ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                            <StandingsTable conferenceTeams={northTeams} title="North Conference" />
-                            <StandingsTable conferenceTeams={southTeams} title="South Conference" />
+                    const isMultiConference = (selectedLeague as League)?.format_type === 'multi_conference';
+                    const northTeams = isMultiConference ? leagueTeams.filter(t => (t.region ?? 'north') === 'north') : [];
+                    const southTeams = isMultiConference ? leagueTeams.filter(t => t.region === 'south') : [];
+                    const hasTwoConf = isMultiConference && northTeams.length > 0 && southTeams.length > 0;
+
+                    const countryCode = country.length > 2 ? getCountryCode(country) : country.toLowerCase();
+
+                    return (
+                        <div key={country} className="rounded-2xl border border-white/10 overflow-hidden">
+                            {/* Country header — collapsible trigger */}
+                            <button
+                                onClick={() => toggleCountry(country)}
+                                className="w-full flex items-center gap-3 px-5 py-4 bg-white/[0.03] hover:bg-white/[0.06] transition-colors cursor-pointer"
+                            >
+                                <div className="w-8 h-5 rounded overflow-hidden shrink-0">
+                                    <img src={`/assets/flags/${countryCode}.svg`} alt={country}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                </div>
+                                <Globe size={14} className="text-gray-500 shrink-0" />
+                                <span className="font-bold text-white text-sm flex-1 text-left">{country}</span>
+                                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold bg-white/5 px-2 py-0.5 rounded-full border border-white/5 shrink-0">
+                                    {countryLeagues.length} {countryLeagues.length === 1 ? 'league' : 'leagues'}
+                                </span>
+                                <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isExpanded && (
+                                <div className="border-t border-white/[0.06] bg-black/10">
+                                    {/* League selector — only shown if multiple leagues in country */}
+                                    {countryLeagues.length > 1 && (
+                                        <div className="flex items-center gap-2 flex-wrap px-5 pt-4 pb-2">
+                                            {countryLeagues.map(l => (
+                                                <button key={l.id}
+                                                    onClick={() => setSelectedLeagueByCountry(prev => ({ ...prev, [country]: l.id }))}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                        l.id === selectedLeagueId
+                                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                            : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'
+                                                    }`}
+                                                >
+                                                    {l.league_name}
+                                                    {(l as any).tier && <span className="ml-1.5 text-[9px] text-gray-600">T{(l as any).tier}</span>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Conference toggle for leagues with two conferences */}
+                                    {hasTwoConf && (
+                                        <div className="flex items-center gap-3 px-5 pt-3 pb-1">
+                                            <button onClick={() => setShowConference(false)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${!showConference ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
+                                                Overall
+                                            </button>
+                                            <button onClick={() => setShowConference(true)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${showConference ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
+                                                Conference
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Standings table(s) */}
+                                    <div className="p-4 pt-3">
+                                        {hasTwoConf && showConference ? (
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                                <StandingsTable conferenceTeams={northTeams} title="North Conference" />
+                                                <StandingsTable conferenceTeams={southTeams} title="South Conference" />
+                                            </div>
+                                        ) : (
+                                            <StandingsTable
+                                                conferenceTeams={leagueTeams}
+                                                title={selectedLeague?.league_name ?? 'Standings'}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <StandingsTable conferenceTeams={leagueTeams} title="Overall Standings" />
-                    )}
-                </div>
-            ) : (
-                <StandingsTable conferenceTeams={leagueTeams} title="League Standings" />
-            )}
+                    );
+                })}
+            </div>
 
             {selectedTeam && (
                 <TeamDetailsModal
@@ -240,6 +336,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
     const [players, setPlayers] = useState<Player[]>([]);
     const [fixtures, setFixtures] = useState<Fixture[]>([]);
     const [loading, setLoading] = useState(true);
+    const [summaryFixtureId, setSummaryFixtureId] = useState<number | null>(null);
 
     useEffect(() => {
         setLoading(true);
@@ -259,6 +356,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
     const setDiff = team.sets_won - team.sets_lost;
 
     return (
+        <>
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
             onClick={onClose}>
@@ -413,7 +511,11 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                                     const resultLabel = won ? 'W' : lost ? 'L' : 'D';
                                     const [, mm, dd] = f.scheduled_date.split('-');
                                     return (
-                                        <div key={f.id} className={`flex items-center gap-3 p-3 rounded-2xl border shrink-0 ${resultBg}`}>
+                                        <div key={f.id}
+                                            className={`flex items-center gap-3 p-3 rounded-2xl border shrink-0 cursor-pointer hover:brightness-125 transition-all ${resultBg}`}
+                                            onClick={() => setSummaryFixtureId(f.id)}
+                                            title="Click to view match summary"
+                                        >
                                             <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${resultColor} bg-white/5`}>
                                                 {resultLabel}
                                             </div>
@@ -438,5 +540,14 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                 )}
             </div>
         </div>
+
+        {summaryFixtureId && (
+            <GameSummaryModal
+                fixtureId={summaryFixtureId}
+                perspectiveTeamId={team.id}
+                onClose={() => setSummaryFixtureId(null)}
+            />
+        )}
+        </>
     );
 }

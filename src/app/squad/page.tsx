@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { GripVertical, RotateCcw, Save, Check } from 'lucide-react';
+import { GripVertical, RotateCcw, Save, Check, X as XIcon } from 'lucide-react';
 import Image from 'next/image';
 import PlayerModal from '@/components/player-modal';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
@@ -19,6 +19,7 @@ interface Player {
     team_id?: number;
 }
 
+// Position slot definitions — ordered for visual clarity (front row → back row → libero)
 const POSITIONS = [
     { key: 'OH1', label: 'Outside Hitter', row: 0, col: 0 },
     { key: 'MB1', label: 'Middle Blocker', row: 0, col: 1 },
@@ -29,16 +30,26 @@ const POSITIONS = [
     { key: 'L',   label: 'Libero',          row: 2, col: 1 },
 ];
 
+// Role descriptions shown on empty slots
+const SLOT_DESC: Record<string, string> = {
+    OH1: 'Primary attacker & receiver',
+    MB1: 'Front-row blocker & quick attack',
+    OPP: 'Right-side power hitter',
+    S:   'Playmaker & ball distributor',
+    MB2: 'Back-row blocker & quick attack',
+    OH2: 'Secondary attacker & serve receive',
+    L:   'Defensive specialist',
+};
 
-const POS_ACCENT: Record<string, { badge: string; border: string; glow: string }> = {
-    'Setter':         { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',    border: 'border-blue-500/40',    glow: 'shadow-blue-500/20' },
-    'Outside Hitter': { badge: 'bg-red-500/20 text-red-300 border-red-500/40',       border: 'border-red-500/40',     glow: 'shadow-red-500/20' },
-    'Middle Blocker': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', border: 'border-purple-500/40', glow: 'shadow-purple-500/20' },
-    'Opposite Hitter':{ badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40', border: 'border-orange-500/40', glow: 'shadow-orange-500/20' },
-    'Libero':         { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', border: 'border-emerald-500/40', glow: 'shadow-emerald-500/20' },
+const POS_ACCENT: Record<string, { badge: string; border: string; glow: string; slotBg: string; slotBorder: string }> = {
+    'Setter':         { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',       border: 'border-blue-500/40',    glow: 'shadow-blue-500/20',    slotBg: 'bg-blue-500/5',    slotBorder: 'border-blue-500/25' },
+    'Outside Hitter': { badge: 'bg-red-500/20 text-red-300 border-red-500/40',          border: 'border-red-500/40',     glow: 'shadow-red-500/20',     slotBg: 'bg-red-500/5',     slotBorder: 'border-red-500/25'  },
+    'Middle Blocker': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', border: 'border-purple-500/40',  glow: 'shadow-purple-500/20',  slotBg: 'bg-purple-500/5',  slotBorder: 'border-purple-500/25' },
+    'Opposite Hitter':{ badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40', border: 'border-orange-500/40',  glow: 'shadow-orange-500/20',  slotBg: 'bg-orange-500/5',  slotBorder: 'border-orange-500/25' },
+    'Libero':         { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', border: 'border-emerald-500/40', glow: 'shadow-emerald-500/20', slotBg: 'bg-emerald-500/5', slotBorder: 'border-emerald-500/25' },
 };
 function posAccent(pos: string) {
-    return POS_ACCENT[pos] || { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/40', border: 'border-gray-500/40', glow: 'shadow-gray-500/20' };
+    return POS_ACCENT[pos] || { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/40', border: 'border-gray-500/40', glow: 'shadow-gray-500/20', slotBg: 'bg-gray-500/5', slotBorder: 'border-gray-500/25' };
 }
 function posAbbrev(pos: string) {
     const m: Record<string, string> = { 'Setter': 'S', 'Outside Hitter': 'OH', 'Middle Blocker': 'MB', 'Opposite Hitter': 'OPP', 'Libero': 'L' };
@@ -46,6 +57,11 @@ function posAbbrev(pos: string) {
 }
 function overallColor(v: number) {
     return v >= 80 ? 'text-emerald-400' : v >= 60 ? 'text-amber-400' : 'text-red-400';
+}
+
+// Check if a player's position is valid for a given lineup slot
+function isValidForSlot(playerPosition: string, slotLabel: string): boolean {
+    return playerPosition === slotLabel;
 }
 
 /* ── Shared image sub-components ── */
@@ -185,12 +201,73 @@ function LineupCard({ player, posKey, onDragStart, onClick }: { player: Player; 
     );
 }
 
+/* ── Empty slot with position label + drag validation visual ── */
+function EmptySlot({ posKey, label, isOver, isValid, isDragging }: {
+    posKey: string; label: string; isOver: boolean; isValid: boolean; isDragging: boolean;
+}) {
+    const acc = posAccent(label);
+    const borderClass = isOver
+        ? isValid
+            ? 'border-emerald-400/80 shadow-lg shadow-emerald-500/20'
+            : 'border-red-500/80 shadow-lg shadow-red-500/20'
+        : isDragging
+            ? `${acc.slotBorder} border-dashed`
+            : 'border-dashed border-slate-500/30 hover:border-slate-400/40';
+    const bgClass = isOver
+        ? isValid ? 'bg-emerald-500/10' : 'bg-red-500/10'
+        : `${acc.slotBg}`;
+
+    return (
+        <div className={`rounded-xl border transition-all duration-150 flex flex-col cursor-cell overflow-hidden ${borderClass} ${bgClass}`}>
+            {/* Photo zone height matches LineupCard h-[130px] */}
+            <div className="h-[130px] flex flex-col items-center justify-center border-b border-dashed border-white/5 gap-2 px-2">
+                {isOver && !isValid ? (
+                    <div className="flex flex-col items-center gap-1">
+                        <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center">
+                            <XIcon size={14} className="text-red-400" />
+                        </div>
+                        <p className="text-[10px] font-bold text-red-400 text-center">Wrong position</p>
+                        <p className="text-[9px] text-red-400/60 text-center">{label} only</p>
+                    </div>
+                ) : isOver && isValid ? (
+                    <div className="flex flex-col items-center gap-1">
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                            <Check size={14} className="text-emerald-400" />
+                        </div>
+                        <p className="text-[10px] font-bold text-emerald-400 text-center">Drop to place</p>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-2 text-center">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${acc.badge}`}>{posKey}</span>
+                        <p className="text-[10px] font-semibold text-slate-400">{label}</p>
+                        <p className="text-[9px] text-slate-600 leading-tight">{SLOT_DESC[posKey]}</p>
+                    </div>
+                )}
+            </div>
+            {/* Identity zone matches LineupCard */}
+            <div className="px-3 pt-2 pb-2">
+                <div className="h-[14px] rounded bg-slate-700/20 mb-1.5" />
+                <div className="h-[11px] rounded bg-slate-700/10 mb-2" />
+                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5">
+                    {['ATK', 'DEF', 'OVR'].map(l => (
+                        <div key={l} className="text-center">
+                            <div className="text-[8px] text-slate-600 uppercase">{l}</div>
+                            <div className="text-[11px] font-black text-slate-700">—</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function SquadPage() {
     const { team } = useAuth();
     const [players, setPlayers] = useState<Player[]>([]);
     const [lineup, setLineup] = useState<Record<string, Player | null>>({});
     const [bench, setBench] = useState<Player[]>([]);
     const [draggedPlayer, setDraggedPlayer] = useState<Player | null>(null);
+    const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
@@ -218,6 +295,13 @@ export default function SquadPage() {
 
     const handleDropOnPosition = useCallback((posKey: string) => {
         if (!draggedPlayer) return;
+        setDragOverSlot(null);
+        // Hard-block: reject if player position doesn't match slot
+        const slotPos = POSITIONS.find(p => p.key === posKey);
+        if (!slotPos || !isValidForSlot(draggedPlayer.position, slotPos.label)) {
+            setDraggedPlayer(null);
+            return;
+        }
         setLineup(prev => {
             const newLineup = { ...prev };
             Object.keys(newLineup).forEach(k => { if (newLineup[k]?.id === draggedPlayer.id) newLineup[k] = null; });
@@ -232,6 +316,7 @@ export default function SquadPage() {
 
     const handleDropOnBench = useCallback(() => {
         if (!draggedPlayer) return;
+        setDragOverSlot(null);
         setLineup(prev => {
             const newLineup = { ...prev };
             Object.keys(newLineup).forEach(k => { if (newLineup[k]?.id === draggedPlayer.id) newLineup[k] = null; });
@@ -303,51 +388,104 @@ export default function SquadPage() {
 
             {/* ── Squad Stats + Lineup grid ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
-                {/* Squad Lineup Grid — FM-style cards (moved first) */}
+                {/* Squad Lineup Grid */}
                 <div className="lg:col-span-2 rounded-xl bg-gradient-to-br from-slate-900/40 via-slate-800/30 to-slate-900/40 border border-slate-500/30 p-6">
-                    <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Squad Lineup</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {POSITIONS.map(pos => {
-                            const player = lineup[pos.key];
-                            return (
-                                <div key={pos.key}
-                                    onDragOver={e => e.preventDefault()}
-                                    onDrop={() => handleDropOnPosition(pos.key)}
-                                >
-                                    {player ? (
-                                        <LineupCard
-                                            player={player}
-                                            posKey={pos.key}
-                                            onDragStart={() => handleDragStart(player)}
-                                            onClick={() => setSelectedPlayer(player)}
-                                        />
-                                    ) : (
-                                        <div className="rounded-xl border border-dashed border-slate-500/30 hover:border-slate-400/50 transition-colors flex flex-col bg-white/[0.02] cursor-cell">
-                                            {/* Mirrors LineupCard photo zone h-[130px] */}
-                                            <div className="h-[130px] flex items-center justify-center border-b border-dashed border-slate-500/20">
-                                                <div className="text-center">
-                                                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">{pos.key}</div>
-                                                    <p className="text-xs text-slate-500">Drop here</p>
-                                                </div>
-                                            </div>
-                                            {/* Mirrors LineupCard identity + stats zone */}
-                                            <div className="px-3 pt-2 pb-2">
-                                                <div className="h-[14px] rounded bg-slate-700/20 mb-1.5" />
-                                                <div className="h-[18px] rounded bg-slate-700/10 mb-2" />
-                                                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5">
-                                                    {['ATK', 'DEF', 'OVR'].map(l => (
-                                                        <div key={l} className="text-center">
-                                                            <div className="text-[8px] text-slate-600 uppercase">{l}</div>
-                                                            <div className="text-[11px] font-black text-slate-700">—</div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
+                    <div className="flex items-center justify-between mb-5">
+                        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Squad Lineup</h3>
+                        <div className="flex items-center gap-3 text-[10px] text-gray-500 uppercase tracking-wider">
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500/60 inline-block" />Valid drop</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500/60 inline-block" />Wrong position</span>
+                        </div>
+                    </div>
+
+                    {/* Row labels */}
+                    <div className="space-y-3">
+                        {/* Row 1: Front row attackers */}
+                        <div>
+                            <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest mb-2 pl-1">Front Row</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {['OH1', 'MB1', 'OPP'].map(key => {
+                                    const pos = POSITIONS.find(p => p.key === key)!;
+                                    const player = lineup[key];
+                                    const isOver = dragOverSlot === key;
+                                    const isValid = draggedPlayer ? isValidForSlot(draggedPlayer.position, pos.label) : false;
+                                    return (
+                                        <div key={key}
+                                            onDragOver={e => { e.preventDefault(); setDragOverSlot(key); }}
+                                            onDragLeave={() => setDragOverSlot(null)}
+                                            onDrop={() => handleDropOnPosition(key)}
+                                        >
+                                            {player ? (
+                                                <LineupCard player={player} posKey={key}
+                                                    onDragStart={() => handleDragStart(player)}
+                                                    onClick={() => setSelectedPlayer(player)} />
+                                            ) : (
+                                                <EmptySlot posKey={key} label={pos.label} isOver={isOver} isValid={isValid} isDragging={!!draggedPlayer} />
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Row 2: Back row */}
+                        <div>
+                            <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest mb-2 pl-1">Back Row</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {['S', 'MB2', 'OH2'].map(key => {
+                                    const pos = POSITIONS.find(p => p.key === key)!;
+                                    const player = lineup[key];
+                                    const isOver = dragOverSlot === key;
+                                    const isValid = draggedPlayer ? isValidForSlot(draggedPlayer.position, pos.label) : false;
+                                    return (
+                                        <div key={key}
+                                            onDragOver={e => { e.preventDefault(); setDragOverSlot(key); }}
+                                            onDragLeave={() => setDragOverSlot(null)}
+                                            onDrop={() => handleDropOnPosition(key)}
+                                        >
+                                            {player ? (
+                                                <LineupCard player={player} posKey={key}
+                                                    onDragStart={() => handleDragStart(player)}
+                                                    onClick={() => setSelectedPlayer(player)} />
+                                            ) : (
+                                                <EmptySlot posKey={key} label={pos.label} isOver={isOver} isValid={isValid} isDragging={!!draggedPlayer} />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Row 3: Libero — centered */}
+                        <div>
+                            <p className="text-[9px] font-bold text-emerald-600/70 uppercase tracking-widest mb-2 pl-1">Libero</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div />
+                                {(() => {
+                                    const key = 'L';
+                                    const pos = POSITIONS.find(p => p.key === key)!;
+                                    const player = lineup[key];
+                                    const isOver = dragOverSlot === key;
+                                    const isValid = draggedPlayer ? isValidForSlot(draggedPlayer.position, pos.label) : false;
+                                    return (
+                                        <div key={key}
+                                            onDragOver={e => { e.preventDefault(); setDragOverSlot(key); }}
+                                            onDragLeave={() => setDragOverSlot(null)}
+                                            onDrop={() => handleDropOnPosition(key)}
+                                        >
+                                            {player ? (
+                                                <LineupCard player={player} posKey={key}
+                                                    onDragStart={() => handleDragStart(player)}
+                                                    onClick={() => setSelectedPlayer(player)} />
+                                            ) : (
+                                                <EmptySlot posKey={key} label={pos.label} isOver={isOver} isValid={isValid} isDragging={!!draggedPlayer} />
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                <div />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -438,9 +576,12 @@ export default function SquadPage() {
                                         const pos = POSITIONS.find(p => p.row === row && p.col === col);
                                         const player = pos ? lineup[pos.key] : null;
                                         if (row === 2 && (col === 0 || col === 2)) return <div key={`${row}-${col}`} />;
+                                        const courtIsOver = pos ? dragOverSlot === pos.key : false;
+                                        const courtIsValid = pos && draggedPlayer ? isValidForSlot(draggedPlayer.position, pos.label) : false;
                                         return (
                                             <div key={`${row}-${col}`}
-                                                onDragOver={e => e.preventDefault()}
+                                                onDragOver={e => { e.preventDefault(); if (pos) setDragOverSlot(pos.key); }}
+                                                onDragLeave={() => setDragOverSlot(null)}
                                                 onDrop={() => pos && handleDropOnPosition(pos.key)}
                                             >
                                                 {player ? (
@@ -463,10 +604,19 @@ export default function SquadPage() {
                                                     </div>
                                                 ) : pos ? (
                                                     <div className="text-center">
-                                                        <div className="w-24 h-24 mx-auto rounded-full border-2 border-dashed border-green-500/30 flex items-center justify-center bg-white/5 cursor-cell hover:border-green-500/50 transition-colors">
-                                                            <span className="text-sm font-bold text-green-500/60">{pos.key}</span>
+                                                        <div className={`w-24 h-24 mx-auto rounded-full border-2 flex items-center justify-center cursor-cell transition-all duration-150 ${
+                                                            courtIsOver
+                                                                ? courtIsValid
+                                                                    ? 'border-emerald-400 bg-emerald-500/20 shadow-lg shadow-emerald-500/30'
+                                                                    : 'border-red-500 bg-red-500/20 shadow-lg shadow-red-500/30'
+                                                                : 'border-dashed border-green-500/30 bg-white/5 hover:border-green-500/50'
+                                                        }`}>
+                                                            {courtIsOver && !courtIsValid
+                                                                ? <XIcon size={16} className="text-red-400" />
+                                                                : <span className={`text-sm font-bold ${courtIsOver && courtIsValid ? 'text-emerald-400' : 'text-green-500/60'}`}>{pos.key}</span>
+                                                            }
                                                         </div>
-                                                        <p className="mt-2 text-[12px] text-green-500/40">Empty</p>
+                                                        <p className="mt-2 text-[12px] text-green-500/40">{pos.label.split(' ')[0]}</p>
                                                     </div>
                                                 ) : null}
                                             </div>

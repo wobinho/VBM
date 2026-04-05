@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import MatchSimModal from '@/components/match-sim-modal';
+import GameSummaryModal from '@/components/game-summary-modal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,9 @@ export default function DashboardPage() {
 
   // Match sim modal state
   const [matchSimFixtureId, setMatchSimFixtureId] = useState<number | null>(null);
+
+  // Game summary modal state
+  const [summaryFixtureId, setSummaryFixtureId] = useState<number | null>(null);
 
   // Simulate-to-date state
   const [simToDate, setSimToDate] = useState(false);
@@ -821,10 +825,14 @@ export default function DashboardPage() {
                 const opponent = userIsHome ? f.away_team_name : f.home_team_name;
                 const oppTeamId = userIsHome ? f.away_team_id : f.home_team_id;
                 return (
-                  <div key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.025] transition-colors">
+                  <div key={f.id}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer group"
+                    onClick={() => setSummaryFixtureId(f.id)}
+                    title="Click to view match summary"
+                  >
                     <TeamLogo teamId={oppTeamId} size={28} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">{opponent}</p>
+                      <p className="text-xs font-semibold text-white truncate group-hover:text-amber-300 transition-colors">{opponent}</p>
                       <p className="text-[10px] text-slate-600 mt-0.5">{formatShortDate(f.scheduled_date)} · GW{f.game_week}</p>
                     </div>
                     {badge && (
@@ -850,6 +858,14 @@ export default function DashboardPage() {
           onMatchComplete={async () => {
             await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
           }}
+        />
+      )}
+
+      {summaryFixtureId && (
+        <GameSummaryModal
+          fixtureId={summaryFixtureId}
+          perspectiveTeamId={team?.id}
+          onClose={() => setSummaryFixtureId(null)}
         />
       )}
     </div>
