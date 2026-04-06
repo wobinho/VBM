@@ -10,6 +10,7 @@ import {
   getPlayoffGamesByDate, recordPlayoffGameResult,
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 
 /**
  * POST /api/advance-day — advance the game calendar by exactly 1 day.
@@ -28,11 +29,11 @@ export async function POST() {
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
 
-  // Block on Aug 31: all regular-season fixtures must be complete and the user
-  // must use the "Proceed to Playoffs / Vacation" button instead.
-  if (state.current_date.endsWith('-08-31')) {
+  // Block on Jul 31: league block ends and cup block begins. User must press
+  // "Proceed to Cup Block" to advance to Aug 1.
+  if (state.current_date.endsWith('-07-31')) {
     return NextResponse.json(
-      { error: 'season_gate', message: 'The regular season has ended. Use the "Proceed to Playoffs" button to continue.' },
+      { error: 'season_gate', message: 'The league block has ended. Use the "Proceed to Cup Block" button to continue.' },
       { status: 409 },
     );
   }
@@ -80,6 +81,18 @@ export async function POST() {
     );
   }
 
+  // Also block if the user has an unplayed cup fixture today
+  const todayCupFixtures = getCupFixturesByDate(state.current_date);
+  const userCupFixture = userTeamId !== null
+    ? todayCupFixtures.find(cf => cf.home_team_id === userTeamId || cf.away_team_id === userTeamId) ?? null
+    : null;
+  if (userCupFixture && userCupFixture.status === 'scheduled') {
+    return NextResponse.json(
+      { error: 'user_fixture_pending', message: 'Simulate your cup fixture before advancing the day.' },
+      { status: 409 },
+    );
+  }
+
   // Auto-simulate all remaining AI regular-season fixtures for today
   const remaining = todayFixtures.filter(f => f.status !== 'completed' && f.id !== userFixture?.id);
   for (const f of remaining) {
@@ -106,6 +119,24 @@ export async function POST() {
     const awayLu = buildLineup(pg.away_team_id);
     const result = runFullMatch(homeLu, awayLu);
     recordPlayoffGameResult(pg.id, {
+      home_sets:   result.homeSets,
+      away_sets:   result.awaySets,
+      home_points: result.homeTotalPoints,
+      away_points: result.awayTotalPoints,
+    });
+  }
+
+  // Also auto-simulate any AI cup fixtures scheduled for today
+  // (user cup fixtures are left for the user to play manually)
+  for (const cf of todayCupFixtures) {
+    const isUserGame = userTeamId !== null &&
+      (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId);
+    if (isUserGame) continue;
+
+    const homeLu = buildLineup(cf.home_team_id);
+    const awayLu = buildLineup(cf.away_team_id);
+    const result = runFullMatch(homeLu, awayLu);
+    recordCupFixtureResult(cf.id, {
       home_sets:   result.homeSets,
       away_sets:   result.awaySets,
       home_points: result.homeTotalPoints,
@@ -150,16 +181,17 @@ export async function POST() {
     }
   }
 
-  // Check if the new date has any fixtures or playoff games
+  // Check if the new date has any fixtures, playoff games, or cup fixtures
   const dayFixtures = getFixtures({ date: newDate });
   const dayPlayoffGames = getPlayoffGamesByDate(newDate);
-  const hasMatchDay = dayFixtures.length > 0 || dayPlayoffGames.length > 0;
+  const dayCupFixtures = getCupFixturesByDate(newDate);
+  const hasMatchDay = dayFixtures.length > 0 || dayPlayoffGames.length > 0 || dayCupFixtures.length > 0;
 
   return NextResponse.json({
     previousDate: state.current_date,
     newDate,
     hasMatchDay,
-    fixtureCount: dayFixtures.length + dayPlayoffGames.length,
+    fixtureCount: dayFixtures.length + dayPlayoffGames.length + dayCupFixtures.length,
     autoSimulated: remaining.length,
     monthlyEconomyRan,
     playoffsGenerated,

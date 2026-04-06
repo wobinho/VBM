@@ -453,8 +453,8 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Aug 31 gate — Proceed to Playoffs (Premier) or Vacation (other leagues) */}
-          {currentDateStr.endsWith('-08-31') ? (
+          {/* Jul 31 gate — Proceed to Cup Block */}
+          {currentDateStr.endsWith('-07-31') ? (
             <button
               onClick={handleProceedToPlayoffs}
               disabled={proceedingPlayoffs}
@@ -464,10 +464,8 @@ export default function DashboardPage() {
             >
               {proceedingPlayoffs ? (
                 <><Loader2 size={14} className="animate-spin" /> Processing…</>
-              ) : team?.league_id === 1 ? (
-                <><Trophy size={14} /> Proceed to Playoffs</>
               ) : (
-                <><Star size={14} /> Proceed to Vacation</>
+                <><Trophy size={14} /> Proceed to Cup Block</>
               )}
             </button>
           ) : currentDateStr.endsWith('-12-31') ? (
@@ -516,14 +514,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Aug 31 Season Gate Banner ───────────────────────────────────────── */}
-      {currentDateStr.endsWith('-08-31') && (
+      {/* ── Jul 31 League Block Gate Banner ────────────────────────────────────── */}
+      {currentDateStr.endsWith('-07-31') && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm">
           <Trophy size={14} className="text-amber-400 shrink-0" />
           <span className="flex-1">
-            {team?.league_id === 1
-              ? 'The regular season is over! Top 4 from each conference advance to the playoffs. Press "Proceed to Playoffs" to continue.'
-              : 'The regular season is over! Press "Proceed to Vacation" to skip to the off-season.'}
+            The league block has ended! The cup block begins on August 1. Press "Proceed to Cup Block" to continue.
           </span>
         </div>
       )}

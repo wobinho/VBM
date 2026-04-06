@@ -592,6 +592,7 @@ export default function OfficePage() {
     const [negotiating, setNegotiating] = useState<Player | null>(null);
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
+    const [cashFlowExpanded, setCashFlowExpanded] = useState(true);
 
     const fetchData = useCallback(() => {
         if (!team) return;
@@ -807,45 +808,57 @@ export default function OfficePage() {
 
             {/* Cash Flow History */}
             <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 overflow-hidden">
-                <div className="px-5 py-4 border-b border-white/10 flex items-center gap-2">
-                    <Receipt size={16} className="text-amber-400" />
-                    <h2 className="text-sm font-semibold text-white">Monthly Cash Flow</h2>
+                <div 
+                    className="px-5 py-4 border-b border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors group"
+                    onClick={() => setCashFlowExpanded(!cashFlowExpanded)}
+                >
+                    <div className="flex items-center gap-2">
+                        <Receipt size={16} className="text-amber-400" />
+                        <h2 className="text-sm font-semibold text-white">Monthly Cash Flow</h2>
+                    </div>
+                    <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
+                        {cashFlowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
                 </div>
 
-                {transactions.length === 0 ? (
-                    <div className="px-5 py-10 text-center">
-                        <p className="text-sm text-gray-600">No transactions yet — cash flow updates on the 1st of each month.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-white/5">
-                        {/* Column headers */}
-                        <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
-                            <span>Period</span>
-                            <span className="text-right">Income</span>
-                            <span className="text-right">Expenses</span>
-                            <span className="text-right">Net</span>
-                        </div>
-                        {transactions.map(tx => {
-                            const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
-                            const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
-                            const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
-                            return (
-                                <div key={tx.id}
-                                    onClick={() => setSelectedTx(tx)}
-                                    className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3.5 items-center cursor-pointer hover:bg-white/[0.03] transition-colors">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                                        <span className="text-sm font-medium text-white">{monthLabel}</span>
-                                    </div>
-                                    <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(totalIncome)}</span>
-                                    <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
-                                    <span className={`text-sm font-black text-right ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                        {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
-                                    </span>
+                {cashFlowExpanded && (
+                    <>
+                        {transactions.length === 0 ? (
+                            <div className="px-5 py-10 text-center">
+                                <p className="text-sm text-gray-600">No transactions yet — cash flow updates on the 1st of each month.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-white/5">
+                                {/* Column headers */}
+                                <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
+                                    <span>Period</span>
+                                    <span className="text-right">Income</span>
+                                    <span className="text-right">Expenses</span>
+                                    <span className="text-right">Net</span>
                                 </div>
-                            );
-                        })}
-                    </div>
+                                {transactions.map(tx => {
+                                    const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
+                                    const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
+                                    const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+                                    return (
+                                        <div key={tx.id}
+                                            onClick={() => setSelectedTx(tx)}
+                                            className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3.5 items-center cursor-pointer hover:bg-white/[0.03] transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                                <span className="text-sm font-medium text-white">{monthLabel}</span>
+                                            </div>
+                                            <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(totalIncome)}</span>
+                                            <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
+                                            <span className={`text-sm font-black text-right ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 

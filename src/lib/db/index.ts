@@ -227,7 +227,7 @@ export function getDb(): Database.Database {
       `);
     }
 
-    // Migration: league_configs and league_links tables
+    // Migration: league_configs, league_links, and league_presets tables
     const leagueConfigsCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='league_configs'"
     ).get();
@@ -253,6 +253,33 @@ export function getDb(): Database.Database {
         );
         CREATE INDEX IF NOT EXISTS idx_league_links_from ON league_links(from_league_id);
         CREATE INDEX IF NOT EXISTS idx_league_links_to   ON league_links(to_league_id);
+
+        CREATE TABLE IF NOT EXISTS league_presets (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          preset_name  TEXT    NOT NULL UNIQUE,
+          config       TEXT    NOT NULL,
+          created_at   TEXT    DEFAULT (datetime('now')),
+          updated_at   TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_league_presets_name ON league_presets(preset_name);
+      `);
+      seedLeagueConfigs(db);
+    }
+
+    // Ensure league_presets table exists if league_configs already did (migration for existing DBs)
+    const presetsCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='league_presets'"
+    ).get();
+    if (!presetsCheck) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS league_presets (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          preset_name  TEXT    NOT NULL UNIQUE,
+          config       TEXT    NOT NULL,
+          created_at   TEXT    DEFAULT (datetime('now')),
+          updated_at   TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_league_presets_name ON league_presets(preset_name);
       `);
       seedLeagueConfigs(db);
     }
@@ -312,6 +339,169 @@ export function getDb(): Database.Database {
     } else {
       // Tables exist — ensure every league has a season and fixtures (handles new leagues added later)
       seedMissingLeagueSeasons(db);
+    }
+
+    // Migration: cup competition tables and config updates (Jan–Jun calendar, cup participation)
+    const cupCompetitionsCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='cup_competitions'"
+    ).get();
+    if (!cupCompetitionsCheck) {
+      // Create cup tables
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS cup_competitions (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT NOT NULL,
+          cup_type    TEXT NOT NULL CHECK (cup_type IN ('national', 'cl', 'secondary')),
+          format      TEXT NOT NULL CHECK (format IN ('single_elimination', 'group_knockout')),
+          country     TEXT,
+          year        INTEGER NOT NULL,
+          status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+          created_at  TEXT DEFAULT (datetime('now')),
+          UNIQUE(cup_type, country, year)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cup_competitions_year ON cup_competitions(year);
+
+        CREATE TABLE IF NOT EXISTS cup_rounds (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          cup_id       INTEGER NOT NULL REFERENCES cup_competitions(id) ON DELETE CASCADE,
+          round_number INTEGER NOT NULL,
+          round_name   TEXT NOT NULL,
+          round_type   TEXT NOT NULL CHECK (round_type IN ('group', 'knockout')),
+          start_date   TEXT NOT NULL,
+          end_date     TEXT NOT NULL,
+          status       TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'active', 'completed')),
+          created_at   TEXT DEFAULT (datetime('now')),
+          UNIQUE(cup_id, round_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cup_rounds_cup_id ON cup_rounds(cup_id);
+
+        CREATE TABLE IF NOT EXISTS cup_groups (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          round_id    INTEGER NOT NULL REFERENCES cup_rounds(id) ON DELETE CASCADE,
+          group_name  TEXT NOT NULL,
+          created_at  TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_cup_groups_round_id ON cup_groups(round_id);
+
+        CREATE TABLE IF NOT EXISTS cup_group_teams (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          group_id  INTEGER NOT NULL REFERENCES cup_groups(id) ON DELETE CASCADE,
+          team_id   INTEGER NOT NULL REFERENCES teams(id),
+          played    INTEGER DEFAULT 0,
+          won       INTEGER DEFAULT 0,
+          lost      INTEGER DEFAULT 0,
+          points    INTEGER DEFAULT 0,
+          sets_won  INTEGER DEFAULT 0,
+          sets_lost INTEGER DEFAULT 0,
+          UNIQUE(group_id, team_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cup_group_teams_group_id ON cup_group_teams(group_id);
+
+        CREATE TABLE IF NOT EXISTS cup_fixtures (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          cup_id          INTEGER NOT NULL REFERENCES cup_competitions(id) ON DELETE CASCADE,
+          round_id        INTEGER NOT NULL REFERENCES cup_rounds(id) ON DELETE CASCADE,
+          group_id        INTEGER REFERENCES cup_groups(id),
+          home_team_id    INTEGER NOT NULL REFERENCES teams(id),
+          away_team_id    INTEGER NOT NULL REFERENCES teams(id),
+          scheduled_date  TEXT NOT NULL,
+          status          TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'postponed')),
+          home_sets       INTEGER,
+          away_sets       INTEGER,
+          home_points     INTEGER,
+          away_points     INTEGER,
+          winner_team_id  INTEGER REFERENCES teams(id),
+          played_at       TEXT,
+          created_at      TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_cup_fixtures_date   ON cup_fixtures(scheduled_date);
+        CREATE INDEX IF NOT EXISTS idx_cup_fixtures_cup_id ON cup_fixtures(cup_id);
+        CREATE INDEX IF NOT EXISTS idx_cup_fixtures_home   ON cup_fixtures(home_team_id);
+        CREATE INDEX IF NOT EXISTS idx_cup_fixtures_away   ON cup_fixtures(away_team_id);
+        CREATE INDEX IF NOT EXISTS idx_cup_fixtures_status ON cup_fixtures(status);
+      `);
+
+      // Update existing league configs to new date ranges and add cup participation
+      const premierConfig = {
+        team_count: 16,
+        format: {
+          type: 'multi_conference',
+          conferences: [
+            { name: 'north', region_tag: 'north', size: 8 },
+            { name: 'south', region_tag: 'south', size: 8 },
+          ],
+        },
+        regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 4, end_day: 30 },
+        post_season: {
+          type: 'conference_playoffs',
+          start_month: 5,
+          start_day: 1,
+          series_length: 5,
+          rounds: [
+            { name: 'Conference Semifinals', scope: 'per_conference', teams_per_conference: 4, matchup_pattern: 'top_vs_bottom' },
+            { name: 'Conference Finals', scope: 'per_conference', matchup_pattern: 'top_vs_bottom' },
+            { name: 'Grand Final', scope: 'cross_conference' },
+          ],
+        },
+        tiebreakers: ['points', 'score_diff', 'set_diff'],
+        cup_participation: {
+          qualifier: 'top_n_per_league',
+          top_n: 4,
+          cups: ['national', 'cl'],
+        },
+      };
+
+      const div2Config = {
+        team_count: 16,
+        format: { type: 'single_table' },
+        regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 6, end_day: 30 },
+        post_season: { type: 'none' },
+        tiebreakers: ['points', 'score_diff', 'set_diff'],
+        cup_participation: {
+          qualifier: 'all_country',
+          cups: ['national'],
+        },
+      };
+
+      const superligaPolskaConfig = {
+        team_count: 20,
+        format: { type: 'single_table' },
+        regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 6, end_day: 30 },
+        post_season: { type: 'none' },
+        tiebreakers: ['points', 'score_diff', 'set_diff'],
+        cup_participation: {
+          qualifier: 'all_country',
+          cups: ['national'],
+        },
+      };
+
+      // Update league configs (tier 2 = premier, tier 3 = div2, by name = superliga)
+      const tier2League = db.prepare("SELECT id FROM leagues WHERE tier = 2 LIMIT 1").get() as { id: number } | undefined;
+      if (tier2League) {
+        db.prepare("UPDATE league_configs SET config = ? WHERE league_id = ?")
+          .run(JSON.stringify(premierConfig), tier2League.id);
+      }
+
+      const tier3Leagues = db.prepare("SELECT id FROM leagues WHERE tier = 3 ORDER BY id").all() as { id: number }[];
+      for (const league of tier3Leagues) {
+        db.prepare("UPDATE league_configs SET config = ? WHERE league_id = ?")
+          .run(JSON.stringify(div2Config), league.id);
+      }
+
+      const superligaPolskaLeague = db.prepare("SELECT id FROM leagues WHERE league_name = 'Superliga Polska' LIMIT 1")
+        .get() as { id: number } | undefined;
+      if (superligaPolskaLeague) {
+        db.prepare("UPDATE league_configs SET config = ? WHERE league_id = ?")
+          .run(JSON.stringify(superligaPolskaConfig), superligaPolskaLeague.id);
+      }
+
+      // Update league presets
+      db.prepare("UPDATE league_presets SET config = ? WHERE preset_name = ?")
+        .run(JSON.stringify(premierConfig), 'Italian Premier Division');
+      db.prepare("UPDATE league_presets SET config = ? WHERE preset_name = ?")
+        .run(JSON.stringify(div2Config), 'Division 2 Standard');
+      db.prepare("UPDATE league_presets SET config = ? WHERE preset_name = ?")
+        .run(JSON.stringify(superligaPolskaConfig), 'Superliga Polska Standard');
     }
   }
   return db;
@@ -448,10 +638,10 @@ function seedLeagueConfigs(db: Database.Database) {
         { name: 'south', region_tag: 'south', size: 8 },
       ],
     },
-    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 8, end_day: 31 },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 4, end_day: 30 },
     post_season: {
       type: 'conference_playoffs',
-      start_month: 9,
+      start_month: 5,
       start_day: 1,
       series_length: 5,
       rounds: [
@@ -461,14 +651,23 @@ function seedLeagueConfigs(db: Database.Database) {
       ],
     },
     tiebreakers: ['points', 'score_diff', 'set_diff'],
+    cup_participation: {
+      qualifier: 'top_n_per_league',
+      top_n: 4,
+      cups: ['national', 'cl'],
+    },
   };
 
   const div2Config: LeagueConfig = {
     team_count: 16,
     format: { type: 'single_table' },
-    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 8, end_day: 31 },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 6, end_day: 30 },
     post_season: { type: 'none' },
     tiebreakers: ['points', 'score_diff', 'set_diff'],
+    cup_participation: {
+      qualifier: 'all_country',
+      cups: ['national'],
+    },
   };
 
   const superligaPolska = db.prepare("SELECT id FROM leagues WHERE league_name = 'Superliga Polska' LIMIT 1").get() as { id: number } | undefined;
@@ -476,10 +675,19 @@ function seedLeagueConfigs(db: Database.Database) {
   const superligaPolskaConfig: LeagueConfig = {
     team_count: 20,
     format: { type: 'single_table' },
-    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 11, end_day: 30 },
+    regular_season: { rounds: 3, start_month: 1, start_day: 1, end_month: 6, end_day: 30 },
     post_season: { type: 'none' },
     tiebreakers: ['points', 'score_diff', 'set_diff'],
+    cup_participation: {
+      qualifier: 'all_country',
+      cups: ['national'],
+    },
   };
+
+  const insertPreset = db.prepare("INSERT OR IGNORE INTO league_presets (preset_name, config) VALUES (?, ?)");
+  insertPreset.run("Italian Premier Division", JSON.stringify(premierConfig));
+  insertPreset.run("Division 2 Standard", JSON.stringify(div2Config));
+  insertPreset.run("Superliga Polska Standard", JSON.stringify(superligaPolskaConfig));
 
   const insertConfig = db.prepare("INSERT OR IGNORE INTO league_configs (league_id, config) VALUES (?, ?)");
 

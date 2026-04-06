@@ -56,6 +56,12 @@ export interface LeagueConfig {
   };
 
   tiebreakers: Array<'points' | 'score_diff' | 'set_diff'>;
+
+  cup_participation?: {
+    qualifier: 'all_country' | 'top_n_per_league' | 'none';
+    top_n?: number;           // used when qualifier = 'top_n_per_league'
+    cups: string[];           // cup type IDs, e.g. ['national', 'cl']
+  };
 }
 
 // ── League link condition types ───────────────────────────────────────────────

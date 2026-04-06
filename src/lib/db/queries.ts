@@ -80,6 +80,24 @@ export function getLeagueById(id: number): League | undefined {
     return getDb().prepare('SELECT * FROM leagues WHERE id = ?').get(id) as League | undefined;
 }
 
+export function getLeaguePresets(): { id: number; preset_name: string; config: string }[] {
+    return getDb().prepare('SELECT * FROM league_presets ORDER BY preset_name').all() as { id: number; preset_name: string; config: string }[];
+}
+
+export function createLeagueFromPreset(leagueName: string, presetName: string, country: string = 'Italy', tier: number = 2): number {
+    const db = getDb();
+    const preset = db.prepare('SELECT config FROM league_presets WHERE preset_name = ?').get(presetName) as { config: string } | undefined;
+    if (!preset) throw new Error(`Preset "${presetName}" not found`);
+
+    return db.transaction(() => {
+        const result = db.prepare('INSERT INTO leagues (league_name, country, tier) VALUES (?, ?, ?)').run(leagueName, country, tier);
+        const leagueId = Number(result.lastInsertRowid);
+
+        db.prepare('INSERT INTO league_configs (league_id, config) VALUES (?, ?)').run(leagueId, preset.config);
+        return leagueId;
+    })();
+}
+
 // ==================== TEAMS ====================
 export function getTeams(): Team[] {
     const teams = getDb().prepare(`
@@ -741,6 +759,9 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
 
   // Delete all seasons newer than the origin year (fixtures/playoffs cascade-delete via FK).
   db.prepare("DELETE FROM seasons WHERE year > ?").run(originYear);
+
+  // Clear financial history
+  db.prepare("DELETE FROM financial_transactions").run();
 
   // Restore original seasons to active.
   db.prepare("UPDATE seasons SET status = 'active' WHERE year = ?").run(originYear);

@@ -6,13 +6,15 @@ import {
   getGameState, advanceGameDate,
   generatePlayoffs, getUserTeam,
 } from '@/lib/db/queries';
+import { generateAllCups } from '@/lib/cup-engine';
 
 /**
  * POST /api/proceed-to-playoffs
  *
- * Called on Aug 31 after all regular-season fixtures are complete.
+ * Called on Jul 31 after the league block ends.
  * - Generates playoff brackets for ALL active tier-2 league seasons.
- * - Advances calendar to Sep 1.
+ * - Generates all cup competitions for the year.
+ * - Advances calendar to Aug 1 (start of cup block).
  *
  * Returns: { qualified: boolean, playoffsGenerated: boolean, newDate: string }
  */
@@ -25,8 +27,8 @@ export async function POST() {
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
 
-  if (!state.current_date.endsWith('-08-31')) {
-    return NextResponse.json({ error: 'Not Aug 31 — cannot proceed to playoffs yet.' }, { status: 409 });
+  if (!state.current_date.endsWith('-07-31')) {
+    return NextResponse.json({ error: 'Not Jul 31 — cannot proceed to cup block yet.' }, { status: 409 });
   }
 
   // Identify the user's league
@@ -53,10 +55,13 @@ export async function POST() {
   }
   const playoffsGenerated = totalSeriesCreated > 0;
 
-  // Advance to Sep 1
+  // Advance to Aug 1 (start of cup block)
   const year = state.current_date.slice(0, 4);
-  const newDate = `${year}-09-01`;
+  const newDate = `${year}-08-01`;
   advanceGameDate(newDate);
+
+  // Generate all cup competitions for the year
+  generateAllCups(parseInt(year));
 
   // User qualifies for playoffs if their league is tier-2
   const userLeagueTier = userLeagueId
