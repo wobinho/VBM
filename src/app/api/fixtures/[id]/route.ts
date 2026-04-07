@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch, getSquadLineup, getPlayers, recordPlayoffGameResult, getGameState, getFixtures, getPlayoffGamesByDate } from '@/lib/db/queries';
+import {
+  getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch,
+  getSquadLineup, getPlayers, recordPlayoffGameResult,
+  getGameState, getFixtures, getPlayoffGamesByDate,
+  advanceGameDate, getCupFixtureById,
+} from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
 import { getDb } from '@/lib/db';
+import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 
 /**
  * PATCH /api/fixtures/[id] — Save the user's manually-simulated match result,
@@ -13,33 +19,103 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const fixtureId = Number(id);
+    const gameId = Number(id);
     const db = getDb();
     const { homeSets, awaySets, homePoints, awayPoints } = await req.json();
 
-    // Look up the fixture to get its date and team IDs
-    const fixture = getFixtureById(fixtureId);
-    if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+    // 1. Determine if this is a regular fixture, playoff game, or cup game
+    const { searchParams } = new URL(req.url);
+    const typeS = searchParams.get('type'); // 'playoff' or 'cup'
 
-    // Save the user's fixture result and update standings
-    updateFixtureResult(fixtureId, {
-      home_sets:   homeSets,
-      away_sets:   awaySets,
-      home_points: homePoints ?? 0,
-      away_points: awayPoints ?? 0,
-    });
-    updateTeamStatsAfterMatch(
-      fixture.home_team_id, fixture.away_team_id,
-      homeSets, awaySets,
-      homePoints ?? 0, awayPoints ?? 0,
-    );
+    let fixture = null;
+    let isPlayoffGame = typeS === 'playoff';
+    let isCupGame = typeS === 'cup';
+    let playoffGame: any = null;
+    let cupGame: any = null;
+    let targetDate: string;
 
-    const targetDate = fixture.scheduled_date;
+    if (isPlayoffGame) {
+      playoffGame = db.prepare(`
+        SELECT pg.*,
+          ht.team_name AS home_team_name,
+          at.team_name AS away_team_name
+        FROM playoff_games pg
+        JOIN teams ht ON pg.home_team_id = ht.id
+        JOIN teams at ON pg.away_team_id = at.id
+        WHERE pg.id = ?
+      `).get(gameId) as any;
 
-    // Simulate all remaining regular fixtures on the same date
+      if (!playoffGame) return NextResponse.json({ error: 'Playoff game not found' }, { status: 404 });
+      targetDate = playoffGame.scheduled_date;
+    } else if (isCupGame) {
+      cupGame = getCupFixtureById(gameId);
+      if (!cupGame) return NextResponse.json({ error: 'Cup game not found' }, { status: 404 });
+      targetDate = cupGame.scheduled_date;
+    } else {
+      fixture = getFixtureById(gameId);
+      if (!fixture) {
+        // Fallback: check playoff_games
+        playoffGame = db.prepare(`
+          SELECT pg.*,
+            ht.team_name AS home_team_name,
+            at.team_name AS away_team_name
+          FROM playoff_games pg
+          JOIN teams ht ON pg.home_team_id = ht.id
+          JOIN teams at ON pg.away_team_id = at.id
+          WHERE pg.id = ?
+        `).get(gameId) as any;
+
+        if (playoffGame) {
+          isPlayoffGame = true;
+          targetDate = playoffGame.scheduled_date;
+        } else {
+          // Fallback: check cup_fixtures
+          cupGame = getCupFixtureById(gameId);
+          if (cupGame) {
+            isCupGame = true;
+            targetDate = cupGame.scheduled_date;
+          } else {
+            return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+          }
+        }
+      } else {
+        targetDate = fixture.scheduled_date;
+      }
+    }
+
+    // 2. Save the user's match result
+    if (isPlayoffGame) {
+      recordPlayoffGameResult(gameId, {
+        home_sets:   homeSets,
+        away_sets:   awaySets,
+        home_points: homePoints ?? 0,
+        away_points: awayPoints ?? 0,
+      });
+    } else if (isCupGame) {
+      recordCupFixtureResult(gameId, {
+        home_sets:   homeSets,
+        away_sets:   awaySets,
+        home_points: homePoints ?? 0,
+        away_points: awayPoints ?? 0,
+      });
+    } else if (fixture) {
+      updateFixtureResult(gameId, {
+        home_sets:   homeSets,
+        away_sets:   awaySets,
+        home_points: homePoints ?? 0,
+        away_points: awayPoints ?? 0,
+      });
+      updateTeamStatsAfterMatch(
+        fixture.home_team_id, fixture.away_team_id,
+        homeSets, awaySets,
+        homePoints ?? 0, awayPoints ?? 0,
+      );
+    }
+
+    // 3. Simulate all remaining regular fixtures on the same date
     const dayFixtures = getFixtures({ date: targetDate });
     for (const f of dayFixtures) {
-      if (f.status === 'completed' || f.id === fixtureId) continue;
+      if (f.status === 'completed' || (!isPlayoffGame && !isCupGame && f.id === gameId)) continue;
       const homeLu = buildLineup(f.home_team_id);
       const awayLu = buildLineup(f.away_team_id);
       const result = runFullMatch(homeLu, awayLu);
@@ -52,10 +128,10 @@ export async function PATCH(
       updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
     }
 
-    // Simulate all remaining playoff games on the same date
+    // 4. Simulate all remaining playoff games on the same date
     const dayPlayoffGames = getPlayoffGamesByDate(targetDate);
     for (const pg of dayPlayoffGames) {
-      if (pg.status === 'completed') continue;
+      if (pg.status === 'completed' || (isPlayoffGame && pg.id === gameId)) continue;
       const homeLu = buildLineup(pg.home_team_id);
       const awayLu = buildLineup(pg.away_team_id);
       const result = runFullMatch(homeLu, awayLu);
@@ -65,6 +141,38 @@ export async function PATCH(
         home_points: result.homeTotalPoints,
         away_points: result.awayTotalPoints,
       });
+    }
+
+    // 4b. Simulate all remaining cup fixtures on the same date
+    const dayCupFixtures = getCupFixturesByDate(targetDate);
+    for (const cf of dayCupFixtures) {
+      if (cf.status === 'completed' || (isCupGame && cf.id === gameId)) continue;
+      const homeLu = buildLineup(cf.home_team_id);
+      const awayLu = buildLineup(cf.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      recordCupFixtureResult(cf.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+    }
+
+    // 5. If ALL fixtures for this date (regular, playoff, cup) are now complete,
+    // automatically advance the game date to the next day.
+    const allReg = getFixtures({ date: targetDate });
+    const allPo  = getPlayoffGamesByDate(targetDate, true);
+    const allCup = getCupFixturesByDate(targetDate);
+    
+    const anyPendingReg = allReg.some(f => f.status === 'scheduled');
+    const anyPendingPo  = allPo.some(pg => pg.status === 'scheduled');
+    const anyPendingCup = allCup.length > 0;
+
+    if (!anyPendingReg && !anyPendingPo && !anyPendingCup) {
+      const current = new Date(targetDate);
+      current.setDate(current.getDate() + 1);
+      const nextDate = current.toISOString().slice(0, 10);
+      advanceGameDate(nextDate);
     }
 
     return NextResponse.json({ ok: true });
@@ -77,12 +185,66 @@ export async function PATCH(
 
 /** GET /api/fixtures/[id] — fetch a single fixture */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const fixture = getFixtureById(Number(id));
-  if (!fixture) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+  const gameId = Number(id);
+  const { searchParams } = new URL(req.url);
+  const typeS = searchParams.get('type');
+
+  const db = getDb();
+
+  if (typeS === 'playoff') {
+    const playoffGame = db.prepare(`
+      SELECT pg.*,
+        ht.team_name AS home_team_name,
+        at.team_name AS away_team_name
+      FROM playoff_games pg
+      JOIN teams ht ON pg.home_team_id = ht.id
+      JOIN teams at ON pg.away_team_id = at.id
+      WHERE pg.id = ?
+    `).get(gameId) as any;
+    if (!playoffGame) return NextResponse.json({ error: 'Playoff game not found' }, { status: 404 });
+    return NextResponse.json({
+      ...playoffGame,
+      is_playoff: true,
+      season_name: 'Playoffs',
+    });
+  }
+
+  if (typeS === 'cup') {
+    const cupGame = getCupFixtureById(gameId);
+    if (!cupGame) return NextResponse.json({ error: 'Cup game not found' }, { status: 404 });
+    return NextResponse.json({
+      ...cupGame,
+      is_cup: true,
+      season_name: cupGame.cup_name ?? 'Cup',
+    });
+  }
+
+  const fixture = getFixtureById(gameId);
+  if (!fixture) {
+    // try playoff fallback
+    const playoffGame = db.prepare(`
+      SELECT pg.*,
+        ht.team_name AS home_team_name,
+        at.team_name AS away_team_name
+      FROM playoff_games pg
+      JOIN teams ht ON pg.home_team_id = ht.id
+      JOIN teams at ON pg.away_team_id = at.id
+      WHERE pg.id = ?
+    `).get(gameId) as any;
+    if (playoffGame) {
+      return NextResponse.json({...playoffGame, is_playoff: true, season_name: 'Playoffs'});
+    }
+    // try cup fallback
+    const cupGame = getCupFixtureById(gameId);
+    if (cupGame) {
+       return NextResponse.json({...cupGame, is_cup: true, season_name: cupGame.cup_name ?? 'Cup'});
+    }
+    return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+  }
   return NextResponse.json(fixture);
 }
 
@@ -106,13 +268,16 @@ export async function POST(
 
     const currentDate = state.current_date;
 
+    const { searchParams } = new URL(req.url);
+    const typeS = searchParams.get('type');
+
     // Determine if this is a regular fixture or playoff game
-    let targetFixture = getFixtureById(gameId);
-    let isPlayoffGame = false;
+    let targetFixture = null;
+    let isPlayoffGame = typeS === 'playoff';
     let targetPlayoffGame: any = null;
     let targetDate: string;
 
-    if (!targetFixture) {
+    if (isPlayoffGame) {
       targetPlayoffGame = db.prepare(`
         SELECT pg.*,
           ht.team_name AS home_team_name,
@@ -123,11 +288,30 @@ export async function POST(
         WHERE pg.id = ?
       `).get(gameId) as any;
 
-      if (!targetPlayoffGame) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
-      isPlayoffGame = true;
+      if (!targetPlayoffGame) return NextResponse.json({ error: 'Playoff game not found' }, { status: 404 });
       targetDate = targetPlayoffGame.scheduled_date;
     } else {
-      targetDate = targetFixture.scheduled_date;
+      targetFixture = getFixtureById(gameId);
+      if (!targetFixture) {
+        targetPlayoffGame = db.prepare(`
+          SELECT pg.*,
+            ht.team_name AS home_team_name,
+            at.team_name AS away_team_name
+          FROM playoff_games pg
+          JOIN teams ht ON pg.home_team_id = ht.id
+          JOIN teams at ON pg.away_team_id = at.id
+          WHERE pg.id = ?
+        `).get(gameId) as any;
+
+        if (targetPlayoffGame) {
+          isPlayoffGame = true;
+          targetDate = targetPlayoffGame.scheduled_date;
+        } else {
+          return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
+        }
+      } else {
+        targetDate = targetFixture.scheduled_date;
+      }
     }
 
     // ── Simulate all regular fixtures on this date ───────────────────────────────

@@ -294,7 +294,7 @@ export default function PlayoffsPage() {
                         <div className="space-y-2">
                             <h2 className="text-2xl font-black text-white">Playoffs Haven&apos;t Started</h2>
                             <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
-                                The playoffs begin after the regular season ends on Aug 31.
+                                The playoffs begin after the regular season ends on April 30.
                                 Top 4 teams from each conference will qualify.
                             </p>
                         </div>

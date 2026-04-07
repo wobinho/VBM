@@ -1,0 +1,46 @@
+# Implementation Plan - Cups Page and Schedule Fix
+
+The user reported that the accelerated cup scheduling (July-only, Mon/Wed/Fri) did not work and requested a new "Cups" page under Playoffs.
+
+## User Review Required
+
+> [!IMPORTANT]
+> - **Database Wipe**: I will wipe all existing cup data to ensure the new generation logic (Copa Italia, July schedule) can run without being blocked by old entries.
+> - **Navigation**: A new "Cups" link will be added to the sidebar.
+> - **Bracket View**: The new page will visualize the Copa Italia knockout bracket.
+
+## Proposed Changes
+
+### Database Cleanup
+
+#### [NEW] [wipe-cups.js](file:///c:/Users/wobin/Documents/GitHub/VBM/tmp/wipe-cups.js)
+- A script to TRUNCATE `cup_competitions`, `cup_rounds`, and `cup_fixtures`.
+
+### API Layer
+
+#### [NEW] [src/app/api/cups/route.ts](file:///c:/Users/wobin/Documents/GitHub/VBM/src/app/api/cups/route.ts)
+- GET handler to fetch the active National Cup (Copa Italia) for the current year, including its rounds and fixtures.
+
+### UI Layer
+
+#### [MODIFY] [src/components/sidebar.tsx](file:///c:/Users/wobin/Documents/GitHub/VBM/src/components/sidebar.tsx)
+- Add a new navigation item for **Cups** (using the `Trophy` icon).
+
+#### [NEW] [src/app/cups/page.tsx](file:///c:/Users/wobin/Documents/GitHub/VBM/src/app/cups/page.tsx)
+- Implementation of the Cups visualization page.
+- Features:
+    - Round-by-round knockout bracket display.
+    - Status indicators (Scheduled, Live, Completed).
+    - Match results.
+
+## Verification Plan
+
+### Automated Tests
+- Run `node tmp/wipe-cups.js`.
+- Manually trigger `POST /api/proceed-to-playoffs` (or advance past June 30).
+- Verify `Copa Italia` is generated with the 1-month July schedule.
+
+### Manual Verification
+- Navigate to the new `/cups` page.
+- Confirm the 2-tier entry (R1 North/South, R2 Premier entry) is visually represented.
+- Confirm matchdates are Mon/Wed/Fri in July.

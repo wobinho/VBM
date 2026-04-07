@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   Calendar, ChevronLeft, ChevronRight, Swords, Trophy, DollarSign,
-  Play, Zap, TrendingUp, TrendingDown, Clock, Star, Activity,
+  Play, TrendingUp, TrendingDown, Clock, Star, Activity,
   AlertCircle, CheckCircle2, X, Loader2, ArrowUpDown,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -28,7 +28,9 @@ interface Fixture {
   home_sets: number | null; away_sets: number | null;
   season_name: string;
   is_playoff?: boolean;
+  is_cup?: boolean;
   playoff_game_id?: number;
+  cup_game_id?: number;
 }
 
 interface Season { id: number; year: number; name: string; }
@@ -118,17 +120,12 @@ export default function DashboardPage() {
 
   // Simulate matchday state
   const [simulatingMatchday, setSimulatingMatchday] = useState(false);
-  const [matchdayResult, setMatchdayResult] = useState<SimMatchdayResult | null>(null);
-  const [showResultsBanner, setShowResultsBanner] = useState(false);
-
-  // Quick-sim state
-  const [simming, setSimming] = useState(false);
 
   // Match sim modal state
-  const [matchSimFixtureId, setMatchSimFixtureId] = useState<number | null>(null);
+  const [matchSimData, setMatchSimData] = useState<{ id: number; type: 'regular' | 'playoff' | 'cup' } | null>(null);
 
   // Game summary modal state
-  const [summaryFixtureId, setSummaryFixtureId] = useState<number | null>(null);
+  const [summaryData, setSummaryData] = useState<{ id: number; type: 'regular' | 'playoff' | 'cup' } | null>(null);
 
   // Simulate-to-date state
   const [simToDate, setSimToDate] = useState(false);
@@ -137,7 +134,7 @@ export default function DashboardPage() {
   // End-season result banner
   const [endSeasonResult, setEndSeasonResult] = useState<string | null>(null);
 
-  // Season-gate states (Aug 31 / Dec 31)
+  // Season-gate states (Jun 30 / Dec 31)
   const [proceedingPlayoffs, setProceedingPlayoffs] = useState(false);
   const [proceedingNextSeason, setProceedingNextSeason] = useState(false);
 
@@ -278,7 +275,7 @@ export default function DashboardPage() {
   };
 
 
-  // ─── Proceed to Playoffs / Vacation (Aug 31 gate) ─────────────────────────
+  // ─── Proceed to Playoffs / Vacation (Jun 30 gate) ─────────────────────────
 
   const handleProceedToPlayoffs = async () => {
     setProceedingPlayoffs(true);
@@ -321,41 +318,6 @@ export default function DashboardPage() {
     setProceedingNextSeason(false);
   };
 
-  // ─── Quick-sim all games for today ────────────────────────────────────────
-
-  const handleQuickSim = async (fixtureId: number) => {
-    setSimming(true);
-    setMatchdayResult(null);
-    setShowResultsBanner(false);
-    try {
-      console.log('Starting Quick Sim for fixture:', fixtureId);
-      const res = await fetch(`/api/fixtures/${fixtureId}`, { method: 'POST' });
-      console.log('Response status:', res.status, res.statusText);
-      const text = await res.text();
-      console.log('Response text:', text);
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { raw: text };
-      }
-      if (!res.ok) {
-        console.error('Quick Sim error:', { status: res.status, statusText: res.statusText, data });
-        setMatchdayResult(null);
-      } else {
-        console.log('Quick Sim successful');
-        // Show results banner
-        setMatchdayResult(data);
-        setShowResultsBanner(true);
-        // Reload game state
-        await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
-      }
-    } catch (e) {
-      console.error('Quick Sim fetch error:', e);
-    }
-    setSimming(false);
-  };
-
   // ─── Calendar logic ────────────────────────────────────────────────────────
 
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
@@ -373,6 +335,7 @@ export default function DashboardPage() {
     if (!day) return '';
     const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const isToday = iso === currentDateStr && todayIsInView;
+    const isPast = iso < currentDateStr;
     const isSelected = iso === selectedDate;
     const userStatus = userMatchDates.get(iso);
     const hasAnyMatch = matchDates.has(iso);
@@ -383,6 +346,12 @@ export default function DashboardPage() {
       base += 'ring-2 ring-amber-400 bg-amber-500/20 text-amber-300 ';
     } else if (isToday) {
       base += 'ring-2 ring-white/40 bg-white/10 text-white font-bold ';
+    } else if (isPast) {
+      base += 'opacity-40 grayscale-[0.3] text-slate-500 ';
+      if (userStatus === 'win') base += 'bg-emerald-500/10 ';
+      else if (userStatus === 'loss') base += 'bg-red-500/10 ';
+      else if (userStatus === 'scheduled') base += 'bg-amber-500/10 ';
+      else if (hasAnyMatch) base += 'bg-white/5 ';
     } else if (userStatus === 'win') {
       base += 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 ';
     } else if (userStatus === 'loss') {
@@ -453,8 +422,8 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Jul 31 gate — Proceed to Cup Block */}
-          {currentDateStr.endsWith('-07-31') ? (
+          {/* Jun 30 or Jul 31 gate — Proceed to Cup Block */}
+          {(currentDateStr.endsWith('-06-30') || currentDateStr.endsWith('-07-31')) ? (
             <button
               onClick={handleProceedToPlayoffs}
               disabled={proceedingPlayoffs}
@@ -514,12 +483,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Jul 31 League Block Gate Banner ────────────────────────────────────── */}
-      {currentDateStr.endsWith('-07-31') && (
+      {/* ── Jun 30 or Jul 31 League Block Gate Banner ────────────────────────────────────── */}
+      {(currentDateStr.endsWith('-06-30') || currentDateStr.endsWith('-07-31')) && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm">
           <Trophy size={14} className="text-amber-400 shrink-0" />
           <span className="flex-1">
-            The league block has ended! The cup block begins on August 1. Press "Proceed to Cup Block" to continue.
+            The league block has ended! The cup block begins on July 1. Press "Proceed to Cup Block" to continue.
           </span>
         </div>
       )}
@@ -547,44 +516,6 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
-
-      {/* ── Matchday Results Banner ──────────────────────────────────────────── */}
-      {showResultsBanner && matchdayResult && (
-        <div className="rounded-2xl border border-white/10 overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(10,15,26,0.98) 100%)' }}>
-          <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2.5">
-              <Activity size={14} className="text-sky-400" />
-              <span className="text-sm font-bold text-white">
-                Matchday Results — {formatShortDate(matchdayResult.date)}
-              </span>
-              <span className="text-[10px] text-slate-500 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
-                {matchdayResult.simulatedCount} matches played
-              </span>
-            </div>
-            <button onClick={() => setShowResultsBanner(false)} className="text-slate-500 hover:text-white transition-colors cursor-pointer p-1 rounded-lg hover:bg-white/5">
-              <X size={14} />
-            </button>
-          </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {matchdayResult.simulated.map(r => (
-              <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`text-xs font-semibold truncate ${r.winner === 'home' ? 'text-white' : 'text-slate-400'}`}>{r.homeTeam}</span>
-                    <span className={`text-xs font-black shrink-0 ${r.winner === 'home' ? 'text-emerald-400' : 'text-slate-500'}`}>{r.homeSets}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <span className={`text-xs font-semibold truncate ${r.winner === 'away' ? 'text-white' : 'text-slate-400'}`}>{r.awayTeam}</span>
-                    <span className={`text-xs font-black shrink-0 ${r.winner === 'away' ? 'text-emerald-400' : 'text-slate-500'}`}>{r.awaySets}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── Stat Cards ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -772,7 +703,7 @@ export default function DashboardPage() {
                         <TeamLogo teamId={f.away_team_id} size={22} />
                         <span className={`text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md shrink-0 ${completed ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/10 text-amber-500/80'
                           }`}>
-                          {completed ? 'FT' : f.is_playoff ? 'PO' : `GW${f.game_week}`}
+                          {completed ? 'FT' : f.is_cup ? 'CUP' : f.is_playoff ? 'PO' : `GW${f.game_week}`}
                         </span>
                       </div>
                     );
@@ -792,9 +723,7 @@ export default function DashboardPage() {
               fixture={gameState?.userFixtureToday ?? nextFixture!}
               userTeamId={team?.id ?? null}
               isToday={!!gameState?.userFixtureToday}
-              onQuickSim={handleQuickSim}
-              onPlayMatch={(id) => setMatchSimFixtureId(id)}
-              simming={simming}
+              onPlayMatch={(id, type) => setMatchSimData({ id, type })}
             />
           ) : (
             <div className="p-6 rounded-2xl border border-white/[0.07] flex flex-col items-center justify-center text-center gap-3"
@@ -823,7 +752,7 @@ export default function DashboardPage() {
                 return (
                   <div key={f.id}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer group"
-                    onClick={() => setSummaryFixtureId(f.id)}
+                    onClick={() => setSummaryData({ id: f.id, type: f.is_cup ? 'cup' : f.is_playoff ? 'playoff' : 'regular' })}
                     title="Click to view match summary"
                   >
                     <TeamLogo teamId={oppTeamId} size={28} />
@@ -847,21 +776,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {matchSimFixtureId && (
+      {matchSimData && (
         <MatchSimModal
-          fixtureId={matchSimFixtureId}
-          onClose={() => setMatchSimFixtureId(null)}
+          fixtureId={matchSimData.id}
+          fixtureType={matchSimData.type}
+          onClose={() => setMatchSimData(null)}
           onMatchComplete={async () => {
             await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates()]);
           }}
         />
       )}
 
-      {summaryFixtureId && (
+      {summaryData && (
         <GameSummaryModal
-          fixtureId={summaryFixtureId}
+          fixtureId={summaryData.id}
+          fixtureType={summaryData.type}
           perspectiveTeamId={team?.id}
-          onClose={() => setSummaryFixtureId(null)}
+          onClose={() => setSummaryData(null)}
         />
       )}
     </div>
@@ -871,14 +802,12 @@ export default function DashboardPage() {
 // ─── Next Match Card ──────────────────────────────────────────────────────────
 
 function NextMatchCard({
-  fixture, userTeamId, isToday, onQuickSim, onPlayMatch, simming,
+  fixture, userTeamId, isToday, onPlayMatch,
 }: {
   fixture: Fixture;
   userTeamId: number | null;
   isToday: boolean;
-  onQuickSim: (id: number) => void;
-  onPlayMatch: (id: number) => void;
-  simming: boolean;
+  onPlayMatch: (id: number, type: 'regular' | 'playoff' | 'cup') => void;
 }) {
   const userIsHome = fixture.home_team_id === userTeamId;
   const userTeamName = userIsHome ? fixture.home_team_name : fixture.away_team_name;
@@ -963,46 +892,14 @@ function NextMatchCard({
         {/* Actions — only on match day */}
         {isToday && (
           <div className="flex gap-2">
-            {fixture.is_playoff ? (
-              <>
-                <a href="/playoffs"
+                <button
+                  onClick={() => onPlayMatch(fixture.id, fixture.is_cup ? 'cup' : fixture.is_playoff ? 'playoff' : 'regular')}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
                     bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
                     transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
                   <Play size={11} fill="currentColor" />
-                  Play Playoff Game
-                </a>
-                <button
-                  onClick={() => onQuickSim(fixture.id)}
-                  disabled={simming}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
-                    bg-white/[0.05] border border-white/[0.08] text-slate-300 hover:bg-white/10 hover:text-white
-                    transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {simming ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
-                  Quick Sim
+                  {fixture.is_cup ? 'Play Cup Game' : fixture.is_playoff ? 'Play Playoff Game' : 'Play Match'}
                 </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => onPlayMatch(fixture.id)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
-                    bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
-                    transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
-                  <Play size={11} fill="currentColor" />
-                  Play Match
-                </button>
-                <button
-                  onClick={() => onQuickSim(fixture.id)}
-                  disabled={simming}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
-                    bg-white/[0.05] border border-white/[0.08] text-slate-300 hover:bg-white/10 hover:text-white
-                    transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {simming ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
-                  Quick Sim
-                </button>
-              </>
-            )}
           </div>
         )}
       </div>

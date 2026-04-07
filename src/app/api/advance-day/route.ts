@@ -29,9 +29,9 @@ export async function POST() {
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
 
-  // Block on Jul 31: league block ends and cup block begins. User must press
-  // "Proceed to Cup Block" to advance to Aug 1.
-  if (state.current_date.endsWith('-07-31')) {
+  // Block on Jun 30: league block ends and cup block begins. User must press
+  // "Proceed to Cup Block" to advance to Jul 1.
+  if (state.current_date.endsWith('-06-30') || state.current_date.endsWith('-07-31')) {
     return NextResponse.json(
       { error: 'season_gate', message: 'The league block has ended. Use the "Proceed to Cup Block" button to continue.' },
       { status: 409 },

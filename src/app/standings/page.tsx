@@ -128,12 +128,16 @@ export default function StandingsPage() {
         );
     }
 
-    function StandingsTable({ conferenceTeams, title }: { conferenceTeams: Team[]; title: string }) {
+    function StandingsTable({ conferenceTeams, title, accentColor = "amber" }: { conferenceTeams: Team[]; title: string; accentColor?: string }) {
         const total = conferenceTeams.length;
         return (
             <div>
                 <div className="flex items-center gap-3 mb-3">
-                    <h2 className="text-base font-bold text-white uppercase tracking-widest">{title}</h2>
+                    <h2 className={`text-base font-bold text-white uppercase tracking-widest border-l-4 pl-3 ${
+                        accentColor === 'sky' ? 'border-sky-500' :
+                        accentColor === 'violet' ? 'border-violet-500' :
+                        'border-amber-500'
+                    }`}>{title}</h2>
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold bg-white/5 px-2 py-0.5 rounded-full border border-white/5">{total} teams</span>
                 </div>
                 <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800/60 border border-white/10 overflow-x-auto shadow-xl">
@@ -164,7 +168,9 @@ export default function StandingsPage() {
                             <div key={team.id} className={idx < total - 1 ? 'border-b border-white/[0.04]' : ''}>
                                 <div
                                     className={`grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-4 items-center cursor-pointer transition-all min-w-fit border-l-2 ${borderColor} ${
-                                        isUserTeam ? 'bg-amber-500/[0.08] hover:bg-amber-500/[0.13]' : 'hover:bg-white/[0.04]'
+                                        isUserTeam 
+                                            ? (accentColor === 'sky' ? 'bg-sky-500/[0.08] hover:bg-sky-500/[0.13]' : accentColor === 'violet' ? 'bg-violet-500/[0.08] hover:bg-violet-500/[0.13]' : 'bg-amber-500/[0.08] hover:bg-amber-500/[0.13]') 
+                                            : 'hover:bg-white/[0.04]'
                                     }`}
                                     onClick={() => setSelectedTeam({ ...team, rank: idx + 1 })}
                                 >
@@ -290,9 +296,9 @@ export default function StandingsPage() {
                                     {/* Standings table(s) */}
                                     <div className="p-4 pt-3">
                                         {hasTwoConf && showConference ? (
-                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                                <StandingsTable conferenceTeams={northTeams} title="North Conference" />
-                                                <StandingsTable conferenceTeams={southTeams} title="South Conference" />
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                                <StandingsTable conferenceTeams={northTeams} title="North Conference" accentColor="sky" />
+                                                <StandingsTable conferenceTeams={southTeams} title="South Conference" accentColor="violet" />
                                             </div>
                                         ) : (
                                             <StandingsTable

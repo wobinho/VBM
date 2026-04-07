@@ -21,6 +21,7 @@ interface FixtureSummary {
 
 interface Props {
     fixtureId: number;
+    fixtureType?: 'regular' | 'playoff' | 'cup';
     /** Optional: if provided, highlights this team's perspective */
     perspectiveTeamId?: number;
     onClose: () => void;
@@ -42,21 +43,22 @@ function fmtDate(iso: string) {
     return `${MONTHS[parseInt(m) - 1]} ${parseInt(d)}, ${y}`;
 }
 
-export default function GameSummaryModal({ fixtureId, perspectiveTeamId, onClose }: Props) {
+export default function GameSummaryModal({ fixtureId, fixtureType = 'regular', perspectiveTeamId, onClose }: Props) {
     const [fixture, setFixture] = useState<FixtureSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         setLoading(true);
-        fetch(`/api/fixtures/${fixtureId}`)
+        const typeParam = fixtureType !== 'regular' ? `?type=${fixtureType}` : '';
+        fetch(`/api/fixtures/${fixtureId}${typeParam}`)
             .then(r => r.json())
             .then(data => {
                 if (data.error) { setError(data.error); } else { setFixture(data); }
                 setLoading(false);
             })
             .catch(() => { setError('Failed to load match data.'); setLoading(false); });
-    }, [fixtureId]);
+    }, [fixtureId, fixtureType]);
 
     const homeSets  = fixture?.home_sets  ?? 0;
     const awaySets  = fixture?.away_sets  ?? 0;

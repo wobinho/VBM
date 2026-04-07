@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const { getDb } = await import('@/lib/db');
   const db = getDb();
 
-  const { targetDate } = await req.json() as { targetDate: string };
+  let { targetDate } = await req.json() as { targetDate: string };
   if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
     return NextResponse.json({ error: 'Invalid targetDate' }, { status: 400 });
   }
@@ -30,69 +30,85 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Target date must be after the current date' }, { status: 400 });
   }
 
+  // ── Gate Enforcement ───────────────────────────────────────────────────────
+  // Ensure simulation doesn't skip Jun 30 or Dec 31 boundaries.
+  const year = state.current_date.slice(0, 4);
+  const nextJun30 = `${year}-06-30`;
+  const nextDec31 = `${year}-12-31`;
+
+  if (state.current_date < nextJun30 && targetDate > nextJun30) {
+    targetDate = nextJun30;
+  } else if (state.current_date < nextDec31 && targetDate > nextDec31) {
+    targetDate = nextDec31;
+  }
+
   const summary: { date: string; simulated: number }[] = [];
 
   let cursor = new Date(state.current_date);
   const end   = new Date(targetDate);
 
-  while (cursor <= end) {
-    const dateStr = cursor.toISOString().slice(0, 10);
+  const execute = db.transaction(() => {
+    while (cursor <= end) {
+      const dateStr = cursor.toISOString().slice(0, 10);
 
-    // ── Simulate regular season fixtures ───────────────────────────────────────
-    const fixtures = getFixtures({ date: dateStr, status: 'scheduled' });
-    let daySimulated = 0;
+      // ── Simulate regular season fixtures ───────────────────────────────────────
+      const fixtures = getFixtures({ date: dateStr, status: 'scheduled' });
+      let daySimulated = 0;
 
-    if (fixtures.length > 0) {
-      for (const f of fixtures) {
-        const homeLu = buildLineup(f.home_team_id);
-        const awayLu = buildLineup(f.away_team_id);
-        const result = runFullMatch(homeLu, awayLu);
-        updateFixtureResult(f.id, {
-          home_sets:   result.homeSets,
-          away_sets:   result.awaySets,
-          home_points: result.homeTotalPoints,
-          away_points: result.awayTotalPoints,
-        });
-        updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
-        daySimulated++;
+      if (fixtures.length > 0) {
+        for (const f of fixtures) {
+          const homeLu = buildLineup(f.home_team_id);
+          const awayLu = buildLineup(f.away_team_id);
+          const result = runFullMatch(homeLu, awayLu);
+          updateFixtureResult(f.id, {
+            home_sets:   result.homeSets,
+            away_sets:   result.awaySets,
+            home_points: result.homeTotalPoints,
+            away_points: result.awayTotalPoints,
+          });
+          updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+          daySimulated++;
+        }
       }
-    }
 
-    // ── Simulate playoff games ────────────────────────────────────────────────
-    const playoffGames = getPlayoffGamesByDate(dateStr);
-    if (playoffGames.length > 0) {
-      for (const pg of playoffGames) {
-        if (pg.status === 'completed') continue;
+      // ── Simulate playoff games ────────────────────────────────────────────────
+      const playoffGames = getPlayoffGamesByDate(dateStr);
+      if (playoffGames.length > 0) {
+        for (const pg of playoffGames) {
+          if (pg.status === 'completed') continue;
 
-        const homeLu = buildLineup(pg.home_team_id);
-        const awayLu = buildLineup(pg.away_team_id);
-        const result = runFullMatch(homeLu, awayLu);
+          const homeLu = buildLineup(pg.home_team_id);
+          const awayLu = buildLineup(pg.away_team_id);
+          const result = runFullMatch(homeLu, awayLu);
 
-        recordPlayoffGameResult(pg.id, {
-          home_sets:   result.homeSets,
-          away_sets:   result.awaySets,
-          home_points: result.homeTotalPoints,
-          away_points: result.awayTotalPoints,
-        });
-        daySimulated++;
+          recordPlayoffGameResult(pg.id, {
+            home_sets:   result.homeSets,
+            away_sets:   result.awaySets,
+            home_points: result.homeTotalPoints,
+            away_points: result.awayTotalPoints,
+          });
+          daySimulated++;
+        }
       }
+
+      if (daySimulated > 0) {
+        summary.push({ date: dateStr, simulated: daySimulated });
+      }
+
+      // Monthly economy on the 1st
+      if (dateStr.endsWith('-01')) {
+        const month = dateStr.slice(0, 7);
+        const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
+        for (const t of allTeams) runMonthlyEconomy(t.id, month);
+      }
+
+      cursor.setDate(cursor.getDate() + 1);
     }
 
-    if (daySimulated > 0) {
-      summary.push({ date: dateStr, simulated: daySimulated });
-    }
+    advanceGameDate(targetDate);
+  });
 
-    // Monthly economy on the 1st
-    if (dateStr.endsWith('-01')) {
-      const month = dateStr.slice(0, 7);
-      const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
-      for (const t of allTeams) runMonthlyEconomy(t.id, month);
-    }
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  advanceGameDate(targetDate);
+  execute();
 
   return NextResponse.json({ ok: true, targetDate, days: summary });
 }

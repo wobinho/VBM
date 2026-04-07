@@ -119,6 +119,19 @@ export function getDb(): Database.Database {
       'Firenze Lilies','Firenze Lillies','Perugia Griffins','Salerno Marittimo','Pisa Towers'
     )`);
 
+    // Migration: ensure leagues table has new columns (tier, created_at, updated_at)
+    const leagueCols = db.prepare("PRAGMA table_info(leagues)").all() as { name: string }[];
+    const leagueColNames = leagueCols.map(c => c.name);
+    if (!leagueColNames.includes('tier')) {
+      db.exec("ALTER TABLE leagues ADD COLUMN tier INTEGER DEFAULT 2");
+    }
+    if (!leagueColNames.includes('created_at')) {
+      db.exec("ALTER TABLE leagues ADD COLUMN created_at TEXT");
+    }
+    if (!leagueColNames.includes('updated_at')) {
+      db.exec("ALTER TABLE leagues ADD COLUMN updated_at TEXT");
+    }
+
     // Migration: playoff_series and playoff_games tables
     const playoffSeriesCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='playoff_series'"
@@ -265,6 +278,16 @@ export function getDb(): Database.Database {
       `);
       seedLeagueConfigs(db);
     }
+
+    // Ensure league_configs are seeded if they exist but are empty
+    const emptyConfigs = db.prepare("SELECT COUNT(*) as c FROM league_configs").get() as { c: number };
+    if (emptyConfigs.c === 0) {
+      seedLeagueConfigs(db);
+    }
+
+    // Always ensure tiers are correct for Italian leagues
+    db.exec(`UPDATE leagues SET tier = 2 WHERE league_name = 'IVL Premier Division'`);
+    db.exec(`UPDATE leagues SET tier = 3 WHERE league_name IN ('IVL North', 'IVL South')`);
 
     // Ensure league_presets table exists if league_configs already did (migration for existing DBs)
     const presetsCheck = db.prepare(

@@ -473,6 +473,8 @@ export interface Fixture {
   home_team_name?: string;
   away_team_name?: string;
   season_name?: string;
+  is_playoff?: boolean;
+  is_cup?: boolean;
 }
 
 const FIXTURE_JOIN = `
@@ -1230,7 +1232,7 @@ export function getPlayoffBracket(seasonId: number): PlayoffBracket {
 /**
  * Generate Round 1 playoff series + all 5 potential game slots for the active
  * Premier Division season. Called automatically when the last regular-season
- * fixture date passes (Aug 31).
+ * fixture date passes (Jun 30).
  */
 export function generatePlayoffs(seasonId: number): { seriesCreated: number; gamesScheduled: number } {
   return generatePostSeason(seasonId);
@@ -1452,9 +1454,88 @@ export function recordPlayoffGameResult(
 
 /**
  * Check whether the regular season (league_id=1) is fully complete — i.e., all
- * fixtures on or before Aug 31 have been played — and playoffs haven't started yet.
+ * fixtures on or before Jun 30 have been played — and playoffs haven't started yet.
  * Used by advance-day to auto-trigger playoff generation.
  */
 export function shouldGeneratePlayoffs(seasonId: number): boolean {
   return shouldGeneratePostSeason(seasonId);
+}
+
+// ==================== CUPS ====================
+
+export interface CupGame {
+  id: number;
+  cup_id: number;
+  round_id: number;
+  group_id: number | null;
+  home_team_id: number;
+  away_team_id: number;
+  scheduled_date: string;
+  status: string;
+  home_sets: number | null;
+  away_sets: number | null;
+  home_points: number | null;
+  away_points: number | null;
+  winner_team_id: number | null;
+  played_at: string | null;
+  created_at: string;
+  // Joined
+  home_team_name?: string;
+  away_team_name?: string;
+  cup_name?: string;
+}
+
+const CUP_FIXTURE_JOIN = `
+  SELECT cf.*,
+    ht.team_name AS home_team_name,
+    at.team_name AS away_team_name,
+    cc.name AS cup_name
+  FROM cup_fixtures cf
+  JOIN teams ht ON cf.home_team_id = ht.id
+  JOIN teams at ON cf.away_team_id = at.id
+  JOIN cup_competitions cc ON cf.cup_id = cc.id
+`;
+
+export function getCupGamesByTeam(teamId: number): CupGame[] {
+  return getDb().prepare(`
+    ${CUP_FIXTURE_JOIN}
+    WHERE cf.home_team_id = ? OR cf.away_team_id = ?
+    ORDER BY cf.scheduled_date ASC
+  `).all(teamId, teamId) as CupGame[];
+}
+
+export function getCupGamesByDate(date: string): CupGame[] {
+  return getDb().prepare(`
+    ${CUP_FIXTURE_JOIN}
+    WHERE cf.scheduled_date = ?
+    ORDER BY cf.id ASC
+  `).all(date) as CupGame[];
+}
+
+export function getCupGameDatesForYear(year: number): string[] {
+  const rows = getDb().prepare(`
+    SELECT DISTINCT cf.scheduled_date
+    FROM cup_fixtures cf
+    JOIN cup_competitions cc ON cf.cup_id = cc.id
+    WHERE cc.year = ?
+    ORDER BY cf.scheduled_date ASC
+  `).all(year) as { scheduled_date: string } [];
+  return rows.map(r => r.scheduled_date);
+}
+
+export function getCupFixtureById(fixtureId: number): CupGame | undefined {
+  const CUP_FIXTURE_JOIN_INNER = `
+    SELECT cf.*,
+      ht.team_name AS home_team_name,
+      at.team_name AS away_team_name,
+      cc.name AS cup_name
+    FROM cup_fixtures cf
+    JOIN teams ht ON cf.home_team_id = ht.id
+    JOIN teams at ON cf.away_team_id = at.id
+    JOIN cup_competitions cc ON cf.cup_id = cc.id
+  `;
+  return getDb().prepare(`
+    ${CUP_FIXTURE_JOIN_INNER}
+    WHERE cf.id = ?
+  `).get(fixtureId) as CupGame | undefined;
 }

@@ -12,6 +12,7 @@ const navItems = [
     { href: '/office', label: 'Office', icon: Briefcase, adminOnly: false },
     { href: '/standings', label: 'Standings', icon: ListOrdered, adminOnly: false },
     { href: '/playoffs', label: 'Playoffs', icon: Trophy, adminOnly: false },
+    { href: '/cups', label: 'Cups', icon: Shield, adminOnly: false },
     { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart, adminOnly: false },
     { href: '/match', label: 'Match Simulation', icon: Swords, adminOnly: true },
     { href: '/admin', label: 'Database Admin', icon: Database, adminOnly: true },

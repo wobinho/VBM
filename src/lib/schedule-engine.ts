@@ -29,7 +29,7 @@
  *   Round 2 starts once ALL Round 1 series are complete (next round generated dynamically).
  *   Round 3 starts once ALL Round 2 series are complete (next round generated dynamically).
  *
- * Cup Block (Aug 1 – Dec 31):
+ * Cup Block (Jul 1 – Dec 31):
  *   - Mondays: National Cups (single-elimination or group-knockout)
  *   - Wednesdays: Champions League-type cups (group-knockout to knockout)
  *   - Fridays: Secondary cups (single-elimination)
@@ -332,22 +332,22 @@ export function getPlayoffRoundStartDates(year: number): { round1: string; round
 }
 
 /**
- * Get all matchdays for a cup competition in a given year (Aug 1 – Dec 31).
- * Each cup type has a fixed day-of-week slot:
- *   'national' → Mondays
- *   'cl'       → Wednesdays
- *   'secondary' → Fridays
+ * Get all matchdays for a cup competition in a given year (Jul 1 – Jul 31).
+ * Cup matchdays are pooled Mon/Wed/Fri in July to fit the tournament.
  *
  * @param year - the season calendar year
- * @param cupType - the cup type ('national', 'cl', or 'secondary')
- * @returns array of YYYY-MM-DD strings for all game dates in the cup block
+ * @param _type - cup type (unused)
+ * @returns array of YYYY-MM-DD strings for game dates in July
  */
-export function getCupMatchdays(year: number, cupType: 'national' | 'cl' | 'secondary'): string[] {
-  const cupStart = new Date(year, 7, 1);  // Aug 1
-  const cupEnd   = new Date(year, 11, 31); // Dec 31
+export function getCupMatchdays(year: number, _type: 'national' | 'cl' | 'secondary'): string[] {
+  const cupStart = new Date(year, 6, 1);  // Jul 1
+  const cupEnd   = new Date(year, 6, 31); // Jul 31
 
-  const weekday = cupType === 'national' ? 1 : cupType === 'cl' ? 3 : 5;
-  return getDatesForWeekday(cupStart, cupEnd, weekday);
+  const mondays    = getDatesForWeekday(cupStart, cupEnd, 1);
+  const wednesdays = getDatesForWeekday(cupStart, cupEnd, 3);
+  const fridays    = getDatesForWeekday(cupStart, cupEnd, 5);
+
+  return [...mondays, ...wednesdays, ...fridays].sort();
 }
 
 /**
@@ -366,27 +366,17 @@ export function getCupMatchdays(year: number, cupType: 'national' | 'cl' | 'seco
  *   Game 5: +11 (Wednesday, +2 from Monday)
  */
 export function getPlayoffRoundDates(year: number, round: 1 | 2 | 3): string[] {
-  // Round 1 anchor: first Monday (day 1) on or after May 1
-  const may1 = new Date(year, 4, 1);
-  while (may1.getDay() !== 1) may1.setDate(may1.getDate() + 1);
-  const round1Mon = new Date(may1);
+  // Playoff block: May 1 – Jun 30
+  const start = new Date(year, 4, 1);
+  const end   = new Date(year, 5, 30);
 
-  // Round 2 anchor: Monday, 18 days after Round 1's game-1 Monday
-  const round2Mon = new Date(round1Mon);
-  round2Mon.setDate(round1Mon.getDate() + 18);
+  const mondays    = getDatesForWeekday(start, end, 1);
+  const wednesdays = getDatesForWeekday(start, end, 3);
+  const fridays    = getDatesForWeekday(start, end, 5);
 
-  // Round 3 anchor: Monday, 18 days after Round 2's game-1 Monday
-  const round3Mon = new Date(round2Mon);
-  round3Mon.setDate(round2Mon.getDate() + 18);
+  const all = [...mondays, ...wednesdays, ...fridays].sort();
 
-  const anchor = round === 1 ? round1Mon : round === 2 ? round2Mon : round3Mon;
-
-  // All anchors are Monday, so offsets are the same for all rounds
-  const offsets = [0, 2, 4, 9, 11];
-
-  return offsets.map(offset => {
-    const d = new Date(anchor);
-    d.setDate(anchor.getDate() + offset);
-    return toLocalDateString(d);
-  });
+  // Each round gets a 5-matchday block (best-of-5 series)
+  const startIdx = (round - 1) * 6; // giving 6 slots per round for buffer
+  return all.slice(startIdx, startIdx + 5);
 }

@@ -10,6 +10,7 @@ import {
   getPlayoffGamesByDate, PlayoffGame, Fixture,
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { getCupFixturesByDate } from '@/lib/cup-engine';
 
 /** GET /api/game-state — return current game date, season, upcoming fixtures */
 export async function GET() {
@@ -145,8 +146,34 @@ function playoffGameAsFixture(pg: PlayoffGame): Fixture & { is_playoff: true; pl
     away_team_name: pg.away_team_name,
     season_name: 'Playoffs',
     is_playoff: true,
+    is_cup: false,
     playoff_game_id: pg.id,
   };
+}
+
+function cupFixtureAsFixture(cf: any): Fixture & { is_playoff: true; cup_game_id: number } {
+  return {
+    id: cf.id,
+    season_id: 0,
+    league_id: 1,
+    home_team_id: cf.home_team_id,
+    away_team_id: cf.away_team_id,
+    game_week: 0,
+    scheduled_date: cf.scheduled_date,
+    status: cf.status,
+    home_sets: null,
+    away_sets: null,
+    home_points: null,
+    away_points: null,
+    played_at: null,
+    created_at: '',
+    home_team_name: cf.home_team_name,
+    away_team_name: cf.away_team_name,
+    season_name: cf.cup_name ?? 'Cup',
+    is_playoff: false, // For simulation logic, it's not a league playoff
+    is_cup: true,
+    cup_game_id: cf.id,
+  } as any;
 }
 
 function buildLineup(teamId: number): SimLineup {
@@ -202,10 +229,19 @@ async function buildStatePayload(
       // Check if the user has a playoff game today
       const todayPlayoffGames = getPlayoffGamesByDate(state.current_date);
       const userPlayoffGame = todayPlayoffGames.find(
-        pg => pg.home_team_id === userTeamId || pg.away_team_id === userTeamId
+        pg => (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId) && pg.status === 'scheduled'
       ) ?? null;
       if (userPlayoffGame) {
         userFixtureToday = playoffGameAsFixture(userPlayoffGame);
+      } else {
+        // Also check for cup fixtures
+        const todayCupFixtures = getCupFixturesByDate(state.current_date);
+        const userCupFixture = todayCupFixtures.find(
+          cf => (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId) && cf.status === 'scheduled'
+        ) ?? null;
+        if (userCupFixture) {
+          userFixtureToday = cupFixtureAsFixture(userCupFixture);
+        }
       }
     }
   }
