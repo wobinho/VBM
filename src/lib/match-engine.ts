@@ -260,19 +260,18 @@ export function computeNextPoint(state: MatchSimState, homeStr: TeamStrengths, a
     else { homeStreak = homeStreak <= 0 ? homeStreak - 1 : -1; awayScore++; if (isHomeServing) servingTeam = 'away'; }
     const newStats: MatchStats = { home: { ...state.matchStats.home, players: { ...state.matchStats.home.players } }, away: { ...state.matchStats.away, players: { ...state.matchStats.away.players } } };
     const scoringSide = scoredBy, losingSide: 'home' | 'away' = scoredBy === 'home' ? 'away' : 'home';
-    const scoringTeamStats = newStats[scoringSide];
-    scoringTeamStats.totalPoints++;
+    const losingTeamStats = newStats[losingSide];
     const sTeam: 'home' | 'away' = isHomeServing ? 'home' : 'away';
     const rTeam: 'home' | 'away' = isHomeServing ? 'away' : 'home';
-    if (eventType === 'ace' && result.serverRef) { const p = ensurePlayer(newStats[sTeam], result.serverRef); p.aces++; p.points++; newStats[sTeam].aces++; }
-    if (eventType === 'serve_error' && result.serverRef) { const p = ensurePlayer(newStats[sTeam], result.serverRef); p.serveErrors++; newStats[sTeam].serveErrors++; }
-    if (eventType === 'spike' && result.attackerRef) { const p = ensurePlayer(newStats[sTeam], result.attackerRef); p.spikes++; p.points++; newStats[sTeam].spikes++; }
-    if (eventType === 'block' && result.blockerRef) { const p = ensurePlayer(newStats[rTeam], result.blockerRef); p.blocks++; p.points++; newStats[rTeam].blocks++; }
+    if (eventType === 'ace' && result.serverRef) { const p = ensurePlayer(newStats[sTeam], result.serverRef); p.aces++; p.points++; newStats[sTeam].aces++; newStats[sTeam].totalPoints++; }
+    if (eventType === 'serve_error' && result.serverRef) { const p = ensurePlayer(newStats[sTeam], result.serverRef); p.serveErrors++; newStats[sTeam].serveErrors++; newStats[rTeam].totalPoints++; }
+    if (eventType === 'spike' && result.attackerRef) { const p = ensurePlayer(newStats[sTeam], result.attackerRef); p.spikes++; p.points++; newStats[sTeam].spikes++; newStats[sTeam].totalPoints++; }
+    if (eventType === 'block' && result.blockerRef) { const p = ensurePlayer(newStats[rTeam], result.blockerRef); p.blocks++; p.points++; newStats[rTeam].blocks++; newStats[rTeam].totalPoints++; }
     if (eventType === 'dig_winner') {
         if (result.diggerRef) { const dp = ensurePlayer(newStats[rTeam], result.diggerRef); dp.digs++; newStats[rTeam].digs++; }
-        if (result.attackerRef) { const ap = ensurePlayer(newStats[rTeam], result.attackerRef); ap.spikes++; ap.points++; newStats[rTeam].spikes++; }
+        if (result.attackerRef) { const ap = ensurePlayer(newStats[rTeam], result.attackerRef); ap.spikes++; ap.points++; newStats[rTeam].spikes++; newStats[rTeam].totalPoints++; }
     }
-    if (eventType === 'attack_error' && result.attackerRef) { const p = ensurePlayer(newStats[sTeam], result.attackerRef); p.attackErrors++; newStats[sTeam].attackErrors++; }
+    if (eventType === 'attack_error' && result.attackerRef) { const p = ensurePlayer(newStats[sTeam], result.attackerRef); p.attackErrors++; newStats[sTeam].attackErrors++; newStats[rTeam].totalPoints++; }
     const target = setTarget(state.currentSet);
     const setOver = (homeScore >= target || awayScore >= target) && Math.abs(homeScore - awayScore) >= 2;
     const entry: PointLogEntry = { text, scoredBy, homeTotal: homeScore, awayTotal: awayScore, players, teams, eventType };

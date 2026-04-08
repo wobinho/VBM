@@ -566,10 +566,7 @@ function computeNextPoint(
 
     const scoringSide = scoredBy;
     const losingSide: 'home' | 'away' = scoredBy === 'home' ? 'away' : 'home';
-    const scoringTeamStats = newStats[scoringSide];
     const losingTeamStats  = newStats[losingSide];
-
-    scoringTeamStats.totalPoints++;
 
     // Attribute stats based on event + which team scored
     const sTeam: 'home' | 'away' = isHomeServing ? 'home' : 'away';
@@ -579,21 +576,25 @@ function computeNextPoint(
         const p = ensurePlayer(newStats[sTeam], result.serverRef);
         p.aces++; p.points++;
         newStats[sTeam].aces++;
+        newStats[sTeam].totalPoints++;
     }
     if (eventType === 'serve_error' && result.serverRef) {
         const p = ensurePlayer(newStats[sTeam], result.serverRef);
         p.serveErrors++;
         newStats[sTeam].serveErrors++;
+        newStats[rTeam].totalPoints++;
     }
     if (eventType === 'spike' && result.attackerRef) {
         const p = ensurePlayer(newStats[sTeam], result.attackerRef);
         p.spikes++; p.points++;
         newStats[sTeam].spikes++;
+        newStats[sTeam].totalPoints++;
     }
     if (eventType === 'block' && result.blockerRef) {
         const p = ensurePlayer(newStats[rTeam], result.blockerRef);
         p.blocks++; p.points++;
         newStats[rTeam].blocks++;
+        newStats[rTeam].totalPoints++;
     }
     if (eventType === 'dig_winner') {
         // dig_winner means the defensive team won the rally, but the point goes to their
@@ -604,6 +605,7 @@ function computeNextPoint(
         const p = ensurePlayer(newStats[sTeam], result.attackerRef);
         p.attackErrors++;
         newStats[sTeam].attackErrors++;
+        newStats[rTeam].totalPoints++;
     }
 
     const target  = setTarget(state.currentSet);

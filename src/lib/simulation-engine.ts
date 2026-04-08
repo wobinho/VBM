@@ -337,10 +337,9 @@ function simulateSet(
         statAcc.set(scorer.id, { teamId: scorerTeamId, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 });
       }
       const s = statAcc.get(scorer.id)!;
-      s.points++;
-      if (eventType === 'ace') s.aces++;
-      else if (eventType === 'spike' || eventType === 'rally') s.spikes++;
-      else if (eventType === 'block') s.blocks++;
+      if (eventType === 'ace') { s.aces++; s.points++; }
+      else if (eventType === 'spike' || eventType === 'rally') { s.spikes++; s.points++; }
+      else if (eventType === 'block') { s.blocks++; s.points++; }
       else if (eventType === 'dig_winner') s.digs++;
     }
 
