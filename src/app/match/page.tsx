@@ -596,16 +596,9 @@ function computeNextPoint(
         newStats[rTeam].blocks++;
     }
     if (eventType === 'dig_winner') {
-        if (result.diggerRef) {
-            const dp = ensurePlayer(newStats[rTeam], result.diggerRef);
-            dp.digs++;
-            newStats[rTeam].digs++;
-        }
-        if (result.attackerRef) {
-            const ap = ensurePlayer(newStats[rTeam], result.attackerRef);
-            ap.spikes++; ap.points++;
-            newStats[rTeam].spikes++;
-        }
+        // dig_winner means the defensive team won the rally, but the point goes to their
+        // next attacker (who will spike it), not to the digger or the original attacker
+        // We don't track stats here as the next rally will credit the actual spike/block/ace
     }
     if (eventType === 'attack_error' && result.attackerRef) {
         const p = ensurePlayer(newStats[sTeam], result.attackerRef);
@@ -731,9 +724,10 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
 
     const overviewRows = [
         { label: 'Points',        icon: Star,      home: h.totalPoints,  away: a.totalPoints  },
-        { label: 'Aces',          icon: Zap,       home: h.aces,         away: a.aces         },
-        { label: 'Blocks',        icon: Shield,    home: h.blocks,       away: a.blocks       },
         { label: 'Spikes',        icon: Target,    home: h.spikes,       away: a.spikes       },
+        { label: 'Blocks',        icon: Shield,    home: h.blocks,       away: a.blocks       },
+        { label: 'Aces',          icon: Zap,       home: h.aces,         away: a.aces         },
+        { label: 'Opponent Errors', icon: TrendingUp, home: h.serveErrors + h.attackErrors, away: a.serveErrors + a.attackErrors },
     ];
 
     const renderPlayerTable = (teamStats: TeamMatchStats, side: 'home' | 'away') => {
@@ -751,9 +745,10 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                             <th className="text-left py-2 pl-1 font-semibold">Player</th>
                             <th className="text-center py-2 px-1 font-semibold w-8">Pos</th>
                             <th className={`text-right py-2 px-2 font-semibold w-10 ${accent}`}>PTS</th>
-                            <th className="text-right py-2 px-2 font-semibold w-9 text-sky-500">ACE</th>
+                            <th className="text-right py-2 px-2 font-semibold w-9 text-sky-500">SPK</th>
                             <th className="text-right py-2 px-2 font-semibold w-9 text-violet-500">BLK</th>
-                            <th className="text-right py-2 px-2 font-semibold w-9 text-emerald-500">ATK</th>
+                            <th className="text-right py-2 px-2 font-semibold w-9 text-emerald-500">ACE</th>
+                            <th className="text-right py-2 px-2 font-semibold w-9 text-orange-500">ERR</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.04]">
@@ -777,9 +772,10 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                                     <td className={`text-right py-2.5 px-2 font-black tabular-nums ${idx === 0 ? accent : 'text-gray-300'}`}>
                                         {p.points}
                                     </td>
-                                    <td className="text-right py-2.5 px-2 tabular-nums text-sky-400/80">{p.aces || '–'}</td>
+                                    <td className="text-right py-2.5 px-2 tabular-nums text-sky-400/80">{p.spikes || '–'}</td>
                                     <td className="text-right py-2.5 px-2 tabular-nums text-violet-400/80">{p.blocks || '–'}</td>
-                                    <td className="text-right py-2.5 px-2 tabular-nums text-emerald-400/80">{p.spikes || '–'}</td>
+                                    <td className="text-right py-2.5 px-2 tabular-nums text-emerald-400/80">{p.aces || '–'}</td>
+                                    <td className="text-right py-2.5 pr-1 tabular-nums text-orange-400/80">{(p.serveErrors + p.attackErrors) || '–'}</td>
                                 </tr>
                             );
                         })}
