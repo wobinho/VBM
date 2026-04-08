@@ -63,12 +63,23 @@ export interface TeamStrengths {
   overall: number;
 }
 
+export interface PlayerStatLine {
+  playerId: number;
+  teamId: number;
+  points: number;
+  spikes: number;
+  blocks: number;
+  aces: number;
+  digs: number;
+}
+
 export interface MatchResult {
   homeSets: number;
   awaySets: number;
   homeTotalPoints: number;
   awayTotalPoints: number;
   winner: 'home' | 'away';
+  playerStats?: PlayerStatLine[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -170,6 +181,12 @@ function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer 
 
 // ─── Rally resolver ───────────────────────────────────────────────────────────
 
+interface RallyEvent {
+  servingWins: boolean;
+  scorer: SimPlayer | null;
+  eventType: 'ace' | 'serve_error' | 'spike' | 'block' | 'dig_winner' | 'rally';
+}
+
 function simulateRally(
   sStr: TeamStrengths,
   rStr: TeamStrengths,
@@ -179,7 +196,7 @@ function simulateRally(
   sChem: number,
   rChem: number,
   isHomeServing: boolean,
-): boolean /* servingTeamWins */ {
+): RallyEvent {
   const rng = Math.random;
 
   const server   = pickServer(sLu);
@@ -197,14 +214,14 @@ function simulateRally(
 
   // Ace
   const aceProb = Math.max(0.03, Math.min(0.12, 0.06 + servePressure * 0.08 + sMomBonus / 600));
-  if (rng() < aceProb) return true;
+  if (rng() < aceProb) return { servingWins: true, scorer: server, eventType: 'ace' };
 
   // Serve error
   const serverConsistency = server ? (server.consistency * 0.5 + server.technique * 0.5) : 50;
   const errProb = Math.max(0.05, Math.min(0.11,
     0.08 - (serveStat - 50) / 1200 - (serverConsistency - 50) / 2000 - sMomBonus / 700,
   ));
-  if (rng() < errProb) return false;
+  if (rng() < errProb) return { servingWins: false, scorer: receiver, eventType: 'serve_error' };
 
   const setter  = sLu.S;
   const setStat = setter ? setter.setting * 0.5 + setter.playmaking * 0.3 + setter.vision * 0.2 : 50;
@@ -247,16 +264,16 @@ function simulateRally(
 
   // Block
   const blockChance = Math.max(0, (blkQ - atkQ + 15) / 120);
-  if (rng() < Math.min(0.22, blockChance)) return false;
+  if (rng() < Math.min(0.22, blockChance)) return { servingWins: false, scorer: blocker, eventType: 'block' };
 
   // Attack error
-  if (atkQ < digQ - 18 && rng() < 0.30) return false;
+  if (atkQ < digQ - 18 && rng() < 0.30) return { servingWins: false, scorer: digger, eventType: 'dig_winner' };
 
   // Spike win
-  if (atkQ > digQ + 22) return true;
+  if (atkQ > digQ + 22) return { servingWins: true, scorer: attacker, eventType: 'spike' };
 
   // Dig & counter
-  if (cAtkQ > cBlkQ + 18) return false;
+  if (cAtkQ > cBlkQ + 18) return { servingWins: false, scorer: cAttacker, eventType: 'spike' };
 
   // Long rally — mental battle
   const sRallyBonus = sLu.S ? (sLu.S.vision * 0.5 + sLu.S.game_iq * 0.5) * 0.02 : 0;
@@ -267,7 +284,8 @@ function simulateRally(
   const rMental = (rStr.mental + rRallyBonus + rEndurance * 0.05) * (1 + (rChem - 1) * 0.1);
   const mentalAdv = (sMental - rMental) * 0.4 + (rng() - 0.5) * 80;
 
-  return mentalAdv > 0;
+  const mentalWinner = mentalAdv > 0 ? attacker ?? null : cAttacker ?? null;
+  return { servingWins: mentalAdv > 0, scorer: mentalWinner, eventType: 'rally' };
 }
 
 // ─── Set & match runner ───────────────────────────────────────────────────────
@@ -284,6 +302,9 @@ function simulateSet(
   awayLu: SimLineup,
   homeChem: number,
   awayChem: number,
+  statAcc?: Map<number, { teamId: number; points: number; spikes: number; blocks: number; aces: number; digs: number }>,
+  homeTeamId?: number,
+  awayTeamId?: number,
 ): { homeScore: number; awayScore: number } {
   const target = setTarget(setNum);
   let homeScore = 0, awayScore = 0;
@@ -299,12 +320,29 @@ function simulateSet(
     const rLu   = isHomeServing ? awayLu   : homeLu;
     const sChem = isHomeServing ? homeChem : awayChem;
     const rChem = isHomeServing ? awayChem : homeChem;
+    const sTeamId = isHomeServing ? homeTeamId : awayTeamId;
+    const rTeamId = isHomeServing ? awayTeamId : homeTeamId;
 
     const rawMom   = getMomentumBonus(streak);
     const sMomBonus = isHomeServing ? rawMom : -rawMom;
 
-    const servingWins = simulateRally(sStr, rStr, sLu, rLu, sMomBonus, sChem, rChem, isHomeServing);
+    const rally = simulateRally(sStr, rStr, sLu, rLu, sMomBonus, sChem, rChem, isHomeServing);
+    const { servingWins, scorer, eventType } = rally;
     const scoredBy: 'home' | 'away' = (isHomeServing === servingWins) ? 'home' : 'away';
+
+    // Accumulate player stats
+    if (statAcc && scorer && scorer.id !== undefined) {
+      const scorerTeamId = (scoredBy === 'home' ? homeTeamId : awayTeamId) ?? 0;
+      if (!statAcc.has(scorer.id)) {
+        statAcc.set(scorer.id, { teamId: scorerTeamId, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 });
+      }
+      const s = statAcc.get(scorer.id)!;
+      s.points++;
+      if (eventType === 'ace') s.aces++;
+      else if (eventType === 'spike' || eventType === 'rally') s.spikes++;
+      else if (eventType === 'block') s.blocks++;
+      else if (eventType === 'dig_winner') s.digs++;
+    }
 
     if (scoredBy === 'home') {
       homeScore++;
@@ -364,15 +402,20 @@ export function autoLineupFromPlayers(players: SimPlayer[]): SimLineup {
 
 /**
  * Run a complete best-of-5 match and return the final result.
+ * Pass homeTeamId/awayTeamId to get per-player stats in the result.
  */
 export function runFullMatch(
   homeLu: SimLineup,
   awayLu: SimLineup,
+  homeTeamId?: number,
+  awayTeamId?: number,
 ): MatchResult {
   const homeStr  = buildStrengths(homeLu);
   const awayStr  = buildStrengths(awayLu);
   const homeChem = computeChemistry(homeLu);
   const awayChem = computeChemistry(awayLu);
+
+  const statAcc = new Map<number, { teamId: number; points: number; spikes: number; blocks: number; aces: number; digs: number }>();
 
   let homeSets = 0, awaySets = 0;
   let homeTotalPoints = 0, awayTotalPoints = 0;
@@ -381,6 +424,7 @@ export function runFullMatch(
   while (homeSets < 3 && awaySets < 3) {
     const { homeScore, awayScore } = simulateSet(
       setNum, homeStr, awayStr, homeLu, awayLu, homeChem, awayChem,
+      statAcc, homeTeamId, awayTeamId,
     );
     if (homeScore > awayScore) homeSets++;
     else awaySets++;
@@ -389,11 +433,17 @@ export function runFullMatch(
     setNum++;
   }
 
+  const playerStats: PlayerStatLine[] = [];
+  for (const [playerId, s] of statAcc) {
+    playerStats.push({ playerId, teamId: s.teamId, points: s.points, spikes: s.spikes, blocks: s.blocks, aces: s.aces, digs: s.digs });
+  }
+
   return {
     homeSets,
     awaySets,
     homeTotalPoints,
     awayTotalPoints,
     winner: homeSets > awaySets ? 'home' : 'away',
+    playerStats,
   };
 }

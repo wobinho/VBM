@@ -853,6 +853,18 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
     db.prepare('DELETE FROM playoff_series WHERE season_id = ?').run(season.id);
   }
 
+  // Clear all cup data (fixtures, rounds, competitions) from origin year onwards
+  const cupCompetitions = db.prepare('SELECT id FROM cup_competitions WHERE year >= ?')
+    .all(originYear) as { id: number }[];
+  for (const cup of cupCompetitions) {
+    // Delete cup fixtures first (cascade from round_id FK)
+    db.prepare('DELETE FROM cup_fixtures WHERE cup_id = ?').run(cup.id);
+    // Delete cup rounds
+    db.prepare('DELETE FROM cup_rounds WHERE cup_id = ?').run(cup.id);
+  }
+  // Delete all cup competitions from origin year onwards
+  db.prepare('DELETE FROM cup_competitions WHERE year >= ?').run(originYear);
+
   // Rewind game_state to Jan 1 of the origin year
   const startDate = `${originYear}-01-01`;
   const firstSeason = originSeasons[0];

@@ -5,13 +5,25 @@ export async function GET() {
   try {
     const db = getDb();
     
-    // 1. Get the current active cup (Copa Italia)
-    // For now we assume Italy and current year, or just the latest active one
-    const cup = db.prepare(`
-      SELECT * FROM cup_competitions 
+    // 1. Get the current active cup, or if none, the most recent completed cup
+    // that belongs to the current season year (visible until Dec 31 of that year).
+    const today = new Date();
+    const currentYear = today.getFullYear();
+
+    let cup = db.prepare(`
+      SELECT * FROM cup_competitions
       WHERE status = 'active'
       ORDER BY year DESC, id DESC LIMIT 1
     `).get() as any;
+
+    if (!cup) {
+      // Show the most recently completed cup if it's still within its season year
+      cup = db.prepare(`
+        SELECT * FROM cup_competitions
+        WHERE status = 'completed' AND year = ?
+        ORDER BY id DESC LIMIT 1
+      `).get(currentYear) as any;
+    }
 
     if (!cup) {
       return NextResponse.json({ error: 'No active cup found' }, { status: 404 });

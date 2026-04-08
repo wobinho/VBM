@@ -286,5 +286,62 @@ export function runSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cup_fixtures_home   ON cup_fixtures(home_team_id);
     CREATE INDEX IF NOT EXISTS idx_cup_fixtures_away   ON cup_fixtures(away_team_id);
     CREATE INDEX IF NOT EXISTS idx_cup_fixtures_status ON cup_fixtures(status);
+
+    -- Player match stats: one row per player per fixture (league, playoff, or cup)
+    CREATE TABLE IF NOT EXISTS player_match_stats (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team_id       INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      season_year   INTEGER NOT NULL,
+      fixture_type  TEXT NOT NULL CHECK (fixture_type IN ('league', 'playoff', 'cup')),
+      fixture_id    INTEGER NOT NULL,
+      points        INTEGER NOT NULL DEFAULT 0,
+      spikes        INTEGER NOT NULL DEFAULT 0,
+      blocks        INTEGER NOT NULL DEFAULT 0,
+      aces          INTEGER NOT NULL DEFAULT 0,
+      digs          INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT DEFAULT (datetime('now')),
+      UNIQUE(player_id, fixture_type, fixture_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pms_player_id   ON player_match_stats(player_id);
+    CREATE INDEX IF NOT EXISTS idx_pms_team_id     ON player_match_stats(team_id);
+    CREATE INDEX IF NOT EXISTS idx_pms_season_year ON player_match_stats(season_year);
+    CREATE INDEX IF NOT EXISTS idx_pms_fixture     ON player_match_stats(fixture_type, fixture_id);
+
+    -- Team season snapshots: one row per team per season, written when season ends
+    CREATE TABLE IF NOT EXISTS team_season_snapshots (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id         INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      season_year     INTEGER NOT NULL,
+      league_id       INTEGER NOT NULL,
+      played          INTEGER NOT NULL DEFAULT 0,
+      won             INTEGER NOT NULL DEFAULT 0,
+      lost            INTEGER NOT NULL DEFAULT 0,
+      points          INTEGER NOT NULL DEFAULT 0,
+      sets_won        INTEGER NOT NULL DEFAULT 0,
+      sets_lost       INTEGER NOT NULL DEFAULT 0,
+      score_diff      INTEGER NOT NULL DEFAULT 0,
+      final_position  INTEGER,
+      league_name     TEXT,
+      cup_result      TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      UNIQUE(team_id, season_year, league_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tss_team_id     ON team_season_snapshots(team_id);
+    CREATE INDEX IF NOT EXISTS idx_tss_season_year ON team_season_snapshots(season_year);
+
+    -- Player team history: tracks which team a player was on each season
+    CREATE TABLE IF NOT EXISTS player_team_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team_id     INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      team_name   TEXT NOT NULL,
+      season_year INTEGER NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      UNIQUE(player_id, season_year)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pth_player_id   ON player_team_history(player_id);
+    CREATE INDEX IF NOT EXISTS idx_pth_team_id     ON player_team_history(team_id);
+    CREATE INDEX IF NOT EXISTS idx_pth_season_year ON player_team_history(season_year);
   `);
 }

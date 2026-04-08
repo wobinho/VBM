@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
-import { X } from 'lucide-react';
-import { useState } from 'react';
+import { X, History } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
@@ -190,6 +190,75 @@ function StatSection({ title, children }: { title: string; children: React.React
     );
 }
 
+function TeamLogoSmall({ teamId }: { teamId?: number | null }) {
+    const [failed, setFailed] = useState(false);
+    if (!teamId || failed) return <div className="w-5 h-5 rounded bg-white/5 shrink-0" />;
+    return (
+        <div className="relative w-5 h-5 shrink-0">
+            <Image src={`/assets/teams/${teamId}.png`} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />
+        </div>
+    );
+}
+
+function PlayerTeamHistory({ playerId, currentTeamId }: { playerId: number; currentTeamId?: number | null }) {
+    const [history, setHistory] = useState<{ season_year: number; team_name: string; team_id: number | null }[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch(`/api/stats/players?teamId=0&playerId=${playerId}`)
+            .then(r => r.ok ? r.json() : { history: [] })
+            .then(d => { setHistory(d.history ?? []); setLoading(false); })
+            .catch(() => setLoading(false));
+    }, [playerId]);
+
+    if (loading) return (
+        <div className="rounded-xl border border-white/8 overflow-hidden">
+            <div className="px-4 py-3 bg-white/4 border-b border-white/8 flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <History size={12} className="text-amber-400" /> Team History
+            </div>
+            <div className="px-4 py-4 flex justify-center">
+                <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="rounded-xl border border-white/8 overflow-hidden">
+            <div className="px-4 py-3 bg-white/4 border-b border-white/8 flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <History size={12} className="text-amber-400" /> Team History
+            </div>
+            {history.length === 0 ? (
+                <p className="px-4 py-4 text-xs text-gray-600 italic">No team history recorded yet.</p>
+            ) : (
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-white/5">
+                            <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Season</th>
+                            <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Team</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {history.map((h, i) => (
+                            <tr key={i} className={`border-b border-white/5 last:border-0 ${h.team_id === currentTeamId ? 'bg-amber-500/5' : ''}`}>
+                                <td className="px-4 py-2.5 font-bold text-amber-500/80 w-20">{h.season_year}</td>
+                                <td className="px-4 py-2.5">
+                                    <div className="flex items-center gap-2">
+                                        <TeamLogoSmall teamId={h.team_id} />
+                                        <span className="text-gray-300">{h.team_name}</span>
+                                        {h.team_id === currentTeamId && (
+                                            <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 font-medium">Current</span>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    );
+}
+
 export default function PlayerModal({ player, onClose }: { player: Player; onClose: () => void }) {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
@@ -335,6 +404,9 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
                             <StatBar label="Intimidation"  value={player.intimidation ?? 0}      color="red" />
                         </StatSection>
                     )}
+
+                    {/* Team History */}
+                    <PlayerTeamHistory playerId={player.id} currentTeamId={player.team_id} />
                 </div>
             </div>
         </div>

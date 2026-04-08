@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
-import { updateOfferStatus, getOfferById, updatePlayer, updateTeamMoney, getTeamById, getPlayerById } from '@/lib/db/queries';
+import { updateOfferStatus, getOfferById, updatePlayer, updateTeamMoney, getTeamById, getPlayerById, getGameState } from '@/lib/db/queries';
+import { getDb } from '@/lib/db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -31,6 +32,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                 }
                 // Move player to buyer's team
                 updatePlayer(offer.player_id, { team_id: session.teamId });
+                // Record team history for next season
+                const gs = getGameState();
+                const year = gs ? parseInt(gs.current_date.slice(0, 4), 10) : new Date().getFullYear();
+                const db = getDb();
+                db.prepare(`
+                  INSERT OR REPLACE INTO player_team_history (player_id, team_id, team_name, season_year)
+                  VALUES (?, ?, ?, ?)
+                `).run(offer.player_id, session.teamId, buyerTeam.team_name, year);
             }
         }
     }

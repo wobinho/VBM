@@ -232,7 +232,7 @@ export default function GameSummaryModal({ fixtureId, fixtureType = 'regular', p
                             <div className="flex items-center gap-1.5 text-[10px] text-gray-600">
                                 <Swords size={11} className="text-gray-600" />
                                 {fixture.season_name ?? 'Regular Season'}
-                                {fixture.game_week ? ` · GW${fixture.game_week}` : ''}
+                                {fixture.game_week ? ` · MD${fixture.game_week}` : ''}
                             </div>
                         </div>
                     </>

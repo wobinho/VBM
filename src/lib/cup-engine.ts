@@ -2,12 +2,15 @@
  * Cup Engine
  *
  * Drives the Copa Italia (National Cup) with a 2-tier entry format:
- * - Round 1: IVL North & IVL South teams (32 teams)
- * - Round 2: R1 winners (16) + IVL Premier Division (16) (32 teams total)
- * - Round 3-5: Single elimination
- * - Final: Best-of-3 series
+ * - Round 1: IVL North & IVL South teams (32 teams) → 16 winners on first matchday
+ * - Round 2: 16 R1 winners + 16 IVL Premier Division (32 teams) → 16 winners on second matchday
+ * - Round of 16: 16 teams → 8 winners on third matchday
+ * - Quarter Finals: 8 teams → 4 winners on fourth matchday
+ * - Semi Finals: 4 teams → 2 winners on fifth matchday
+ * - Grand Final: Best-of-3 series (games on sixth and seventh matchdays)
  *
- * Cup matchdays are on Mondays, Wednesdays, and Fridays in July (Jul 1 – Jul 31).
+ * Each round's fixtures are played on the same day (first available Mon/Wed/Fri of the month).
+ * Cup matchdays are spread across Jul-Dec using all available Mon/Wed/Fri dates.
  */
 
 import { getDb } from './db/index';
@@ -56,10 +59,10 @@ function _generateAllCupsInternal(db: any, year: number): void {
 
   const cupId = Number(cupResult.lastInsertRowid);
 
-  // Get matchday dates (Mondays)
+  // Get all matchday dates (Jul 1 – Dec 31: Mon/Wed/Fri)
   const matchdays = getCupMatchdays(year, 'national');
 
-  // Fetch teams for Round 1: IVL North (2) and IVL South (3)
+  // Fetch teams for Round 1: IVL North (2) and IVL South (3) = 32 teams
   const tier3Teams = db.prepare(`
     SELECT id FROM teams WHERE league_id IN (2, 3)
   `).all() as { id: number }[];
@@ -68,14 +71,14 @@ function _generateAllCupsInternal(db: any, year: number): void {
 
   // Define All Knockout Rounds
   // Round 1: 32 teams (North/South) -> 16 winners
-  // Round 2: 16 winners + 16 Premier -> 16 winners
-  // Round 3: Round of 16 -> 8 winners
-  // Round 4: Quarter Finals -> 4 winners
-  // Round 5: Semi Finals -> 2 winners
-  // Round 6: Grand Final (Best of 3)
+  // Round 2: 16 winners + 16 Premier -> 32 teams -> 16 winners
+  // Round 3: 16 teams -> 8 winners
+  // Round 4: 8 teams -> 4 winners
+  // Round 5: 4 teams -> 2 winners
+  // Round 6: 2 teams -> Grand Final (Best-of-3, first 2 games scheduled)
   const roundNames = [
     'Round 1',
-    'Round 2 (Premier Entry)',
+    'Round 2',
     'Round of 16',
     'Quarter Finals',
     'Semi Finals',
@@ -86,8 +89,8 @@ function _generateAllCupsInternal(db: any, year: number): void {
   for (let i = 0; i < roundNames.length; i++) {
     const isFinal = roundNames[i] === 'Grand Final';
     const startDate = matchdays[i] || matchdays[matchdays.length - 1];
-    const endDate = isFinal 
-      ? (matchdays[i + 2] || matchdays[matchdays.length - 1]) 
+    const endDate = isFinal
+      ? (matchdays[Math.min(i + 1, matchdays.length - 1)] || matchdays[matchdays.length - 1])
       : startDate;
 
     const res = db.prepare(`
@@ -97,7 +100,7 @@ function _generateAllCupsInternal(db: any, year: number): void {
     roundIds.push(Number(res.lastInsertRowid));
   }
 
-  // Seed Round 1
+  // Seed Round 1: 32 teams (16 matchups), all on the same day
   const round1Id = roundIds[0];
   const dateR1 = matchdays[0];
   for (let i = 0; i < teamsR1.length; i += 2) {
@@ -167,7 +170,8 @@ export function advanceCupRound(cupId: number): void {
 }
 
 /**
- * Seed Round 2: 16 winners from R1 + 16 teams from IVL Premier (1).
+ * Seed Round 2: 16 winners from R1 + 16 teams from IVL Premier (1) = 32 teams.
+ * All 16 matches play on the same day (second matchday).
  */
 function seedRound2WithPremier(cupId: number, r1Id: number, r2Id: number): void {
   const db = getDb();
@@ -179,11 +183,13 @@ function seedRound2WithPremier(cupId: number, r1Id: number, r2Id: number): void 
     SELECT id FROM teams WHERE league_id = 1
   `).all() as { id: number }[];
 
+  // Shuffle and combine: 16 R1 winners + 16 Premier teams
   const pool = shuffle([...winnersR1.map(w => w.winner_team_id), ...premierTeams.map(p => p.id)]);
   const cup = db.prepare('SELECT year FROM cup_competitions WHERE id = ?').get(cupId) as { year: number };
   const matchdays = getCupMatchdays(cup.year, 'national');
-  const dateR2 = matchdays[1];
+  const dateR2 = matchdays[1]; // Second matchday
 
+  // Create 16 matches (all on the same day)
   for (let i = 0; i < pool.length; i += 2) {
     db.prepare(`
       INSERT INTO cup_fixtures (cup_id, round_id, home_team_id, away_team_id, scheduled_date, status)
@@ -193,7 +199,10 @@ function seedRound2WithPremier(cupId: number, r1Id: number, r2Id: number): void 
 }
 
 /**
- * Standard knockout seeding.
+ * Standard knockout seeding for rounds 3-5, and special handling for the Grand Final.
+ * Non-final rounds: all fixtures play on the same day (nth matchday).
+ * Grand Final: create exactly 2 fixtures (best-of-3) on matchdays[5] and matchdays[6].
+ *             3rd game is added dynamically only if series is tied 1-1.
  */
 function seedNextKnockoutRound(cupId: number, currentRoundId: number, nextRoundId: number): void {
   const db = getDb();
@@ -207,14 +216,15 @@ function seedNextKnockoutRound(cupId: number, currentRoundId: number, nextRoundI
   const matchdays = getCupMatchdays(cup.year, 'national');
   const date = matchdays[nextRound.round_number - 1];
 
-  // Special Handling: Grand Final (Round 6) logic creates multiple fixtures
   const isFinal = nextRound.round_number === 6;
 
   for (let i = 0; i < pool.length; i += 2) {
     if (i + 1 < pool.length) {
       if (isFinal) {
-        // Create 3 fixtures for BO3
-        for (let g = 0; g < 3; g++) {
+        // Grand Final: Best-of-3 series
+        // Create exactly 2 fixtures on matchdays[5] and matchdays[6]
+        // Game 3 is created dynamically in handleBestOf3Final if series reaches 1-1
+        for (let g = 0; g < 2; g++) {
           const finalDate = matchdays[5 + g];
           db.prepare(`
             INSERT INTO cup_fixtures (cup_id, round_id, home_team_id, away_team_id, scheduled_date, status)
@@ -222,6 +232,7 @@ function seedNextKnockoutRound(cupId: number, currentRoundId: number, nextRoundI
           `).run(cupId, nextRoundId, pool[i], pool[i+1], finalDate);
         }
       } else {
+        // Rounds 3-5: All matches on the same day (nth matchday based on round number)
         db.prepare(`
           INSERT INTO cup_fixtures (cup_id, round_id, home_team_id, away_team_id, scheduled_date, status)
           VALUES (?, ?, ?, ?, ?, 'scheduled')
@@ -255,6 +266,19 @@ function handleBestOf3Final(cupId: number, roundId: number): void {
     
     // Cancel remaining unplayed fixtures in this round if any
     db.prepare("UPDATE cup_fixtures SET status = 'completed', played_at = datetime('now') WHERE round_id = ? AND status = 'scheduled'").run(roundId);
+  } else if (wins1 === 1 && wins2 === 1) {
+    // Series tied 1-1, schedule decider (Game 3) if not already scheduled
+    if (fixtures.length === 2) {
+      const cup = db.prepare('SELECT year FROM cup_competitions WHERE id = ?').get(cupId) as { year: number } | undefined;
+      if (!cup) return;
+      const matchdays = getCupMatchdays(cup.year, 'national');
+      const finalDate = matchdays[7]; // 8th cup matchday
+      
+      db.prepare(`
+        INSERT INTO cup_fixtures (cup_id, round_id, home_team_id, away_team_id, scheduled_date, status)
+        VALUES (?, ?, ?, ?, ?, 'scheduled')
+      `).run(cupId, roundId, team1, team2, finalDate);
+    }
   }
 }
 

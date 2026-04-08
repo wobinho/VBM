@@ -246,29 +246,78 @@ export default function DashboardPage() {
 
   // ─── Simulate to a target date (all matches, incl. user's) ───────────────
 
+  const [simProgress, setSimProgress] = useState<{ current: number; total: number; percent: number } | null>(null);
+  const [simDayMatches, setSimDayMatches] = useState<any[]>([]);
+
   const handleSimToDate = async (targetDate: string) => {
     setSimToDate(true);
     setSimToDateError(null);
+    setSimProgress(null);
+    setSimDayMatches([]);
     try {
       const res = await fetch('/api/simulate-to-date', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetDate }),
       });
-      const data = await res.json();
-      if (!res.ok) { setSimToDateError(data.error ?? 'Simulation failed'); return; }
-      await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates(), loadMatchDates()]);
-      setSelectedDate(targetDate);
-      // reload fixtures for the target date
-      setDayFixtures([]);
-      setLoadingDayFixtures(true);
-      const leagueId = team?.league_id;
-      const url = leagueId
-        ? `/api/fixtures?date=${targetDate}&leagueId=${leagueId}`
-        : `/api/fixtures?date=${targetDate}`;
-      const fx = await fetch(url);
-      if (fx.ok) setDayFixtures(await fx.json());
-      setLoadingDayFixtures(false);
+
+      if (!res.ok) {
+        const data = await res.json();
+        setSimToDateError(data.error ?? 'Simulation failed');
+        return;
+      }
+
+      // Stream the responses using EventSource-like parsing
+      if (!res.body) {
+        setSimToDateError('No response body');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value);
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.status === 'complete') {
+                // Simulation complete, reload data
+                await Promise.all([loadGameState(), loadTeamData(), loadUserMatchDates(), loadMatchDates()]);
+                setSelectedDate(targetDate);
+                // reload fixtures for the target date
+                setDayFixtures([]);
+                setLoadingDayFixtures(true);
+                const leagueId = team?.league_id;
+                const url = leagueId
+                  ? `/api/fixtures?date=${targetDate}&leagueId=${leagueId}`
+                  : `/api/fixtures?date=${targetDate}`;
+                const fx = await fetch(url);
+                if (fx.ok) setDayFixtures(await fx.json());
+                setLoadingDayFixtures(false);
+              } else if (data.status === 'error') {
+                setSimToDateError(data.error ?? 'Simulation error');
+              } else if (data.date && data.matches !== undefined) {
+                // Day update
+                setSimProgress(data.progress);
+                setSimDayMatches(prev => [...prev, { date: data.date, matches: data.matches }]);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      setSimToDateError(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setSimToDate(false);
     }
@@ -671,6 +720,38 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {simToDate && simProgress && (
+                <div className="px-4 py-3 border-b border-white/[0.05] bg-violet-500/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-400">Simulating day by day...</span>
+                    <span className="text-xs font-bold text-violet-400">{simProgress.percent}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-500 transition-all duration-300"
+                      style={{ width: `${simProgress.percent}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2">
+                    Day {simProgress.current} of {simProgress.total}
+                  </div>
+                  {simDayMatches.length > 0 && (
+                    <div className="mt-3 max-h-32 overflow-y-auto space-y-1">
+                      {simDayMatches.slice(-5).map((day, i) => (
+                        <div key={i} className="text-[10px] text-slate-400">
+                          <span className="text-violet-400 font-semibold">{day.date}:</span>
+                          {day.matches.length > 0 ? (
+                            <span> {day.matches.length} match{day.matches.length !== 1 ? 'es' : ''}</span>
+                          ) : (
+                            <span> No matches</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {loadingDayFixtures ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-xs">
                   <Loader2 size={13} className="animate-spin" /> Loading…
@@ -703,7 +784,7 @@ export default function DashboardPage() {
                         <TeamLogo teamId={f.away_team_id} size={22} />
                         <span className={`text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md shrink-0 ${completed ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/10 text-amber-500/80'
                           }`}>
-                          {completed ? 'FT' : f.is_cup ? 'CUP' : f.is_playoff ? 'PO' : `GW${f.game_week}`}
+                          {completed ? 'FT' : f.is_cup ? 'CUP' : f.is_playoff ? 'PO' : `MD${f.game_week}`}
                         </span>
                       </div>
                     );
@@ -758,7 +839,7 @@ export default function DashboardPage() {
                     <TeamLogo teamId={oppTeamId} size={28} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-white truncate group-hover:text-amber-300 transition-colors">{opponent}</p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{formatShortDate(f.scheduled_date)} · GW{f.game_week}</p>
+                      <p className="text-[10px] text-slate-600 mt-0.5">{formatShortDate(f.scheduled_date)} · MD{f.game_week}</p>
                     </div>
                     {badge && (
                       <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 ${badge.won ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
@@ -847,7 +928,7 @@ function NextMatchCard({
               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
               }`}>{venue}</span>
-            <span className="text-[10px] text-slate-600">{fixture.is_playoff ? 'Playoffs' : `GW${fixture.game_week}`}</span>
+            <span className="text-[10px] text-slate-600">{fixture.is_playoff ? 'Playoffs' : `MD${fixture.game_week}`}</span>
           </div>
         </div>
 

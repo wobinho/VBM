@@ -354,7 +354,7 @@ export default function PlayoffsPage() {
 
             {/* ── Champion Banner ── */}
             {bracket.champion && (
-                <div className="relative rounded-2xl overflow-hidden border border-amber-500/30">
+                <div className="relative rounded-2xl overflow-hidden border border-amber-500/30 my-8">
                     {/* Background layers */}
                     <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5" />
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(251,191,36,0.12),transparent_60%)]" />
