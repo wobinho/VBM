@@ -748,7 +748,6 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                             <th className="text-right py-2 px-2 font-semibold w-9 text-sky-500">SPK</th>
                             <th className="text-right py-2 px-2 font-semibold w-9 text-violet-500">BLK</th>
                             <th className="text-right py-2 px-2 font-semibold w-9 text-emerald-500">ACE</th>
-                            <th className="text-right py-2 px-2 font-semibold w-9 text-orange-500">ERR</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.04]">
@@ -774,8 +773,7 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                                     </td>
                                     <td className="text-right py-2.5 px-2 tabular-nums text-sky-400/80">{p.spikes || '–'}</td>
                                     <td className="text-right py-2.5 px-2 tabular-nums text-violet-400/80">{p.blocks || '–'}</td>
-                                    <td className="text-right py-2.5 px-2 tabular-nums text-emerald-400/80">{p.aces || '–'}</td>
-                                    <td className="text-right py-2.5 pr-1 tabular-nums text-orange-400/80">{(p.serveErrors + p.attackErrors) || '–'}</td>
+                                    <td className="text-right py-2.5 pr-1 tabular-nums text-emerald-400/80">{p.aces || '–'}</td>
                                 </tr>
                             );
                         })}

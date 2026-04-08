@@ -258,7 +258,6 @@ const STAT_LABELS = [
   { key: 'spikes', label: 'SPK', color: 'text-gray-300' },
   { key: 'blocks', label: 'BLK', color: 'text-gray-300' },
   { key: 'aces', label: 'ACE', color: 'text-gray-300' },
-  { key: 'digs', label: 'DIG', color: 'text-gray-300' },
 ] as const;
 
 function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) {
@@ -395,7 +394,6 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                                 { val: s.spikes, label: 'SPK', color: 'text-gray-300' },
                                 { val: s.blocks, label: 'BLK', color: 'text-gray-300' },
                                 { val: s.aces,   label: 'ACE', color: 'text-gray-300' },
-                                { val: s.digs,   label: 'DIG', color: 'text-gray-300' },
                               ] as const).map(({ val, label, color }) => (
                                 <div key={label} className="text-center min-w-[2.5rem]">
                                   <p className={`text-sm font-bold leading-tight ${color}`}>{val}</p>
@@ -414,7 +412,6 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                                 { val: p.stats?.spikes ?? 0, label: 'SPK', color: 'text-gray-300' },
                                 { val: p.stats?.blocks ?? 0, label: 'BLK', color: 'text-gray-300' },
                                 { val: p.stats?.aces   ?? 0, label: 'ACE', color: 'text-gray-300' },
-                                { val: p.stats?.digs   ?? 0, label: 'DIG', color: 'text-gray-300' },
                               ] as const).map(({ val, label, color }) => (
                                 <div key={label} className="text-center min-w-[2.5rem]">
                                   <p className={`text-sm font-bold leading-tight ${color}`}>{val}</p>
