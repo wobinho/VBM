@@ -722,13 +722,11 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
     const mvp        = allPlayers.reduce((best, p) => p.points  > (best?.points  ?? -1) ? p : best, allPlayers[0] ?? null);
     const topBlocker = allPlayers.reduce((best, p) => p.blocks  > (best?.blocks  ?? -1) ? p : best, allPlayers[0] ?? null);
     const topServer  = allPlayers.reduce((best, p) => p.aces    > (best?.aces    ?? -1) ? p : best, allPlayers[0] ?? null);
-    const topDigger  = allPlayers.reduce((best, p) => p.digs    > (best?.digs    ?? -1) ? p : best, allPlayers[0] ?? null);
 
     const performers = [
         { title: 'MVP',        icon: Star,     player: mvp,        stat: mvp?.points,  unit: 'PTS', accent: 'from-amber-500/20 to-yellow-500/10 border-amber-500/30',  text: 'text-amber-400' },
         { title: 'Top Server', icon: Zap,      player: topServer,  stat: topServer?.aces,   unit: 'ACE', accent: 'from-sky-500/20 to-blue-500/10 border-sky-500/30',       text: 'text-sky-400'   },
         { title: 'Top Block',  icon: Shield,   player: topBlocker, stat: topBlocker?.blocks, unit: 'BLK', accent: 'from-violet-500/20 to-purple-500/10 border-violet-500/30', text: 'text-violet-400'},
-        { title: 'Top Digger', icon: Activity, player: topDigger,  stat: topDigger?.digs,   unit: 'DIG', accent: 'from-emerald-500/20 to-green-500/10 border-emerald-500/30',text: 'text-emerald-400'},
     ];
 
     const overviewRows = [
@@ -736,9 +734,6 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
         { label: 'Aces',          icon: Zap,       home: h.aces,         away: a.aces         },
         { label: 'Blocks',        icon: Shield,    home: h.blocks,       away: a.blocks       },
         { label: 'Spikes',        icon: Target,    home: h.spikes,       away: a.spikes       },
-        { label: 'Digs',          icon: Activity,  home: h.digs,         away: a.digs         },
-        { label: 'Serve Errors',  icon: TrendingUp,home: h.serveErrors,  away: a.serveErrors  },
-        { label: 'Attack Errors', icon: TrendingUp,home: h.attackErrors, away: a.attackErrors },
     ];
 
     const renderPlayerTable = (teamStats: TeamMatchStats, side: 'home' | 'away') => {
@@ -759,8 +754,6 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                             <th className="text-right py-2 px-2 font-semibold w-9 text-sky-500">ACE</th>
                             <th className="text-right py-2 px-2 font-semibold w-9 text-violet-500">BLK</th>
                             <th className="text-right py-2 px-2 font-semibold w-9 text-emerald-500">ATK</th>
-                            <th className="text-right py-2 px-2 font-semibold w-9 text-orange-500">DIG</th>
-                            <th className="text-right py-2 pr-1 font-semibold w-9 text-red-500">ERR</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.04]">
@@ -787,8 +780,6 @@ function PostGameStats({ stats, homeName, awayName }: { stats: MatchStats; homeN
                                     <td className="text-right py-2.5 px-2 tabular-nums text-sky-400/80">{p.aces || '–'}</td>
                                     <td className="text-right py-2.5 px-2 tabular-nums text-violet-400/80">{p.blocks || '–'}</td>
                                     <td className="text-right py-2.5 px-2 tabular-nums text-emerald-400/80">{p.spikes || '–'}</td>
-                                    <td className="text-right py-2.5 px-2 tabular-nums text-orange-400/80">{p.digs || '–'}</td>
-                                    <td className="text-right py-2.5 pr-1 tabular-nums text-red-400/70">{(p.serveErrors + p.attackErrors) || '–'}</td>
                                 </tr>
                             );
                         })}

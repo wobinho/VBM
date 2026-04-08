@@ -23,7 +23,7 @@ interface SeasonStats {
   position: number | null; cup_result: string;
 }
 
-interface Accolade { type: string; name: string; year: number; }
+interface Accolade { type: string; name: string; year: number; position?: number; }
 
 interface SeasonBreakdownRow {
   season_year: number;
@@ -110,6 +110,7 @@ function TeamOverviewTab({
 }) {
   const [data, setData] = useState<{ seasonStats: SeasonStats | null; accolades: Accolade[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -120,37 +121,59 @@ function TeamOverviewTab({
   const stats = selectedYear === 'overall' ? team : data?.seasonStats;
   const accolades = data?.accolades ?? [];
 
-  // Group accolades by type+name
+  // Group cup wins by name (show count × and years), keep league positions separate per year
   const accoladeSummary = useMemo(() => {
-    const map: Record<string, { name: string; type: string; count: number; years: number[] }> = {};
+    const cupMap: Record<string, { name: string; type: string; count: number; years: number[] }> = {};
+    const leaguePositions: Accolade[] = [];
     for (const a of accolades) {
-      const key = `${a.type}:${a.name}`;
-      if (!map[key]) map[key] = { name: a.name, type: a.type, count: 0, years: [] };
-      map[key].count++;
-      map[key].years.push(a.year);
+      if (a.type === 'cup') {
+        const key = `cup:${a.name}`;
+        if (!cupMap[key]) cupMap[key] = { name: a.name, type: 'cup', count: 0, years: [] };
+        cupMap[key].count++;
+        cupMap[key].years.push(a.year);
+      } else if (a.type === 'league_position') {
+        leaguePositions.push(a);
+      }
     }
-    return Object.values(map);
+    return { cups: Object.values(cupMap), leaguePositions };
   }, [accolades]);
 
   if (loading) return <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>;
 
+  const yearOptions = ['overall', ...years.map(String)] as string[];
+
   return (
     <div className="space-y-6">
-      {/* Year filter */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {(['overall', ...years.map(String)] as string[]).map(y => (
-          <button
-            key={y}
-            onClick={() => onYearChange(y)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer border ${
-              selectedYear === y
-                ? 'bg-amber-500 border-amber-500 text-black'
-                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
-            }`}
-          >
-            {y === 'overall' ? 'Overall' : y}
-          </button>
-        ))}
+      {/* Year filter dropdown */}
+      <div className="relative w-fit">
+        <button
+          onClick={() => setYearDropdownOpen(v => !v)}
+          className="flex items-center gap-2 bg-white/5 border border-white/10 hover:border-white/20 rounded-xl px-4 py-2 text-sm font-medium text-white cursor-pointer transition-colors min-w-[140px]"
+        >
+          <Filter size={13} className="text-gray-400 shrink-0" />
+          <span className="flex-1 text-left">{selectedYear === 'overall' ? 'Overall' : `Season ${selectedYear}`}</span>
+          <ChevronDown size={14} className={`text-gray-400 transition-transform shrink-0 ${yearDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {yearDropdownOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setYearDropdownOpen(false)} />
+            <div className="absolute top-full left-0 mt-1 bg-gray-900 border border-white/15 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto min-w-[160px]">
+              {yearOptions.map(y => (
+                <button
+                  key={y}
+                  onClick={() => { onYearChange(y); setYearDropdownOpen(false); }}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer ${
+                    selectedYear === y
+                      ? 'bg-amber-500/20 text-amber-400 font-semibold'
+                      : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {y === 'overall' ? 'Overall' : `Season ${y}`}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Team stats grid */}
@@ -187,13 +210,14 @@ function TeamOverviewTab({
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <Award size={14} className="text-amber-400" /> Accolades
           </h3>
-          {accoladeSummary.length === 0 ? (
+          {accoladeSummary.cups.length === 0 && accoladeSummary.leaguePositions.length === 0 ? (
             <p className="text-gray-600 text-sm italic">No accolades yet.</p>
           ) : (
             <div className="space-y-2">
-              {accoladeSummary.map((a, i) => (
+              {/* Cup wins */}
+              {accoladeSummary.cups.map((a, i) => (
                 <div key={i} className="flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3">
-                  <Trophy size={16} className={a.type === 'cup' ? 'text-amber-400' : 'text-blue-400'} />
+                  <Trophy size={16} className="text-amber-400" />
                   <div className="flex-1">
                     <span className="text-sm text-white font-medium">{a.name}</span>
                     <span className="ml-2 text-xs text-gray-500">{a.years.join(', ')}</span>
@@ -201,6 +225,24 @@ function TeamOverviewTab({
                   <span className="text-lg font-bold text-amber-400">{a.count}×</span>
                 </div>
               ))}
+              {/* League placements per season */}
+              {accoladeSummary.leaguePositions.map((a, i) => {
+                const pos = a.position ?? 0;
+                const isChamp = pos === 1;
+                const isTop3 = pos <= 3;
+                return (
+                  <div key={i} className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${isChamp ? 'bg-amber-500/8 border-amber-500/25' : 'bg-white/5 border-white/8'}`}>
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${isChamp ? 'bg-amber-500/25 text-amber-400' : isTop3 ? 'bg-blue-500/20 text-blue-400' : 'bg-white/8 text-gray-400'}`}>
+                      #{pos}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-white font-medium">{a.name}</span>
+                      {isChamp && <span className="ml-2 text-xs text-amber-400 font-semibold">Champion</span>}
+                    </div>
+                    <span className="text-xs text-gray-500 shrink-0">{a.year}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -211,11 +253,26 @@ function TeamOverviewTab({
 
 // ─── Player Stats Tab ─────────────────────────────────────────────────────────
 
+const STAT_LABELS = [
+  { key: 'points', label: 'PTS', color: 'text-amber-400' },
+  { key: 'spikes', label: 'SPK', color: 'text-gray-300' },
+  { key: 'blocks', label: 'BLK', color: 'text-gray-300' },
+  { key: 'aces', label: 'ACE', color: 'text-gray-300' },
+] as const;
+
 function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) {
-  const [selectedYear, setSelectedYear] = useState<string>('overall');
+  const [selectedYear, setSelectedYear] = useState<string>(() => years.length > 0 ? String(Math.max(...years)) : 'overall');
   const [players, setPlayers] = useState<PlayerStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
+
+  // When years load, default to the most recent season
+  useEffect(() => {
+    if (years.length > 0) {
+      setSelectedYear(String(Math.max(...years)));
+    }
+  }, [teamId]);
 
   useEffect(() => {
     setLoading(true);
@@ -225,23 +282,40 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
 
   const sorted = useMemo(() => [...players].sort((a, b) => (b.stats?.points ?? 0) - (a.stats?.points ?? 0)), [players]);
 
+  const yearOptions = ['overall', ...years.map(String)] as string[];
+
   return (
-    <div className="space-y-5">
-      {/* Year filter */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {(['overall', ...years.map(String)] as string[]).map(y => (
-          <button
-            key={y}
-            onClick={() => { setSelectedYear(y); setExpanded(null); }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer border ${
-              selectedYear === y
-                ? 'bg-amber-500 border-amber-500 text-black'
-                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
-            }`}
-          >
-            {y === 'overall' ? 'Overall' : y}
-          </button>
-        ))}
+    <div className="space-y-4">
+      {/* Year filter dropdown */}
+      <div className="relative w-fit">
+        <button
+          onClick={() => setYearDropdownOpen(v => !v)}
+          className="flex items-center gap-2 bg-white/5 border border-white/10 hover:border-white/20 rounded-xl px-4 py-2 text-sm font-medium text-white cursor-pointer transition-colors min-w-[140px]"
+        >
+          <Filter size={13} className="text-gray-400 shrink-0" />
+          <span className="flex-1 text-left">{selectedYear === 'overall' ? 'Overall' : `Season ${selectedYear}`}</span>
+          <ChevronDown size={14} className={`text-gray-400 transition-transform shrink-0 ${yearDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {yearDropdownOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setYearDropdownOpen(false)} />
+            <div className="absolute top-full left-0 mt-1 bg-gray-900 border border-white/15 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto min-w-[160px]">
+              {yearOptions.map(y => (
+                <button
+                  key={y}
+                  onClick={() => { setSelectedYear(y); setExpanded(null); setYearDropdownOpen(false); }}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer ${
+                    selectedYear === y
+                      ? 'bg-amber-500/20 text-amber-400 font-semibold'
+                      : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {y === 'overall' ? 'Overall' : `Season ${y}`}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -250,69 +324,58 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
         <p className="text-gray-600 text-sm italic text-center py-10">No player stats available yet.</p>
       ) : (
         <div className="space-y-2">
-          {/* Header */}
-          <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 text-xs text-gray-500 uppercase tracking-wider font-medium">
-            <span>Player</span>
-            <span className="text-center">Points</span>
-            <span className="text-center">Spikes</span>
-            <span className="text-center">Blocks</span>
-            <span className="text-center">Aces</span>
-            <span className="text-center">Digs</span>
-          </div>
-
           {sorted.map((p, idx) => (
-            <div key={p.id}>
+            <div key={p.id} className="rounded-xl overflow-hidden border border-white/8 hover:border-white/15 transition-colors">
+              {/* Compact horizontal card — always visible */}
               <button
                 onClick={() => setExpanded(expanded === p.id ? null : p.id)}
-                className="w-full text-left bg-white/4 hover:bg-white/7 border border-white/8 hover:border-white/15 rounded-xl transition-all duration-200 cursor-pointer"
+                className="w-full text-left bg-white/4 hover:bg-white/7 transition-colors cursor-pointer"
               >
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-3 items-center">
-                  {/* Player info */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs font-bold text-gray-600 w-5 shrink-0">#{idx + 1}</span>
-                    <div className="relative w-10 h-10 shrink-0 overflow-hidden">
-                      <Image
-                        src={`/assets/players/${p.id}.png`}
-                        alt={p.player_name} fill unoptimized className="object-contain object-bottom"
-                        onError={(e) => { (e.target as HTMLImageElement).src = '/assets/players/default.png'; }}
-                      />
+                <div className="flex items-center gap-3 px-4 py-3">
+                  {/* Rank + photo */}
+                  <span className="text-xs font-bold text-gray-600 w-5 shrink-0 text-right">#{idx + 1}</span>
+                  <div className="relative w-10 h-10 shrink-0 overflow-hidden rounded-lg bg-white/5">
+                    <Image
+                      src={`/assets/players/${p.id}.png`}
+                      alt={p.player_name} fill unoptimized className="object-contain object-bottom"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/assets/players/default.png'; }}
+                    />
+                  </div>
+                  {/* Name + badges */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white truncate leading-tight">{p.player_name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Flag country={p.country} />
+                      <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${POSITION_COLORS[p.position] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30'}`}>
+                        {p.position.split(' ').map(w => w[0]).join('')}
+                      </span>
+                      {p.current_team_name && p.team_id !== teamId && (
+                        <span className="text-xs text-gray-600 truncate hidden sm:inline">{p.current_team_name}</span>
+                      )}
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{p.player_name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Flag country={p.country} />
-                        <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${POSITION_COLORS[p.position] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30'}`}>
-                          {p.position.split(' ').map(w => w[0]).join('')}
-                        </span>
-                        {p.current_team_name && p.team_id !== teamId && (
-                          <span className="text-xs text-gray-600 truncate">{p.current_team_name}</span>
-                        )}
+                  </div>
+                  {/* Inline stats strip */}
+                  <div className="flex items-center gap-4 shrink-0">
+                    {STAT_LABELS.map(({ key, label, color }) => (
+                      <div key={key} className="text-center hidden sm:block">
+                        <p className={`text-sm font-bold leading-tight ${color}`}>{p.stats?.[key] ?? 0}</p>
+                        <p className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</p>
                       </div>
+                    ))}
+                    {/* Mobile: only show points */}
+                    <div className="text-center sm:hidden">
+                      <p className="text-sm font-bold text-amber-400 leading-tight">{p.stats?.points ?? 0}</p>
+                      <p className="text-[10px] text-gray-600 uppercase tracking-wider">PTS</p>
                     </div>
-                  </div>
-                  {/* Stat columns */}
-                  <div className="text-center">
-                    <span className="text-sm font-bold text-amber-400">{p.stats?.points ?? 0}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-sm text-gray-300">{p.stats?.spikes ?? 0}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-sm text-gray-300">{p.stats?.blocks ?? 0}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-sm text-gray-300">{p.stats?.aces ?? 0}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-sm text-gray-300">{p.stats?.digs ?? 0}</span>
+                    <ChevronDown size={14} className={`text-gray-500 transition-transform ml-1 ${expanded === p.id ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
               </button>
 
               {/* Expanded detail */}
               {expanded === p.id && (
-                <div className="mx-1 mb-2 bg-gray-900/80 border border-white/10 border-t-0 rounded-b-xl px-5 py-4 space-y-5">
-                  {/* Season-by-season breakdown (only stats while at this team) */}
+                <div className="bg-gray-900/80 border-t border-white/8 px-5 py-4 space-y-5">
+                  {/* Season-by-season breakdown — horizontal cards per season */}
                   <div>
                     <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
                       <BarChart2 size={12} className="text-amber-400" />
@@ -321,44 +384,48 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                     {p.seasonBreakdown.length === 0 ? (
                       <p className="text-xs text-gray-600 italic">No stats recorded yet.</p>
                     ) : (
-                      <div>
-                        {/* Table header */}
-                        <div className="grid grid-cols-[3rem_1fr_1fr_1fr_1fr_1fr] gap-2 px-2 py-1 text-xs text-gray-600 uppercase tracking-wider font-medium mb-1">
-                          <span>Year</span>
-                          <span className="text-center">Pts</span>
-                          <span className="text-center">Spk</span>
-                          <span className="text-center">Blk</span>
-                          <span className="text-center">Ace</span>
-                          <span className="text-center">Dig</span>
-                        </div>
-                        <div className="space-y-1">
-                          {(selectedYear === 'overall' ? p.seasonBreakdown : p.seasonBreakdown.filter(s => s.season_year === parseInt(selectedYear))).map(s => (
-                            <div key={s.season_year} className="grid grid-cols-[3rem_1fr_1fr_1fr_1fr_1fr] gap-2 px-2 py-1.5 rounded-lg bg-white/4 text-sm items-center">
-                              <span className="text-xs font-bold text-amber-500/80">{s.season_year}</span>
-                              <span className="text-center font-bold text-amber-400">{s.points}</span>
-                              <span className="text-center text-gray-300">{s.spikes}</span>
-                              <span className="text-center text-gray-300">{s.blocks}</span>
-                              <span className="text-center text-gray-300">{s.aces}</span>
-                              <span className="text-center text-gray-300">{s.digs}</span>
+                      <div className="space-y-2">
+                        {(selectedYear === 'overall' ? p.seasonBreakdown : p.seasonBreakdown.filter(s => s.season_year === parseInt(selectedYear))).map(s => (
+                          <div key={s.season_year} className="flex items-center gap-2 bg-white/4 rounded-lg px-3 py-2.5">
+                            <span className="text-xs font-bold text-amber-500/80 w-10 shrink-0">{s.season_year}</span>
+                            <div className="flex items-center gap-4 flex-1 justify-end">
+                              {([
+                                { val: s.points, label: 'PTS', color: 'text-amber-400' },
+                                { val: s.spikes, label: 'SPK', color: 'text-gray-300' },
+                                { val: s.blocks, label: 'BLK', color: 'text-gray-300' },
+                                { val: s.aces,   label: 'ACE', color: 'text-gray-300' },
+                              ] as const).map(({ val, label, color }) => (
+                                <div key={label} className="text-center min-w-[2.5rem]">
+                                  <p className={`text-sm font-bold leading-tight ${color}`}>{val}</p>
+                                  <p className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</p>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                          {/* Total row for overall view */}
-                          {selectedYear === 'overall' && p.seasonBreakdown.length > 1 && (
-                            <div className="grid grid-cols-[3rem_1fr_1fr_1fr_1fr_1fr] gap-2 px-2 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 text-sm items-center mt-1">
-                              <span className="text-xs font-bold text-gray-500">Total</span>
-                              <span className="text-center font-bold text-amber-400">{p.stats?.points ?? 0}</span>
-                              <span className="text-center text-gray-300">{p.stats?.spikes ?? 0}</span>
-                              <span className="text-center text-gray-300">{p.stats?.blocks ?? 0}</span>
-                              <span className="text-center text-gray-300">{p.stats?.aces ?? 0}</span>
-                              <span className="text-center text-gray-300">{p.stats?.digs ?? 0}</span>
+                          </div>
+                        ))}
+                        {selectedYear === 'overall' && p.seasonBreakdown.length > 1 && (
+                          <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 rounded-lg px-3 py-2.5 mt-1">
+                            <span className="text-xs font-bold text-gray-500 w-10 shrink-0">Total</span>
+                            <div className="flex items-center gap-4 flex-1 justify-end">
+                              {([
+                                { val: p.stats?.points ?? 0, label: 'PTS', color: 'text-amber-400' },
+                                { val: p.stats?.spikes ?? 0, label: 'SPK', color: 'text-gray-300' },
+                                { val: p.stats?.blocks ?? 0, label: 'BLK', color: 'text-gray-300' },
+                                { val: p.stats?.aces   ?? 0, label: 'ACE', color: 'text-gray-300' },
+                              ] as const).map(({ val, label, color }) => (
+                                <div key={label} className="text-center min-w-[2.5rem]">
+                                  <p className={`text-sm font-bold leading-tight ${color}`}>{val}</p>
+                                  <p className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</p>
+                                </div>
+                              ))}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* Team history */}
+                  {/* Career history */}
                   <div>
                     <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
                       <History size={12} className="text-amber-400" /> Career History
@@ -450,7 +517,8 @@ export default function StatsPage() {
         </button>
 
         {teamDropdownOpen && (
-          <div className="absolute top-full left-0 mt-2 w-72 bg-gray-900 border border-white/15 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto">
+          <div className="absolute top-full left-0 mt-2 w-72 bg-gray-900 border border-white/15 rounded-xl shadow-2xl z-50 overflow-hidden">
+            <div className="overflow-y-auto max-h-[26rem] [&::-webkit-scrollbar]:w-0 [scrollbar-width:none]">
             {allTeams.map(t => (
               <button
                 key={t.id}
@@ -465,6 +533,7 @@ export default function StatsPage() {
                 {t.id === userTeam?.id && <span className="ml-auto text-xs text-amber-400 font-semibold shrink-0">My Team</span>}
               </button>
             ))}
+            </div>
           </div>
         )}
       </div>
