@@ -5,7 +5,7 @@ import {
   getGameState, getFixtures, getPlayoffGamesByDate,
   advanceGameDate, getCupFixtureById,
 } from '@/lib/db/queries';
-import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer, PlayerStatLine } from '@/lib/simulation-engine';
 import { getDb } from '@/lib/db';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 
@@ -21,7 +21,7 @@ export async function PATCH(
     const { id } = await params;
     const gameId = Number(id);
     const db = getDb();
-    const { homeSets, awaySets, homePoints, awayPoints } = await req.json();
+    const { homeSets, awaySets, homePoints, awayPoints, playerStats } = await req.json();
 
     // 1. Determine if this is a regular fixture, playoff game, or cup game
     const { searchParams } = new URL(req.url);
@@ -84,6 +84,8 @@ export async function PATCH(
     }
 
     // 2. Save the user's match result
+    const seasonYear = parseInt(targetDate.slice(0, 4), 10);
+
     if (isPlayoffGame) {
       recordPlayoffGameResult(gameId, {
         home_sets:   homeSets,
@@ -91,6 +93,9 @@ export async function PATCH(
         home_points: homePoints ?? 0,
         away_points: awayPoints ?? 0,
       });
+      if (playerStats?.length) {
+        insertPlayerMatchStats(db, playerStats, 'playoff', gameId, seasonYear);
+      }
     } else if (isCupGame) {
       recordCupFixtureResult(gameId, {
         home_sets:   homeSets,
@@ -98,6 +103,9 @@ export async function PATCH(
         home_points: homePoints ?? 0,
         away_points: awayPoints ?? 0,
       });
+      if (playerStats?.length) {
+        insertPlayerMatchStats(db, playerStats, 'cup', gameId, seasonYear);
+      }
     } else if (fixture) {
       updateFixtureResult(gameId, {
         home_sets:   homeSets,
@@ -110,6 +118,9 @@ export async function PATCH(
         homeSets, awaySets,
         homePoints ?? 0, awayPoints ?? 0,
       );
+      if (playerStats?.length) {
+        insertPlayerMatchStats(db, playerStats, 'league', gameId, seasonYear);
+      }
     }
 
     // 3. Simulate all remaining regular fixtures on the same date
@@ -389,7 +400,25 @@ export async function POST(
 }
 
 
-// ─── Helper: load or auto-generate a team's lineup ───────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function insertPlayerMatchStats(
+  db: any,
+  stats: PlayerStatLine[],
+  fixtureType: 'league' | 'playoff' | 'cup',
+  fixtureId: number,
+  seasonYear: number,
+) {
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO player_match_stats
+      (player_id, team_id, season_year, fixture_type, fixture_id, points, spikes, blocks, aces, digs)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const s of stats) {
+    stmt.run(s.playerId, s.teamId || null, seasonYear, fixtureType, fixtureId, s.points, s.spikes, s.blocks, s.aces, s.digs);
+  }
+}
 
 function buildLineup(teamId: number): SimLineup {
   const saved = getSquadLineup(teamId);

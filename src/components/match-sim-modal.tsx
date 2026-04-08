@@ -281,6 +281,44 @@ export default function MatchSimModal({ fixtureId, fixtureType = 'regular', onCl
             const fixtureHomePoints = userIsHome ? finalState.matchStats.home.totalPoints : finalState.matchStats.away.totalPoints;
             const fixtureAwayPoints = userIsHome ? finalState.matchStats.away.totalPoints : finalState.matchStats.home.totalPoints;
 
+            // Convert player stats from match format to API format, mapping player names to IDs
+            const playerStats = [];
+            const homeTeamId = homeTeamIdRef.current;
+            const awayTeamId = awayTeamIdRef.current;
+
+            // Create lookup maps by player name for both teams
+            const homePlayerMap = new Map((homeLuRef.current ? Object.values(homeLuRef.current).filter(Boolean) as SimPlayer[] : []).map(p => [p.player_name, p]));
+            const awayPlayerMap = new Map((awayLuRef.current ? Object.values(awayLuRef.current).filter(Boolean) as SimPlayer[] : []).map(p => [p.player_name, p]));
+
+            for (const [playerName, stats] of Object.entries(finalState.matchStats.home.players)) {
+                const player = homePlayerMap.get(playerName);
+                if (player) {
+                    playerStats.push({
+                        playerId: player.id,
+                        teamId: homeTeamId,
+                        points: stats.points,
+                        spikes: stats.spikes,
+                        blocks: stats.blocks,
+                        aces: stats.aces,
+                        digs: stats.digs,
+                    });
+                }
+            }
+            for (const [playerName, stats] of Object.entries(finalState.matchStats.away.players)) {
+                const player = awayPlayerMap.get(playerName);
+                if (player) {
+                    playerStats.push({
+                        playerId: player.id,
+                        teamId: awayTeamId,
+                        points: stats.points,
+                        spikes: stats.spikes,
+                        blocks: stats.blocks,
+                        aces: stats.aces,
+                        digs: stats.digs,
+                    });
+                }
+            }
+
             const typeParam = fixtureType !== 'regular' ? `?type=${fixtureType}` : '';
             await fetch(`/api/fixtures/${fixtureId}${typeParam}`, {
                 method: 'PATCH',
@@ -290,6 +328,7 @@ export default function MatchSimModal({ fixtureId, fixtureType = 'regular', onCl
                     awaySets:   fixtureAwaySets,
                     homePoints: fixtureHomePoints,
                     awayPoints: fixtureAwayPoints,
+                    playerStats,
                 }),
             });
         } catch (err) { console.error('Failed to save match result:', err); }
