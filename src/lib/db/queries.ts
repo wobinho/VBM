@@ -865,6 +865,9 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
   // Delete all cup competitions from origin year onwards
   db.prepare('DELETE FROM cup_competitions WHERE year >= ?').run(originYear);
 
+  // Clear all player match stats
+  db.prepare('DELETE FROM player_match_stats').run();
+
   // Rewind game_state to Jan 1 of the origin year
   const startDate = `${originYear}-01-01`;
   const firstSeason = originSeasons[0];

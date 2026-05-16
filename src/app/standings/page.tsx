@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
-    Trophy, TrendingUp, TrendingDown, X, MapPin, Users, Calendar,
+    Trophy, TrendingUp, TrendingDown, X, MapPin, Users, Calendar, Award,
     BarChart2, Gamepad2, Shield, Swords, DollarSign, ChevronDown, Globe,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -9,6 +10,29 @@ import { getCountryName, getCountryCode } from '@/lib/country-codes';
 import PlayerModal from '@/components/player-modal';
 import GameSummaryModal from '@/components/game-summary-modal';
 import { useAuth } from '@/contexts/auth-context';
+
+// Position theming for the team-detail roster — matches the squad page's FUT cards.
+const POS_THEME: Record<string, { hex: string; rail: string; chip: string; text: string; halo: string }> = {
+    'Setter':          { hex: '#3b82f6', rail: 'bg-[#3b82f6]', chip: 'bg-[#3b82f6] text-black', text: 'text-[#60a5fa]', halo: 'bg-[#3b82f6]/30' },
+    'Outside Hitter':  { hex: '#ef4444', rail: 'bg-[#ef4444]', chip: 'bg-[#ef4444] text-black', text: 'text-[#fca5a5]', halo: 'bg-[#ef4444]/30' },
+    'Middle Blocker':  { hex: '#a78bfa', rail: 'bg-[#a78bfa]', chip: 'bg-[#a78bfa] text-black', text: 'text-[#c4b5fd]', halo: 'bg-[#a78bfa]/30' },
+    'Opposite Hitter': { hex: '#fb923c', rail: 'bg-[#fb923c]', chip: 'bg-[#fb923c] text-black', text: 'text-[#fdba74]', halo: 'bg-[#fb923c]/30' },
+    'Libero':          { hex: '#22c55e', rail: 'bg-[#22c55e]', chip: 'bg-[#22c55e] text-black', text: 'text-[#86efac]', halo: 'bg-[#22c55e]/30' },
+};
+function posTheme(p: string) {
+    return POS_THEME[p] || { hex: '#a1a1aa', rail: 'bg-zinc-400', chip: 'bg-zinc-300 text-black', text: 'text-zinc-300', halo: 'bg-white/15' };
+}
+function posAbbr(p: string) {
+    const m: Record<string, string> = { 'Setter': 'S', 'Outside Hitter': 'OH', 'Middle Blocker': 'MB', 'Opposite Hitter': 'OPP', 'Libero': 'L' };
+    return m[p] || p.substring(0, 2).toUpperCase();
+}
+function ovrTier(v: number): { label: string; text: string; ring: string } {
+    if (v >= 85) return { label: 'ELITE',  text: 'text-emerald-300', ring: 'ring-emerald-300/45' };
+    if (v >= 75) return { label: 'GOLD',   text: 'text-yellow-300',   ring: 'ring-yellow-300/40' };
+    if (v >= 65) return { label: 'PRO',    text: 'text-amber-300',    ring: 'ring-amber-300/35' };
+    if (v >= 55) return { label: 'SILVER', text: 'text-zinc-200',     ring: 'ring-zinc-200/30' };
+    return         { label: 'BRONZE', text: 'text-orange-300',   ring: 'ring-orange-300/30' };
+}
 
 interface League { id: number; league_name: string; format_type?: string | null; }
 interface Team {
@@ -130,83 +154,204 @@ export default function StandingsPage() {
 
     function StandingsTable({ conferenceTeams, title, accentColor = "amber" }: { conferenceTeams: Team[]; title: string; accentColor?: string }) {
         const total = conferenceTeams.length;
+        const accent = accentColor === 'sky' ? 'var(--info)' : accentColor === 'violet' ? 'var(--epic)' : 'var(--volt)';
+        const accentHex = accentColor === 'sky' ? '#22d3ee' : accentColor === 'violet' ? '#a78bfa' : '#facc15';
+        const leader = conferenceTeams[0];
+        const totalPoints = conferenceTeams.reduce((s, t) => s + t.points, 0);
+
+        // Medal config for top 3
+        const MEDAL = [
+            { tier: 'GOLD',   text: 'text-yellow-300',  ring: 'ring-yellow-300/45', bg: 'from-yellow-300/15 via-yellow-300/[0.04]', rail: 'bg-yellow-300', name: 'CHAMPION' },
+            { tier: 'SILVER', text: 'text-zinc-200',    ring: 'ring-zinc-200/35',   bg: 'from-zinc-200/12 via-zinc-200/[0.04]',     rail: 'bg-zinc-300',   name: 'RUNNER-UP' },
+            { tier: 'BRONZE', text: 'text-orange-300',  ring: 'ring-orange-300/35', bg: 'from-orange-400/14 via-orange-400/[0.04]', rail: 'bg-orange-400', name: 'THIRD' },
+        ] as const;
+
         return (
             <div>
-                <div className="flex items-center gap-3 mb-3">
-                    <h2 className={`text-base font-bold text-white uppercase tracking-widest border-l-4 pl-3 ${
-                        accentColor === 'sky' ? 'border-sky-500' :
-                        accentColor === 'violet' ? 'border-violet-500' :
-                        'border-amber-500'
-                    }`}>{title}</h2>
-                    <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold bg-white/5 px-2 py-0.5 rounded-full border border-white/5">{total} teams</span>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800/60 border border-white/10 overflow-x-auto shadow-xl">
-                    {/* Table header */}
-                    <div className="grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 border-b border-white/[0.06] text-[10px] text-gray-600 uppercase tracking-widest font-semibold min-w-fit bg-white/[0.02]">
-                        <span className="w-6 md:w-8">#</span>
-                        <span>Team</span>
-                        <span className="text-center">P</span>
-                        <span className="text-center">W</span>
-                        <span className="text-center">L</span>
-                        <span className="text-center" title="Point Differential">PD</span>
-                        <span className="text-center" title="Points">Pts</span>
+                {/* Section header with leader strip */}
+                <div className="flex items-end justify-between gap-3 mb-3 pb-3 border-b border-white/[0.05]">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative">
+                            <div className="w-1.5 h-9" style={{ background: accent }} />
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45" style={{ background: accent }} />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="font-mono text-[8.5px] uppercase tracking-[0.32em] font-black" style={{ color: accent }}>Standings</p>
+                            <h2 className="font-display text-xl tracking-[0.06em] text-[var(--bone)] uppercase leading-none mt-1">{title}</h2>
+                        </div>
                     </div>
+                    <div className="hidden sm:flex items-center gap-3 shrink-0">
+                        {leader && leader.points > 0 && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-white/[0.03] border border-white/[0.06]">
+                                <Trophy size={11} className="text-yellow-300" />
+                                <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--ink-500)] font-bold">Leader</span>
+                                <span className="font-display text-xs tracking-wide text-yellow-300 max-w-[140px] truncate">{leader.team_name.toUpperCase()}</span>
+                            </div>
+                        )}
+                        <span className="font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.22em] font-bold tabular">{total} teams</span>
+                    </div>
+                </div>
 
-                    {conferenceTeams.map((team, idx) => {
-                        const isTop4 = idx < 4;
-                        const isBottom = idx === total - 1;
-                        const isUserTeam = userTeam?.id === team.id;
-                        const pd = team.score_diff;
+                {/* Table */}
+                <div className="surface-raised overflow-hidden relative">
+                    {/* Top accent rail */}
+                    <div className="absolute top-0 inset-x-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${accent} 0%, transparent 100%)` }} />
 
-                        let borderColor = 'border-l-transparent';
-                        if (isUserTeam) borderColor = 'border-l-amber-400';
-                        else if (idx === 0) borderColor = 'border-l-amber-400';
-                        else if (isTop4) borderColor = 'border-l-amber-400/40';
-                        else if (isBottom) borderColor = 'border-l-red-500/60';
+                    <div className="overflow-x-auto">
+                        {/* Table header */}
+                        <div className="grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 bg-[var(--ink-950)]/40 border-b border-white/[0.06] font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.28em] font-black min-w-fit">
+                            <span className="w-6 md:w-8 text-center">#</span>
+                            <span>Team</span>
+                            <span className="text-center" title="Played">P</span>
+                            <span className="text-center" title="Won">W</span>
+                            <span className="text-center" title="Lost">L</span>
+                            <span className="text-center" title="Point Differential">PD</span>
+                            <span className="text-center" title="Points">Pts</span>
+                        </div>
 
-                        return (
-                            <div key={team.id} className={idx < total - 1 ? 'border-b border-white/[0.04]' : ''}>
-                                <div
-                                    className={`grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-4 items-center cursor-pointer transition-all min-w-fit border-l-2 ${borderColor} ${
-                                        isUserTeam 
-                                            ? (accentColor === 'sky' ? 'bg-sky-500/[0.08] hover:bg-sky-500/[0.13]' : accentColor === 'violet' ? 'bg-violet-500/[0.08] hover:bg-violet-500/[0.13]' : 'bg-amber-500/[0.08] hover:bg-amber-500/[0.13]') 
-                                            : 'hover:bg-white/[0.04]'
-                                    }`}
-                                    onClick={() => setSelectedTeam({ ...team, rank: idx + 1 })}
-                                >
-                                    <span className={`w-6 md:w-8 text-xs md:text-sm font-bold flex items-center justify-center ${idx === 0 ? 'text-amber-400' : isTop4 ? 'text-amber-400/60' : isBottom ? 'text-red-400/60' : 'text-gray-600'}`}>
-                                        {idx + 1}
-                                    </span>
-                                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                                        <TeamLogo teamId={team.id} />
-                                        <div className="flex items-center gap-1 md:gap-2 min-w-0">
-                                            <span className={`font-semibold text-xs md:text-sm truncate ${isUserTeam ? 'text-amber-300 font-bold' : idx === 0 ? 'text-amber-300' : isBottom ? 'text-red-300/80' : 'text-white'}`}>{team.team_name}</span>
-                                            <CountryFlag country={team.country} />
+                        {conferenceTeams.map((team, idx) => {
+                            const isTop3 = idx < 3;
+                            const isTop4 = idx < 4;
+                            const isBottom = idx === total - 1;
+                            const isUserTeam = userTeam?.id === team.id;
+                            const pd = team.score_diff;
+                            const medal = isTop3 ? MEDAL[idx] : null;
+                            const pointsPct = totalPoints > 0 ? Math.max(4, Math.round((team.points / Math.max(...conferenceTeams.map(t => t.points), 1)) * 100)) : 0;
+
+                            // Row background gradient
+                            let bgClass = 'hover:bg-white/[0.045]';
+                            if (isUserTeam) bgClass = 'bg-[var(--volt)]/[0.09] hover:bg-[var(--volt)]/[0.14]';
+                            else if (isBottom) bgClass = 'hover:bg-[var(--loss)]/[0.06]';
+
+                            // Left rail color (3px)
+                            let railColor = 'transparent';
+                            if (isUserTeam) railColor = 'var(--volt)';
+                            else if (medal) railColor = medal === MEDAL[0] ? '#facc15' : medal === MEDAL[1] ? '#e4e4e7' : '#fb923c';
+                            else if (isBottom) railColor = 'rgba(239,68,68,0.65)';
+                            else if (isTop4) railColor = 'rgba(250,204,21,0.30)';
+
+                            return (
+                                <div key={team.id}
+                                    className={`group relative ${idx < total - 1 ? 'border-b border-white/[0.04]' : ''}`}>
+                                    {/* Medal-tier wash for top 3 */}
+                                    {medal && !isUserTeam && (
+                                        <div className={`absolute inset-0 bg-gradient-to-r ${medal.bg} to-transparent pointer-events-none`} />
+                                    )}
+                                    {/* Relegation hazard stripe */}
+                                    {isBottom && !isUserTeam && (
+                                        <div className="absolute inset-0 opacity-[0.08] pointer-events-none"
+                                            style={{ backgroundImage: 'repeating-linear-gradient(135deg, var(--loss) 0 6px, transparent 6px 14px)' }} />
+                                    )}
+                                    {/* User-team holographic sweep on hover */}
+                                    {isUserTeam && (
+                                        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[900ms] ease-out pointer-events-none"
+                                            style={{ background: 'linear-gradient(110deg, transparent 40%, rgba(250,204,21,0.08) 50%, transparent 60%)' }} />
+                                    )}
+
+                                    <div
+                                        className={`relative grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-3.5 items-center cursor-pointer transition-colors min-w-fit border-l-[3px] ${bgClass}`}
+                                        style={{ borderLeftColor: railColor }}
+                                        onClick={() => setSelectedTeam({ ...team, rank: idx + 1 })}
+                                    >
+                                        {/* Rank pill */}
+                                        <div className="w-6 md:w-8 flex items-center justify-center">
+                                            {medal ? (
+                                                <div className={`relative w-7 h-7 md:w-8 md:h-8 rounded-sm flex items-center justify-center ring-1 ${medal.ring} bg-black/40`}>
+                                                    <span className={`font-display text-sm md:text-base ${medal.text} tabular leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]`}>{idx + 1}</span>
+                                                    {idx === 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-300 shadow-[0_0_8px_rgba(250,204,21,0.7)]" />}
+                                                </div>
+                                            ) : (
+                                                <span className={`font-display text-sm md:text-base tabular leading-none ${
+                                                    isUserTeam ? 'text-[var(--volt)]' :
+                                                    isTop4 ? 'text-[var(--volt)]/65' :
+                                                    isBottom ? 'text-[var(--loss)]/70' :
+                                                    'text-[var(--ink-500)]'
+                                                }`}>{idx + 1}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Team */}
+                                        <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                                            <div className={`relative ${medal ? `rounded-sm p-0.5 ring-1 ${medal.ring}` : ''}`}>
+                                                <TeamLogo teamId={team.id} size={medal ? 30 : 28} />
+                                            </div>
+                                            <div className="flex flex-col min-w-0">
+                                                <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+                                                    <span className={`font-semibold text-xs md:text-sm truncate ${
+                                                        isUserTeam ? 'text-[var(--volt)] font-bold tracking-wide' :
+                                                        idx === 0 ? 'text-yellow-100' :
+                                                        idx === 1 ? 'text-zinc-100' :
+                                                        idx === 2 ? 'text-orange-200' :
+                                                        isBottom ? 'text-[var(--loss)]/80' :
+                                                        'text-[var(--bone)]'
+                                                    }`}>{team.team_name}</span>
+                                                    <CountryFlag country={team.country} />
+                                                </div>
+                                                {(medal || isUserTeam) && (
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        {isUserTeam && (
+                                                            <span className="font-mono text-[8px] font-black uppercase tracking-[0.28em] px-1 py-[1px] rounded-[2px] bg-[var(--volt)] text-[var(--ink-950)]">
+                                                                My Club
+                                                            </span>
+                                                        )}
+                                                        {medal && !isUserTeam && (
+                                                            <span className={`font-mono text-[8px] font-black uppercase tracking-[0.28em] ${medal.text}`}>
+                                                                {medal.name}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <span className="text-center font-mono text-xs md:text-sm text-[var(--ink-400)] tabular">{team.played}</span>
+                                        <span className="text-center font-mono text-xs md:text-sm text-[var(--win)] font-bold tabular">{team.won}</span>
+                                        <span className="text-center font-mono text-xs md:text-sm text-[var(--loss)] font-bold tabular">{team.lost}</span>
+                                        <span className={`text-center font-mono text-xs md:text-sm font-bold tabular ${pd > 0 ? 'text-[var(--win)]' : pd < 0 ? 'text-[var(--loss)]' : 'text-[var(--ink-500)]'}`}>
+                                            {pd > 0 ? `+${pd}` : pd}
+                                        </span>
+
+                                        {/* Points cell — bar + value */}
+                                        <div className="flex items-center justify-end gap-1.5 md:gap-2">
+                                            <div className="hidden md:block w-10 h-[3px] bg-white/[0.05] rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full" style={{
+                                                    width: `${pointsPct}%`,
+                                                    background: medal ? (idx === 0 ? '#facc15' : idx === 1 ? '#e4e4e7' : '#fb923c') : isUserTeam ? 'var(--volt)' : isBottom ? 'var(--loss)' : accent,
+                                                }} />
+                                            </div>
+                                            <span className={`font-display text-lg md:text-2xl tabular leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)] ${
+                                                medal ? medal.text :
+                                                isUserTeam ? 'text-[var(--volt)]' :
+                                                team.points > 0 ? 'text-[var(--bone)]' :
+                                                'text-[var(--ink-500)]'
+                                            }`}>{team.points}</span>
                                         </div>
                                     </div>
-                                    <span className="text-center text-xs md:text-sm text-gray-400">{team.played}</span>
-                                    <span className="text-center text-xs md:text-sm text-emerald-400 font-semibold">{team.won}</span>
-                                    <span className="text-center text-xs md:text-sm text-red-400 font-semibold">{team.lost}</span>
-                                    <span className={`text-center text-xs md:text-sm font-semibold ${pd > 0 ? 'text-emerald-400' : pd < 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                                        {pd > 0 ? `+${pd}` : pd}
-                                    </span>
-                                    <span className="text-center font-black text-sm md:text-base flex items-center justify-center">
-                                        <span className={team.points > 0 ? 'text-emerald-400' : 'text-gray-500'}>{team.points}</span>
-                                    </span>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
 
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-x-5 gap-y-1.5 px-4 md:px-6 py-3 border-t border-white/[0.04] bg-white/[0.01]">
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-sm bg-amber-400" />
-                            <span className="text-[10px] text-gray-500">Top 4 — Playoff</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-sm bg-red-500/60" />
-                            <span className="text-[10px] text-gray-500">Relegation</span>
+                        {/* Legend */}
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 md:px-6 py-3 border-t border-white/[0.04] bg-[var(--ink-950)]/30">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-[2px] bg-yellow-300" />
+                                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Podium 1–3</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]/65" />
+                                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Top 4 · Playoff</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-[2px] bg-[var(--loss)]/65" />
+                                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Relegation</span>
+                            </div>
+                            {userTeam && conferenceTeams.some(t => t.id === userTeam.id) && (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]" />
+                                    <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--volt)] font-bold">My Club</span>
+                                </div>
+                            )}
+                            <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--ink-600)] tabular">{total} clubs</span>
                         </div>
                     </div>
                 </div>
@@ -214,11 +359,93 @@ export default function StandingsPage() {
         );
     }
 
+    // Global stats for the header strip
+    const totalCountries = countriesWithLeagues.length;
+    const userTeamRow = userTeam ? teams.find(t => t.id === userTeam.id) : null;
+    const userLeagueTeams = userTeamRow
+        ? teams.filter(t => t.league_id === userTeamRow.league_id)
+            .sort((a, b) => b.points - a.points || b.score_diff - a.score_diff || (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost))
+        : [];
+    const userRank = userTeamRow ? userLeagueTeams.findIndex(t => t.id === userTeamRow.id) + 1 : 0;
+
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-white">League Standings</h1>
-                <p className="text-sm text-gray-400">{teams.length} teams across {leagues.length} leagues</p>
+        <div className="space-y-6 animate-fade-up">
+            {/* ── HERO HEADER ──────────────────────────────────────────────── */}
+            <div className="relative overflow-hidden rounded-lg border border-white/[0.06] bg-gradient-to-br from-[var(--ink-900)] via-[var(--ink-950)] to-[var(--ink-950)]">
+                {/* Atmosphere */}
+                <div className="absolute -top-20 -left-12 w-72 h-72 rounded-full bg-[var(--volt)]/12 blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-20 right-1/4 w-72 h-72 rounded-full bg-[var(--epic)]/8 blur-3xl pointer-events-none" />
+                {/* Grid texture */}
+                <div className="absolute inset-0 opacity-[0.035] pointer-events-none"
+                    style={{
+                        backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                        backgroundSize: '32px 32px',
+                    }} />
+                {/* Top stripe */}
+                <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-[var(--volt)] via-[var(--volt)]/40 to-transparent" />
+                <div className="absolute top-0 left-32 w-20 h-1.5 bg-[var(--ink-950)]" />
+
+                <div className="relative px-6 md:px-8 py-6 md:py-7 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-end">
+                    {/* Title block */}
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-2.5">
+                            <Trophy size={12} className="text-[var(--volt)]" />
+                            <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.32em] text-[var(--volt)]">League · Tournament Table</p>
+                        </div>
+                        <h1 className="font-display text-5xl md:text-6xl tracking-[0.015em] text-[var(--bone)] leading-[0.85]">
+                            LEAGUE <span className="text-[var(--volt)]">STANDINGS</span>
+                        </h1>
+                        <p className="font-mono text-[10.5px] text-[var(--ink-400)] mt-3.5 uppercase tracking-[0.22em]">
+                            Live competition tables across every active league
+                        </p>
+                    </div>
+
+                    {/* Metric strip */}
+                    <div className="grid grid-cols-3 gap-2.5 lg:gap-3 lg:min-w-[420px]">
+                        {[
+                            { label: 'Clubs', val: teams.length, icon: Users, color: 'var(--volt)' },
+                            { label: 'Leagues', val: leagues.length, icon: Award, color: 'var(--info)' },
+                            { label: 'Nations', val: totalCountries, icon: Globe, color: 'var(--epic)' },
+                        ].map((m) => (
+                            <div key={m.label} className="relative px-3 py-2.5 rounded-md bg-black/40 border border-white/[0.06] backdrop-blur-sm overflow-hidden">
+                                <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: m.color, opacity: 0.65 }} />
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="font-mono text-[8.5px] uppercase tracking-[0.28em] font-black" style={{ color: m.color }}>{m.label}</p>
+                                    <m.icon size={11} style={{ color: m.color, opacity: 0.55 }} />
+                                </div>
+                                <p className="font-display text-2xl tabular leading-none" style={{ color: m.color }}>{m.val}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* User team rank ribbon */}
+                {userTeam && userTeamRow && userRank > 0 && (
+                    <div className="relative px-6 md:px-8 py-3 border-t border-white/[0.05] bg-[var(--volt)]/[0.04] flex items-center gap-3 flex-wrap">
+                        <span className="w-1 h-5 bg-[var(--volt)]" />
+                        <TeamLogo teamId={userTeam.id} size={24} />
+                        <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold">Your Club</span>
+                        <span className="font-display text-base tracking-wide text-[var(--bone)]">{userTeamRow.team_name.toUpperCase()}</span>
+                        <span className="font-mono text-[9px] text-[var(--ink-600)]">·</span>
+                        <span className={`font-mono text-[10.5px] font-black uppercase tracking-[0.22em] tabular ${
+                            userRank === 1 ? 'text-yellow-300' :
+                            userRank <= 3 ? 'text-[var(--bone)]' :
+                            userRank <= 4 ? 'text-[var(--volt)]' :
+                            userRank === userLeagueTeams.length ? 'text-[var(--loss)]' :
+                            'text-[var(--ink-300)]'
+                        }`}>
+                            #{userRank} / {userLeagueTeams.length}
+                        </span>
+                        <span className="font-mono text-[9px] text-[var(--ink-600)]">·</span>
+                        <span className="font-mono text-[10.5px] uppercase tracking-[0.22em] tabular">
+                            <span className="text-[var(--volt)] font-bold">{userTeamRow.points}</span>
+                            <span className="text-[var(--ink-500)] ml-1">PTS</span>
+                        </span>
+                        <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--ink-500)]">
+                            {userTeamRow.won}W · {userTeamRow.lost}L
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Country groups */}
@@ -238,65 +465,127 @@ export default function StandingsPage() {
 
                     const countryCode = country.length > 2 ? getCountryCode(country) : country.toLowerCase();
 
+                    const countryTeamCount = teams.filter(t => countryLeagues.some(l => l.id === t.league_id)).length;
+                    const hasUserClubInCountry = !!(userTeam && countryLeagues.some(l => l.id === userTeam.league_id));
+
                     return (
-                        <div key={country} className="rounded-2xl border border-white/10 overflow-hidden">
-                            {/* Country header — collapsible trigger */}
+                        <div key={country} className={`relative rounded-lg overflow-hidden border transition-colors ${
+                            hasUserClubInCountry
+                                ? 'border-[var(--volt)]/35 bg-[var(--volt)]/[0.025]'
+                                : 'border-white/[0.06] bg-[var(--ink-900)]/40'
+                        }`}>
+                            {/* Country header */}
                             <button
                                 onClick={() => toggleCountry(country)}
-                                className="w-full flex items-center gap-3 px-5 py-4 bg-white/[0.03] hover:bg-white/[0.06] transition-colors cursor-pointer"
+                                className="group relative w-full flex items-center gap-4 px-5 py-4 hover:bg-white/[0.025] transition-colors cursor-pointer overflow-hidden"
                             >
-                                <div className="w-8 h-5 rounded overflow-hidden shrink-0">
+                                {/* Ghosted flag backdrop on the right */}
+                                <div className="absolute right-0 top-0 bottom-0 w-44 opacity-[0.07] pointer-events-none"
+                                    style={{
+                                        backgroundImage: `url(/assets/flags/${countryCode}.svg)`,
+                                        backgroundSize: 'cover',
+                                        backgroundPosition: 'center',
+                                        maskImage: 'linear-gradient(to left, black 0%, transparent 100%)',
+                                        WebkitMaskImage: 'linear-gradient(to left, black 0%, transparent 100%)',
+                                    }} />
+
+                                {/* Live flag plaque */}
+                                <div className={`relative w-12 h-8 rounded-sm overflow-hidden shrink-0 ring-1 shadow-md ${hasUserClubInCountry ? 'ring-[var(--volt)]/40' : 'ring-white/10'}`}>
                                     <img src={`/assets/flags/${countryCode}.svg`} alt={country}
                                         className="w-full h-full object-cover"
                                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 </div>
-                                <Globe size={14} className="text-gray-500 shrink-0" />
-                                <span className="font-bold text-white text-sm flex-1 text-left">{country}</span>
-                                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold bg-white/5 px-2 py-0.5 rounded-full border border-white/5 shrink-0">
-                                    {countryLeagues.length} {countryLeagues.length === 1 ? 'league' : 'leagues'}
-                                </span>
-                                <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+
+                                {/* Title cluster */}
+                                <div className="relative flex-1 min-w-0 text-left">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                        <Globe size={10} className="text-[var(--ink-500)]" />
+                                        <span className="font-mono text-[8.5px] uppercase tracking-[0.3em] text-[var(--ink-500)] font-bold">Nation</span>
+                                        {hasUserClubInCountry && (
+                                            <span className="font-mono text-[8px] font-black uppercase tracking-[0.28em] px-1 py-[1px] rounded-[2px] bg-[var(--volt)] text-[var(--ink-950)]">
+                                                Home
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="block font-display text-lg md:text-xl tracking-[0.05em] text-[var(--bone)] leading-none truncate">
+                                        {country.toUpperCase()}
+                                    </span>
+                                </div>
+
+                                {/* Right meta */}
+                                <div className="relative flex items-center gap-2 shrink-0">
+                                    <div className="hidden sm:flex flex-col items-end">
+                                        <span className="font-mono text-[8.5px] uppercase tracking-[0.28em] text-[var(--ink-500)] font-black">Leagues</span>
+                                        <span className="font-display text-base text-[var(--bone)] tabular leading-none mt-0.5">{countryLeagues.length}</span>
+                                    </div>
+                                    <span className="hidden sm:block w-px h-7 bg-white/[0.08]" />
+                                    <div className="hidden sm:flex flex-col items-end">
+                                        <span className="font-mono text-[8.5px] uppercase tracking-[0.28em] text-[var(--ink-500)] font-black">Clubs</span>
+                                        <span className="font-display text-base text-[var(--bone)] tabular leading-none mt-0.5">{countryTeamCount}</span>
+                                    </div>
+                                    <div className={`w-7 h-7 ml-1.5 rounded-sm flex items-center justify-center border transition-all ${
+                                        isExpanded ? 'bg-[var(--volt)]/15 border-[var(--volt)]/40 text-[var(--volt)]' : 'bg-white/[0.04] border-white/[0.08] text-[var(--ink-400)] group-hover:text-[var(--volt)] group-hover:border-[var(--volt)]/30'
+                                    }`}>
+                                        <ChevronDown size={13} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </div>
+                                </div>
                             </button>
 
                             {isExpanded && (
-                                <div className="border-t border-white/[0.06] bg-black/10">
-                                    {/* League selector — only shown if multiple leagues in country */}
+                                <div className="relative border-t border-white/[0.05] bg-[var(--ink-950)]/30">
+                                    {/* League switcher — tactical chips */}
                                     {countryLeagues.length > 1 && (
-                                        <div className="flex items-center gap-2 flex-wrap px-5 pt-4 pb-2">
-                                            {countryLeagues.map(l => (
-                                                <button key={l.id}
-                                                    onClick={() => setSelectedLeagueByCountry(prev => ({ ...prev, [country]: l.id }))}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                                        l.id === selectedLeagueId
-                                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                                            : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'
-                                                    }`}
-                                                >
-                                                    {l.league_name}
-                                                    {(l as any).tier && <span className="ml-1.5 text-[9px] text-gray-600">T{(l as any).tier}</span>}
-                                                </button>
-                                            ))}
+                                        <div className="flex items-center gap-2 flex-wrap px-5 pt-4 pb-1">
+                                            <span className="font-mono text-[8.5px] uppercase tracking-[0.3em] text-[var(--ink-500)] font-black mr-1">Tier</span>
+                                            {countryLeagues.map(l => {
+                                                const isSel = l.id === selectedLeagueId;
+                                                const isUserLeague = userTeam?.league_id === l.id;
+                                                return (
+                                                    <button key={l.id}
+                                                        onClick={() => setSelectedLeagueByCountry(prev => ({ ...prev, [country]: l.id }))}
+                                                        className={`group/chip relative px-3 py-1.5 rounded-sm font-mono text-[10.5px] font-black uppercase tracking-[0.18em] transition-all cursor-pointer overflow-hidden ${
+                                                            isSel
+                                                                ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_3px_0_0_rgba(0,0,0,0.4)]'
+                                                                : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08] hover:border-white/15'
+                                                        }`}
+                                                    >
+                                                        <span className="relative flex items-center gap-1.5">
+                                                            {isUserLeague && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-[var(--ink-950)]' : 'bg-[var(--volt)]'}`} />}
+                                                            {l.league_name}
+                                                            {(l as any).tier && <span className={`text-[8px] opacity-70 ml-0.5`}>T{(l as any).tier}</span>}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     )}
 
-                                    {/* Conference toggle for leagues with two conferences */}
+                                    {/* Overall/Conference toggle — segmented */}
                                     {hasTwoConf && (
-                                        <div className="flex items-center gap-3 px-5 pt-3 pb-1">
-                                            <button onClick={() => setShowConference(false)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${!showConference ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
-                                                Overall
-                                            </button>
-                                            <button onClick={() => setShowConference(true)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${showConference ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'}`}>
-                                                Conference
-                                            </button>
+                                        <div className="flex items-center gap-2 px-5 pt-3 pb-1">
+                                            <span className="font-mono text-[8.5px] uppercase tracking-[0.3em] text-[var(--ink-500)] font-black mr-1">View</span>
+                                            <div className="inline-flex gap-1 bg-black/40 border border-white/[0.06] rounded-sm p-1">
+                                                <button onClick={() => setShowConference(false)}
+                                                    className={`px-3 py-1 rounded-[2px] font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer ${!showConference ? 'bg-[var(--volt)] text-[var(--ink-950)]' : 'text-[var(--ink-400)] hover:text-[var(--bone)]'}`}>
+                                                    Overall
+                                                </button>
+                                                <button onClick={() => setShowConference(true)}
+                                                    className={`px-3 py-1 rounded-[2px] font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer ${showConference ? 'bg-[var(--epic)] text-black' : 'text-[var(--ink-400)] hover:text-[var(--bone)]'}`}>
+                                                    Split by Conf
+                                                </button>
+                                            </div>
+                                            <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--ink-500)] ml-2 hidden sm:inline">
+                                                <span className="text-[var(--info)] font-bold">North {northTeams.length}</span>
+                                                <span className="text-[var(--ink-700)] mx-1.5">/</span>
+                                                <span className="text-[var(--epic)] font-bold">South {southTeams.length}</span>
+                                            </span>
                                         </div>
                                     )}
 
                                     {/* Standings table(s) */}
-                                    <div className="p-4 pt-3">
+                                    <div className="p-4 pt-3 md:p-5 md:pt-3">
                                         {hasTwoConf && showConference ? (
-                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-8">
                                                 <StandingsTable conferenceTeams={northTeams} title="North Conference" accentColor="sky" />
                                                 <StandingsTable conferenceTeams={southTeams} title="South Conference" accentColor="violet" />
                                             </div>
@@ -361,148 +650,280 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : `$${(n / 1000).toFixed(0)}K`;
     const setDiff = team.sets_won - team.sets_lost;
 
-    return (
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+    if (!mounted) return null;
+
+    // Form string from the last 5 matches (oldest → newest reading order: W L W L W)
+    const form = (() => {
+        const last5 = [...fixtures].slice(0, 5).reverse();
+        return last5.map(f => {
+            const isHome = f.home_team_id === team.id;
+            const ts = isHome ? f.home_sets : f.away_sets;
+            const os = isHome ? f.away_sets : f.home_sets;
+            if (ts === null || os === null) return 'D';
+            return ts > os ? 'W' : 'L';
+        });
+    })();
+    const winRate = team.played > 0 ? Math.round((team.won / team.played) * 100) : 0;
+    const setsForRate = team.sets_won + team.sets_lost > 0
+        ? Math.round((team.sets_won / (team.sets_won + team.sets_lost)) * 100)
+        : 0;
+
+    const avgOverall = players.length > 0
+        ? Math.round(players.reduce((s, p) => s + p.overall, 0) / players.length)
+        : 0;
+
+    return createPortal((
         <>
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)' }}
             onClick={onClose}>
-            <div className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden border border-white/10 shadow-2xl flex flex-col"
-                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+            <div className="relative w-full max-w-5xl max-h-[92vh] rounded-lg overflow-hidden surface-raised flex flex-col animate-fade-up"
                 onClick={e => e.stopPropagation()}>
 
-                {/* Header Section */}
-                <div className="relative px-8 pt-10 pb-8 border-b border-white/5 shrink-0"
-                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                {/* Top accent stripe */}
+                <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[var(--volt)] via-[var(--volt-bright,var(--volt))] to-transparent z-30" />
+                {/* Notch like trading cards */}
+                <div className="absolute top-0 left-24 w-24 h-1.5 bg-[var(--ink-950)] z-30" />
+
+                {/* ── HERO ─────────────────────────────────────────────────────── */}
+                <div className="relative shrink-0 overflow-hidden">
+                    {/* Background atmosphere */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-[var(--volt)]/[0.07] via-transparent to-transparent" />
+                    <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-[var(--volt)]/12 blur-3xl" />
+                    <div className="absolute -bottom-32 left-1/3 w-72 h-72 rounded-full bg-[var(--epic)]/8 blur-3xl" />
+                    {/* Grid overlay */}
+                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay"
+                        style={{
+                            backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+                            backgroundSize: '28px 28px',
+                        }} />
+                    {/* Ghosted oversized logo backdrop */}
+                    <div className="absolute -right-10 -top-6 w-[300px] h-[300px] opacity-[0.06] pointer-events-none">
+                        <Image src={`/assets/teams/${team.id}.png`} alt="" fill unoptimized className="object-contain"
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
+                    </div>
+
+                    {/* Close */}
                     <button onClick={onClose}
-                        className="absolute top-6 right-6 w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
-                        <X size={18} />
+                        className="absolute top-5 right-5 w-10 h-10 rounded-md bg-black/50 backdrop-blur-md border border-white/[0.10] flex items-center justify-center text-[var(--ink-300)] hover:text-[var(--volt)] hover:border-[var(--volt)]/50 transition-all cursor-pointer z-30">
+                        <X size={16} />
                     </button>
 
-                    <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-8">
-                        <div className="relative">
-                            <div className="w-28 h-28 md:w-32 md:h-32 rounded-3xl bg-white/[0.03] border border-white/10 p-4 shadow-2xl flex items-center justify-center overflow-hidden">
-                                <Image src={`/assets/teams/${team.id}.png`} alt={team.team_name} fill unoptimized
-                                    className="object-contain p-4"
-                                    onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
+                    <div className="relative px-8 pt-9 pb-7">
+                        <div className="flex flex-col md:flex-row md:items-end gap-7">
+                            {/* Logo plaque */}
+                            <div className="relative shrink-0">
+                                <div className="absolute -inset-2 bg-[var(--volt)]/15 blur-xl rounded-lg" />
+                                <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-md bg-gradient-to-br from-white/[0.06] to-white/[0.01] border border-white/[0.10] p-4 flex items-center justify-center overflow-hidden shadow-[0_20px_50px_-15px_rgba(0,0,0,0.7)]">
+                                    <Image src={`/assets/teams/${team.id}.png`} alt={team.team_name} fill unoptimized
+                                        className="object-contain p-5"
+                                        onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
+                                    {/* corner ticks */}
+                                    <span className="absolute top-1 left-1 w-2 h-2 border-t border-l border-[var(--volt)]/60" />
+                                    <span className="absolute top-1 right-1 w-2 h-2 border-t border-r border-[var(--volt)]/60" />
+                                    <span className="absolute bottom-1 left-1 w-2 h-2 border-b border-l border-[var(--volt)]/60" />
+                                    <span className="absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[var(--volt)]/60" />
+                                </div>
+                                {/* Rank plaque */}
+                                <div className="absolute -top-4 -right-4 min-w-[60px] h-12 px-2.5 rounded-md bg-[var(--volt)] border-2 border-[var(--ink-950)] flex flex-col items-center justify-center text-[var(--ink-950)] shadow-[0_8px_20px_rgba(0,0,0,0.5)]">
+                                    <span className="font-mono text-[7.5px] font-black uppercase tracking-[0.22em] leading-none">Rank</span>
+                                    <span className="font-display text-xl tracking-wider leading-none tabular mt-0.5">#{team.rank}</span>
+                                </div>
                             </div>
-                            <div className="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-amber-500 border-2 border-gray-900 flex items-center justify-center text-gray-900 font-black shadow-lg">
-                                #{team.rank}
-                            </div>
-                        </div>
 
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                                <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">{team.team_name}</h2>
-                                <img src={`/assets/flags/${team.country?.length === 2 ? team.country.toLowerCase() : getCountryCode(team.country || 'un')}.svg`}
-                                    alt="Flag" className="w-7 rounded shadow-sm opacity-80" />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-sm text-gray-400">
-                                <div className="flex items-center gap-2">
-                                    <MapPin size={14} className="text-amber-500" />
-                                    <span>{team.stadium || 'Unknown Stadium'}</span>
+                            {/* Identity */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2.5">
+                                    <span className="w-1 h-3 bg-[var(--volt)]" />
+                                    <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.32em] text-[var(--volt)]">Franchise Dossier</p>
                                 </div>
-                                <div className="flex items-center gap-2 font-medium">
-                                    <Trophy size={14} className="text-amber-500" />
-                                    <span className="text-white">{team.points} Points</span>
+                                <div className="flex items-end gap-3 flex-wrap">
+                                    <h2 className="font-display text-4xl md:text-5xl tracking-[0.015em] text-[var(--bone)] leading-[0.9]">
+                                        {team.team_name.toUpperCase()}
+                                    </h2>
+                                    <img src={`/assets/flags/${team.country?.length === 2 ? team.country.toLowerCase() : getCountryCode(team.country || 'un')}.svg`}
+                                        alt="Flag" className="w-9 h-6 rounded-sm shadow-md ring-1 ring-white/15 object-cover" />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Calendar size={14} className="text-amber-500" />
-                                    <span>Founded {team.founded || '—'}</span>
+
+                                {/* Quick chips */}
+                                <div className="flex flex-wrap items-center gap-2 mt-4">
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white/[0.04] border border-white/[0.08]">
+                                        <MapPin size={11} className="text-[var(--volt)]" />
+                                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-300)]">{team.stadium || 'Unknown Stadium'}</span>
+                                    </div>
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white/[0.04] border border-white/[0.08]">
+                                        <Calendar size={11} className="text-[var(--volt)]" />
+                                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-300)] tabular">Founded {team.founded || '—'}</span>
+                                    </div>
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-[var(--volt)]/12 border border-[var(--volt)]/30">
+                                        <Trophy size={11} className="text-[var(--volt)]" />
+                                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--volt)] font-bold tabular">{team.points} PTS</span>
+                                    </div>
+                                    {team.team_money !== undefined && (
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-[var(--money)]/12 border border-[var(--money)]/25">
+                                            <DollarSign size={11} className="text-[var(--money)]" />
+                                            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--money)] font-bold tabular">{formatMoney(team.team_money)}</span>
+                                        </div>
+                                    )}
                                 </div>
+
+                                {/* Form ribbon */}
+                                {form.length > 0 && (
+                                    <div className="mt-4 flex items-center gap-3">
+                                        <span className="font-mono text-[8.5px] font-black uppercase tracking-[0.3em] text-[var(--ink-500)]">Last 5</span>
+                                        <div className="flex gap-1">
+                                            {form.map((r, i) => (
+                                                <span key={i}
+                                                    className={`w-6 h-6 flex items-center justify-center rounded-sm font-display text-xs tabular tracking-wider ${
+                                                        r === 'W' ? 'bg-[var(--win)]/20 text-[var(--win)] ring-1 ring-[var(--win)]/35'
+                                                        : r === 'L' ? 'bg-[var(--loss)]/20 text-[var(--loss)] ring-1 ring-[var(--loss)]/35'
+                                                        : 'bg-white/[0.05] text-[var(--ink-400)] ring-1 ring-white/10'
+                                                    }`}>{r}</span>
+                                            ))}
+                                            {Array.from({ length: 5 - form.length }).map((_, i) => (
+                                                <span key={`e${i}`} className="w-6 h-6 rounded-sm border border-dashed border-white/[0.08]" />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Substats Row */}
-                <div className="grid grid-cols-3 md:grid-cols-5 border-b border-white/5 bg-white/[0.02] shrink-0">
+                {/* ── STATS STRIP ──────────────────────────────────────────────── */}
+                <div className="relative grid grid-cols-3 md:grid-cols-6 border-y border-white/[0.06] shrink-0 bg-[var(--ink-950)]/60">
                     {[
-                        { label: 'Played',   val: team.played,                                       icon: Gamepad2,    color: 'text-blue-400' },
-                        { label: 'Won',      val: team.won,                                           icon: TrendingUp,  color: 'text-emerald-400' },
-                        { label: 'Lost',     val: team.lost,                                          icon: TrendingDown, color: 'text-red-400' },
-                        { label: 'Set Diff', val: setDiff > 0 ? `+${setDiff}` : `${setDiff}`,        icon: BarChart2,   color: setDiff > 0 ? 'text-emerald-400' : setDiff < 0 ? 'text-red-400' : 'text-gray-400' },
-                        { label: 'Points',   val: team.points,                                        icon: Trophy,      color: 'text-amber-400' },
-                    ].map(s => (
-                        <div key={s.label} className="px-4 py-4 border-r border-white/5 last:border-0 flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">{s.label}</p>
-                                <p className={`text-lg font-bold ${s.color}`}>{s.val}</p>
+                        { label: 'Played',   val: team.played,                                  icon: Gamepad2,    color: 'var(--info)' },
+                        { label: 'Won',      val: team.won,                                     icon: TrendingUp,  color: 'var(--win)' },
+                        { label: 'Lost',     val: team.lost,                                    icon: TrendingDown,color: 'var(--loss)' },
+                        { label: 'Win %',    val: `${winRate}%`,                                icon: BarChart2,   color: winRate >= 60 ? 'var(--win)' : winRate >= 40 ? 'var(--volt)' : 'var(--loss)' },
+                        { label: 'Set Diff', val: setDiff > 0 ? `+${setDiff}` : `${setDiff}`,   icon: Swords,      color: setDiff > 0 ? 'var(--win)' : setDiff < 0 ? 'var(--loss)' : 'var(--ink-400)' },
+                        { label: 'Points',   val: team.points,                                  icon: Trophy,      color: 'var(--volt)' },
+                    ].map((s, i) => (
+                        <div key={s.label}
+                            className="relative px-4 py-4 border-r border-white/[0.05] last:border-0 overflow-hidden group">
+                            <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: s.color, opacity: 0.55 }} />
+                            <div className="flex items-center justify-between mb-1">
+                                <p className="font-mono text-[8.5px] uppercase tracking-[0.3em] font-black" style={{ color: s.color }}>{s.label}</p>
+                                <s.icon size={13} style={{ color: s.color, opacity: 0.45 }} />
                             </div>
-                            <s.icon size={18} className={`${s.color} opacity-40`} />
+                            <p className="font-display text-3xl tabular leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ color: s.color }}>{s.val}</p>
                         </div>
                     ))}
                 </div>
 
-                {/* Main Content — two-column layout */}
+                {/* Secondary metrics row */}
+                <div className="grid grid-cols-3 border-b border-white/[0.06] shrink-0 bg-[var(--ink-900)]/40">
+                    {[
+                        { label: 'Sets Won',  val: team.sets_won,   accent: 'text-[var(--win)]' },
+                        { label: 'Sets Lost', val: team.sets_lost,  accent: 'text-[var(--loss)]' },
+                        { label: 'Set Win %', val: `${setsForRate}%`, accent: 'text-[var(--volt)]' },
+                    ].map(s => (
+                        <div key={s.label} className="px-4 py-2.5 border-r border-white/[0.04] last:border-0 flex items-baseline justify-between">
+                            <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--ink-500)]">{s.label}</span>
+                            <span className={`font-display text-base tabular leading-none ${s.accent}`}>{s.val}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {/* ── BODY — Roster + Match History ──────────────────────────────── */}
                 {loading ? (
-                    <div className="flex-1 flex items-center justify-center animate-pulse">
-                        <div className="text-center">
-                            <div className="w-10 h-10 bg-amber-500/20 rounded-full mx-auto mb-3" />
-                            <p className="text-sm text-gray-500">Retrieving club data...</p>
+                    <div className="flex-1 flex items-center justify-center py-16">
+                        <div className="text-center space-y-3">
+                            <div className="w-10 h-10 mx-auto rounded-full border-2 border-[var(--volt)] border-t-transparent animate-spin" />
+                            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--ink-500)]">Retrieving Club Data</p>
                         </div>
                     </div>
                 ) : (
                     <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-white/5">
 
-                        {/* Left — Active Roster */}
-                        <div className="flex flex-col overflow-hidden">
-                            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
-                                <div className="flex items-center gap-2">
-                                    <Users size={16} className="text-amber-500" />
-                                    <h3 className="text-sm font-bold text-white tracking-tight">Active Roster</h3>
+                        {/* ── ACTIVE ROSTER ── */}
+                        <div className="flex flex-col overflow-hidden min-h-[300px]">
+                            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0 border-b border-white/[0.04]">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-1 h-5 bg-[var(--volt)]" />
+                                    <Users size={14} className="text-[var(--volt)]" />
+                                    <h3 className="font-display text-lg tracking-[0.06em] text-[var(--bone)]">ACTIVE ROSTER</h3>
                                 </div>
-                                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
-                                    {players.length} Players
-                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.22em] font-bold">
+                                        {players.length} <span className="text-[var(--ink-600)]">·</span> AVG <span className="text-[var(--volt)] tabular">{avgOverall || '—'}</span>
+                                    </span>
+                                </div>
                             </div>
-                            <div className="overflow-y-auto px-6 pb-6 custom-scrollbar flex flex-col gap-2">
-                                {players.map((p) => {
-                                    const overallColor = p.overall >= 80 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : p.overall >= 60 ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-red-400 border-red-500/30 bg-red-500/10';
+                            <div className="overflow-y-auto px-4 pb-5 pt-3 flex flex-col gap-1.5">
+                                {[...players].sort((a, b) => b.overall - a.overall).map((p) => {
+                                    const pt = posTheme(p.position);
+                                    const tier = ovrTier(p.overall);
                                     return (
                                         <div key={p.id}
                                             onClick={() => onPlayerClick(p)}
-                                            className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] hover:border-white/20 transition-all cursor-pointer shrink-0">
-                                            <div className="relative shrink-0">
-                                                <div className="w-12 h-12 rounded-xl bg-gray-800/80 overflow-hidden border border-white/5 relative">
+                                            className={`group relative flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-md bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.15] transition-all duration-200 cursor-pointer shrink-0 ring-1 ring-transparent hover:${tier.ring} overflow-hidden`}>
+                                            {/* Position rail */}
+                                            <span className={`absolute left-0 top-1 bottom-1 w-[3px] ${pt.rail}`} />
+                                            {/* Holographic sweep on hover */}
+                                            <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[900ms] ease-out pointer-events-none"
+                                                style={{ background: 'linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)' }} />
+
+                                            {/* Avatar */}
+                                            <div className="relative shrink-0 z-10">
+                                                <div className={`absolute -inset-1 rounded-md ${pt.halo} blur-md opacity-50 group-hover:opacity-80 transition-opacity`} />
+                                                <div className="relative w-11 h-14 rounded-sm bg-[var(--ink-900)] overflow-hidden border border-white/[0.08]">
                                                     <Image src={`/assets/players/${p.id}.png`} alt={p.player_name} fill unoptimized className="object-contain object-bottom"
                                                         onError={(e) => { (e.target as HTMLImageElement).src = '/assets/players/default.png'; }} />
                                                 </div>
-                                                <div className={`absolute -top-1.5 -right-1.5 w-6 h-6 rounded-lg border-2 border-gray-900 flex items-center justify-center text-[10px] font-black ${overallColor}`}>
-                                                    {p.overall}
-                                                </div>
                                             </div>
-                                            <div className="min-w-0 pr-4">
-                                                <p className="text-sm font-bold text-white truncate leading-tight group-hover:text-amber-300 transition-colors">{p.player_name}</p>
+
+                                            {/* OVR plate */}
+                                            <div className="relative shrink-0 flex flex-col items-center z-10">
+                                                <span className={`font-display text-2xl ${tier.text} tabular leading-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]`}>{p.overall}</span>
+                                                <span className={`mt-0.5 px-1 py-[1px] rounded-[2px] font-mono text-[7.5px] font-black tracking-[0.18em] ${pt.chip}`}>{posAbbr(p.position)}</span>
+                                            </div>
+
+                                            {/* Identity */}
+                                            <div className="min-w-0 flex-1 z-10">
+                                                <p className="text-sm font-bold text-[var(--bone)] truncate leading-tight tracking-wide group-hover:text-[var(--volt)] transition-colors">{p.player_name.toUpperCase()}</p>
                                                 <div className="flex items-center gap-2 mt-1">
-                                                    <div className="w-[28px] h-[18px] rounded-sm overflow-hidden shrink-0 border border-white/10 shadow-sm opacity-90">
+                                                    <div className="w-[22px] h-[14px] rounded-[2px] overflow-hidden shrink-0 ring-1 ring-white/10">
                                                         <img src={`/assets/flags/${p.country.length === 2 ? p.country.toLowerCase() : getCountryCode(p.country)}.svg`} alt="Flag" className="w-full h-full object-cover"
                                                             onError={(e) => { (e.target as HTMLImageElement).parentElement?.classList.add('hidden'); }} />
                                                     </div>
-                                                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold truncate">{p.position}</p>
+                                                    <p className={`font-mono text-[9.5px] uppercase tracking-[0.2em] font-bold truncate ${pt.text}`}>{p.position}</p>
+                                                    <span className="font-mono text-[8.5px] text-[var(--ink-600)] tracking-[0.18em] font-bold">{tier.label}</span>
                                                 </div>
                                             </div>
-                                            <Shield size={12} className="absolute right-4 text-white/10 group-hover:text-amber-500/20 transition-all" />
+
+                                            <ChevronDown size={12} className="rotate-[-90deg] text-[var(--ink-600)] group-hover:text-[var(--volt)] transition-colors z-10" />
                                         </div>
                                     );
                                 })}
+                                {players.length === 0 && (
+                                    <div className="flex items-center justify-center py-12 rounded bg-white/[0.02] border border-white/[0.05]">
+                                        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--ink-500)]">No players signed</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        {/* Right — Match History */}
-                        <div className="flex flex-col overflow-hidden">
-                            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
-                                <div className="flex items-center gap-2">
-                                    <Swords size={16} className="text-amber-500" />
-                                    <h3 className="text-sm font-bold text-white tracking-tight">Match History</h3>
+                        {/* ── MATCH HISTORY ── */}
+                        <div className="flex flex-col overflow-hidden min-h-[300px]">
+                            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0 border-b border-white/[0.04]">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-1 h-5 bg-[var(--volt)]" />
+                                    <Swords size={14} className="text-[var(--volt)]" />
+                                    <h3 className="font-display text-lg tracking-[0.06em] text-[var(--bone)]">MATCH HISTORY</h3>
                                 </div>
-                                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
-                                    {fixtures.length} Matches
+                                <span className="font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.22em] font-bold">
+                                    {fixtures.length} <span className="text-[var(--ink-600)]">·</span> {team.won}W <span className="text-[var(--ink-600)]">/</span> {team.lost}L
                                 </span>
                             </div>
-                            <div className="overflow-y-auto px-6 pb-6 custom-scrollbar flex flex-col gap-2">
+                            <div className="overflow-y-auto px-4 pb-5 pt-3 flex flex-col gap-1.5">
                                 {fixtures.length === 0 ? (
-                                    <div className="flex items-center justify-center py-12 rounded-2xl bg-white/[0.02] border border-white/5">
-                                        <p className="text-sm text-gray-500">No completed matches yet</p>
+                                    <div className="flex items-center justify-center py-12 rounded bg-white/[0.02] border border-white/[0.05]">
+                                        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--ink-500)]">No completed matches yet</p>
                                     </div>
                                 ) : fixtures.map((f) => {
                                     const isHome = f.home_team_id === team.id;
@@ -512,29 +933,49 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                                     const oppId = isHome ? f.away_team_id : f.home_team_id;
                                     const won = teamSets !== null && oppSets !== null && teamSets > oppSets;
                                     const lost = teamSets !== null && oppSets !== null && teamSets < oppSets;
-                                    const resultColor = won ? 'text-emerald-400' : lost ? 'text-red-400' : 'text-gray-400';
-                                    const resultBg = won ? 'bg-emerald-500/10 border-emerald-500/20' : lost ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10';
+                                    const resultColor = won ? 'text-[var(--win)]' : lost ? 'text-[var(--loss)]' : 'text-[var(--ink-400)]';
                                     const resultLabel = won ? 'W' : lost ? 'L' : 'D';
+                                    const railColor = won ? 'bg-[var(--win)]' : lost ? 'bg-[var(--loss)]' : 'bg-[var(--ink-500)]';
                                     const [, mm, dd] = f.scheduled_date.split('-');
                                     return (
                                         <div key={f.id}
-                                            className={`flex items-center gap-3 p-3 rounded-2xl border shrink-0 cursor-pointer hover:brightness-125 transition-all ${resultBg}`}
+                                            className="group relative flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-md bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.15] transition-all duration-200 cursor-pointer shrink-0 overflow-hidden"
                                             onClick={() => setSummaryFixtureId(f.id)}
-                                            title="Click to view match summary"
-                                        >
-                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${resultColor} bg-white/5`}>
+                                            title="Click to view match summary">
+                                            {/* Result rail */}
+                                            <span className={`absolute left-0 top-1 bottom-1 w-[3px] ${railColor}`} />
+                                            {/* Sweep */}
+                                            <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[900ms] ease-out pointer-events-none"
+                                                style={{ background: 'linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.05) 50%, transparent 60%)' }} />
+
+                                            {/* W/L glyph */}
+                                            <div className={`relative w-9 h-9 rounded-sm flex items-center justify-center font-display text-lg shrink-0 ${resultColor} ${won ? 'bg-[var(--win)]/15' : lost ? 'bg-[var(--loss)]/15' : 'bg-white/[0.05]'} ring-1 ${won ? 'ring-[var(--win)]/25' : lost ? 'ring-[var(--loss)]/25' : 'ring-white/10'} tabular`}>
                                                 {resultLabel}
                                             </div>
-                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+
+                                            {/* Opponent */}
+                                            <div className="flex items-center gap-2 min-w-0 flex-1 z-10">
                                                 <div className="relative w-7 h-7 shrink-0">
                                                     <Image src={`/assets/teams/${oppId}.png`} alt={oppName || ''} fill unoptimized className="object-contain"
                                                         onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
                                                 </div>
-                                                <span className="text-sm text-white font-medium truncate">{oppName}</span>
+                                                <div className="min-w-0">
+                                                    <p className="text-[13px] text-[var(--bone)] font-bold truncate leading-tight">{oppName}</p>
+                                                    <p className="font-mono text-[9px] text-[var(--ink-500)] mt-0.5 uppercase tracking-[0.2em] tabular">
+                                                        {isHome
+                                                            ? <span className="text-[var(--win)]/80">HOME</span>
+                                                            : <span className="text-[var(--info)]/80">AWAY</span>
+                                                        } <span className="text-[var(--ink-600)]">·</span> {dd}/{mm}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="shrink-0 text-right">
-                                                <span className={`text-sm font-black ${resultColor}`}>{teamSets ?? '—'}–{oppSets ?? '—'}</span>
-                                                <p className="text-[10px] text-gray-600 mt-0.5">{isHome ? 'Home' : 'Away'} · {dd}/{mm}</p>
+
+                                            {/* Score */}
+                                            <div className="shrink-0 text-right z-10">
+                                                <div className={`font-display text-xl ${resultColor} tabular leading-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.4)]`}>{teamSets ?? '—'}<span className="text-[var(--ink-600)] mx-0.5">–</span>{oppSets ?? '—'}</div>
+                                                <p className={`font-mono text-[8.5px] mt-1 uppercase tracking-[0.22em] tabular font-bold ${resultColor} opacity-80`}>
+                                                    {won ? 'VICTORY' : lost ? 'DEFEAT' : 'DRAW'}
+                                                </p>
                                             </div>
                                         </div>
                                     );
@@ -555,5 +996,5 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
             />
         )}
         </>
-    );
+    ), document.body);
 }

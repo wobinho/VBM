@@ -1,20 +1,36 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Bebas_Neue, JetBrains_Mono, Manrope } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/auth-context';
 import AppShell from '@/components/app-shell';
 
-const inter = Inter({ subsets: ['latin'] });
+const bebas = Bebas_Neue({
+  subsets: ['latin'],
+  weight: ['400'],
+  variable: '--font-display',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-mono',
+});
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['200', '300', '400', '500', '600', '700', '800'],
+  variable: '--font-body',
+});
 
 export const metadata: Metadata = {
-  title: 'Spike Dynasty - Volleyball Manager',
+  title: 'Spike Dynasty — Volleyball Manager',
   description: 'Build your dynasty. Manage your team. Dominate the court.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-gray-950 text-white antialiased`}>
+    <html lang="en" className={`dark ${bebas.variable} ${mono.variable} ${manrope.variable}`}>
+      <body className="antialiased">
         <AuthProvider>
           <AppShell>{children}</AppShell>
         </AuthProvider>

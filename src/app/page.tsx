@@ -91,6 +91,30 @@ function TeamLogo({ teamId, size = 32 }: { teamId: number; size?: number }) {
   );
 }
 
+function OpponentBadge({ teamId, oppName }: { teamId: number; oppName: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span className="font-mono text-[8px] leading-none text-[var(--volt)]/85 font-bold truncate max-w-full px-0.5 mt-1 tracking-wider">
+        {oppName.split(' ').map((w: string) => w[0]).join('').slice(0, 3).toUpperCase()}
+      </span>
+    );
+  }
+  // Absolutely positioned so badge size doesn't affect the cell flex layout.
+  return (
+    <div className="absolute left-1/2 -translate-x-1/2 top-[55%] w-8 h-8 pointer-events-none">
+      <Image
+        src={`/assets/teams/${teamId}.png`}
+        alt={oppName}
+        fill
+        unoptimized
+        className="object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.85)]"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -106,8 +130,8 @@ export default function DashboardPage() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [matchDates, setMatchDates] = useState<Set<string>>(new Set());
   const [userMatchDates, setUserMatchDates] = useState<Map<string, 'scheduled' | 'win' | 'loss'>>(new Map());
-  // Maps date → opponent name for user's fixtures
-  const [userMatchOpponent, setUserMatchOpponent] = useState<Map<string, string>>(new Map());
+  // Maps date → opponent info for user's fixtures
+  const [userMatchOpponent, setUserMatchOpponent] = useState<Map<string, { name: string; teamId: number }>>(new Map());
 
   // Day fixtures panel
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -169,11 +193,12 @@ export default function DashboardPage() {
     if (!res.ok) return;
     const fixtures: Fixture[] = await res.json();
     const map = new Map<string, 'scheduled' | 'win' | 'loss'>();
-    const oppMap = new Map<string, string>();
+    const oppMap = new Map<string, { name: string; teamId: number }>();
     for (const f of fixtures) {
       const userIsHome = f.home_team_id === team.id;
       const oppName = userIsHome ? f.away_team_name : f.home_team_name;
-      if (!oppMap.has(f.scheduled_date)) oppMap.set(f.scheduled_date, oppName);
+      const oppId = userIsHome ? f.away_team_id : f.home_team_id;
+      if (!oppMap.has(f.scheduled_date)) oppMap.set(f.scheduled_date, { name: oppName, teamId: oppId });
 
       if (f.status === 'completed') {
         const userSets = userIsHome ? (f.home_sets ?? 0) : (f.away_sets ?? 0);
@@ -389,28 +414,28 @@ export default function DashboardPage() {
     const userStatus = userMatchDates.get(iso);
     const hasAnyMatch = matchDates.has(iso);
 
-    let base = 'relative flex flex-col items-center justify-center rounded-xl text-xs font-medium transition-all duration-150 cursor-pointer select-none py-1 h-full min-h-[60px] ';
+    let base = 'relative flex flex-col items-center justify-center rounded text-xs font-medium transition-all duration-150 cursor-pointer select-none py-1 h-full min-h-[60px] ';
 
     if (isSelected) {
-      base += 'ring-2 ring-amber-400 bg-amber-500/20 text-amber-300 ';
+      base += 'ring-2 ring-[var(--volt)] bg-[var(--volt)]/20 text-[var(--volt)] ';
     } else if (isToday) {
-      base += 'ring-2 ring-white/40 bg-white/10 text-white font-bold ';
+      base += 'ring-2 ring-[var(--bone)]/40 bg-white/[0.08] text-[var(--bone)] font-bold ';
     } else if (isPast) {
-      base += 'opacity-40 grayscale-[0.3] text-slate-500 ';
-      if (userStatus === 'win') base += 'bg-emerald-500/10 ';
-      else if (userStatus === 'loss') base += 'bg-red-500/10 ';
-      else if (userStatus === 'scheduled') base += 'bg-amber-500/10 ';
-      else if (hasAnyMatch) base += 'bg-white/5 ';
+      base += 'opacity-45 text-[var(--ink-500)] ';
+      if (userStatus === 'win') base += 'bg-[var(--win)]/10 ';
+      else if (userStatus === 'loss') base += 'bg-[var(--loss)]/10 ';
+      else if (userStatus === 'scheduled') base += 'bg-[var(--volt)]/10 ';
+      else if (hasAnyMatch) base += 'bg-white/[0.03] ';
     } else if (userStatus === 'win') {
-      base += 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 ';
+      base += 'bg-[var(--win)]/15 text-[var(--win)] hover:bg-[var(--win)]/25 ';
     } else if (userStatus === 'loss') {
-      base += 'bg-red-500/15 text-red-300 hover:bg-red-500/25 ';
+      base += 'bg-[var(--loss)]/15 text-[var(--loss)] hover:bg-[var(--loss)]/25 ';
     } else if (userStatus === 'scheduled') {
-      base += 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 ';
+      base += 'bg-[var(--volt)]/15 text-[var(--volt)] hover:bg-[var(--volt)]/25 ';
     } else if (hasAnyMatch) {
-      base += 'text-slate-300 hover:bg-white/10 ';
+      base += 'text-[var(--ink-300)] hover:bg-white/[0.06] ';
     } else {
-      base += 'text-slate-500 hover:bg-white/5 ';
+      base += 'text-[var(--ink-500)] hover:bg-white/[0.03] ';
     }
 
     return base;
@@ -421,10 +446,10 @@ export default function DashboardPage() {
     const userStatus = userMatchDates.get(iso);
     const hasAnyMatch = matchDates.has(iso);
 
-    if (userStatus === 'win') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-400" />;
-    if (userStatus === 'loss') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-red-400" />;
-    if (userStatus === 'scheduled') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-amber-400" />;
-    if (hasAnyMatch) return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-sky-500/60" />;
+    if (userStatus === 'win') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--win)]" />;
+    if (userStatus === 'loss') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--loss)]" />;
+    if (userStatus === 'scheduled') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--volt)]" />;
+    if (hasAnyMatch) return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--info)]/60" />;
     return null;
   }
 
@@ -448,37 +473,38 @@ export default function DashboardPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5 pb-10">
+    <div className="space-y-6 pb-12 animate-fade-up">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+      <div className="relative flex flex-col sm:flex-row sm:items-end gap-4 sm:justify-between pb-5 border-b border-white/[0.06]">
+        <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
         <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-black text-white tracking-tight">{team?.name || 'Dashboard'}</h1>
+          <p className="eyebrow mb-2">Dashboard · Season Hub</p>
+          <div className="flex items-end gap-4 flex-wrap">
+            <h1 className="font-display text-5xl sm:text-6xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">
+              {(team?.name || 'DASHBOARD').toUpperCase()}
+            </h1>
             {teamData && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-amber-500/20 text-amber-400 border border-amber-500/25">
+              <span className="tag-hot leading-none">
                 {teamData.points} PTS
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-2">
-            <Clock size={12} className="text-slate-600" />
-            {gameState?.currentDate ? formatDate(gameState.currentDate) : 'Loading…'}
+          <p className="font-mono text-xs text-[var(--ink-400)] mt-3 flex items-center gap-2 tracking-wider">
+            <Clock size={12} className="text-[var(--ink-500)]" />
+            {gameState?.currentDate ? formatDate(gameState.currentDate).toUpperCase() : 'LOADING…'}
             {gameState?.season && (
-              <span className="text-slate-600">· {gameState.season.name}</span>
+              <span className="text-[var(--ink-500)]"> // {gameState.season.name.toUpperCase()}</span>
             )}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Jun 30 or Jul 31 gate — Proceed to Cup Block */}
           {(currentDateStr.endsWith('-06-30') || currentDateStr.endsWith('-07-31')) ? (
             <button
               onClick={handleProceedToPlayoffs}
               disabled={proceedingPlayoffs}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-150
-                bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
-                disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer"
+              className="btn-volt flex items-center gap-2"
             >
               {proceedingPlayoffs ? (
                 <><Loader2 size={14} className="animate-spin" /> Processing…</>
@@ -487,79 +513,67 @@ export default function DashboardPage() {
               )}
             </button>
           ) : currentDateStr.endsWith('-12-31') ? (
-            /* Dec 31 gate — Proceed to Next Season */
             <button
               onClick={handleProceedToNextSeason}
               disabled={proceedingNextSeason}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-150
-                bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-400 hover:to-purple-500
-                disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-violet-500/25 active:scale-95 cursor-pointer"
+              className="font-display text-sm tracking-[0.12em] uppercase px-5 py-3 rounded text-white border bg-[var(--epic)] border-[var(--epic)] hover:bg-[#9070f0] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-[0_4px_0_0_#7c5ae6] active:translate-y-0.5 active:shadow-[0_2px_0_0_#7c5ae6] flex items-center gap-2"
             >
               {proceedingNextSeason ? (
-                <><Loader2 size={14} className="animate-spin" /> Starting New Season…</>
+                <><Loader2 size={14} className="animate-spin" /> Starting Season…</>
               ) : (
-                <><ArrowUpDown size={14} /> Proceed to Next Season</>
+                <><ArrowUpDown size={14} /> Next Season</>
               )}
             </button>
           ) : (
-            <>
-              <button
-                onClick={handleAdvanceDay}
-                disabled={advancing}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-150 shadow-lg
-                  bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
-                  disabled:opacity-60 disabled:cursor-not-allowed shadow-amber-500/25 active:scale-95 cursor-pointer"
-              >
-                {advancing ? (
-                  <><Loader2 size={14} className="animate-spin" /> Advancing…</>
-                ) : (
-                  <><ChevronRight size={14} /> Advance Day</>
-                )}
-              </button>
-            </>
+            <button
+              onClick={handleAdvanceDay}
+              disabled={advancing}
+              className="btn-volt flex items-center gap-2"
+            >
+              {advancing ? (
+                <><Loader2 size={14} className="animate-spin" /> Advancing…</>
+              ) : (
+                <><ChevronRight size={14} /> Advance Day</>
+              )}
+            </button>
           )}
         </div>
       </div>
 
-      {/* ── Advance Day Error Banner ─────────────────────────────────────────── */}
+      {/* ── Banners ─────────────────────────────────────────────────────────── */}
       {advanceError && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-sm">
-          <AlertCircle size={14} className="text-red-400 shrink-0" />
-          <span className="flex-1">{advanceError}</span>
-          <button onClick={() => setAdvanceError(null)} className="text-red-400/60 hover:text-red-300 transition-colors cursor-pointer">
+        <div className="flex items-center gap-3 px-4 py-3.5 rounded border border-[var(--loss)]/30 bg-[var(--loss)]/10 text-[var(--loss)] text-sm">
+          <AlertCircle size={14} className="shrink-0" />
+          <span className="flex-1 font-medium">{advanceError}</span>
+          <button onClick={() => setAdvanceError(null)} className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
             <X size={13} />
           </button>
         </div>
       )}
 
-      {/* ── Jun 30 or Jul 31 League Block Gate Banner ────────────────────────────────────── */}
       {(currentDateStr.endsWith('-06-30') || currentDateStr.endsWith('-07-31')) && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm">
-          <Trophy size={14} className="text-amber-400 shrink-0" />
-          <span className="flex-1">
-            The league block has ended! The cup block begins on July 1. Press "Proceed to Cup Block" to continue.
-          </span>
+        <div className="flex items-center gap-3 px-4 py-3.5 rounded border border-[var(--volt)]/35 bg-[var(--volt)]/10 text-[var(--volt-bright)] text-sm">
+          <Trophy size={14} className="shrink-0" />
+          <span className="flex-1 font-medium">The league block has ended. Cup block begins July 1 — press "Proceed to Cup Block" to continue.</span>
         </div>
       )}
 
-      {/* ── Dec 31 Season Gate Banner ───────────────────────────────────────── */}
       {currentDateStr.endsWith('-12-31') && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm">
-          <Star size={14} className="text-violet-400 shrink-0" />
-          <span className="flex-1">The season has ended. Press "Proceed to Next Season" to start a new season with fresh fixtures.</span>
+        <div className="flex items-center gap-3 px-4 py-3.5 rounded border border-[var(--epic)]/35 bg-[var(--epic)]/10 text-[var(--epic)] text-sm">
+          <Star size={14} className="shrink-0" />
+          <span className="flex-1 font-medium">Season complete. Press "Next Season" to begin a new campaign with fresh fixtures.</span>
         </div>
       )}
 
-      {/* ── End Season Result Banner ────────────────────────────────────────── */}
       {endSeasonResult && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${endSeasonResult.startsWith('Error')
-          ? 'border-red-500/30 bg-red-500/10 text-red-300'
-          : 'border-violet-500/30 bg-violet-500/10 text-violet-300'
+        <div className={`flex items-center gap-3 px-4 py-3.5 rounded border text-sm ${endSeasonResult.startsWith('Error')
+          ? 'border-[var(--loss)]/30 bg-[var(--loss)]/10 text-[var(--loss)]'
+          : 'border-[var(--epic)]/30 bg-[var(--epic)]/10 text-[var(--epic)]'
           }`}>
           {endSeasonResult.startsWith('Error')
             ? <AlertCircle size={14} className="shrink-0" />
-            : <CheckCircle2 size={14} className="shrink-0 text-violet-400" />}
-          <span className="flex-1">{endSeasonResult}</span>
+            : <CheckCircle2 size={14} className="shrink-0" />}
+          <span className="flex-1 font-medium">{endSeasonResult}</span>
           <button onClick={() => setEndSeasonResult(null)} className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
             <X size={13} />
           </button>
@@ -570,37 +584,39 @@ export default function DashboardPage() {
         {[
           {
             label: 'Record', icon: Trophy,
-            value: teamData ? `${teamData.won}W – ${teamData.lost}L` : '—',
-            sub: teamData ? `${teamData.played} played` : '',
-            from: 'from-amber-500/10', border: 'border-amber-500/20', icon_c: 'text-amber-400',
+            value: teamData ? `${teamData.won}–${teamData.lost}` : '—',
+            sub: teamData ? `${teamData.played} matches played` : '',
+            accent: 'var(--volt)',
           },
           {
             label: 'Points', icon: Star,
             value: teamData?.points ?? '—',
-            sub: teamData ? `SD ${teamData.sets_won - teamData.sets_lost > 0 ? '+' : ''}${teamData.sets_won - teamData.sets_lost}` : '',
-            from: 'from-violet-500/10', border: 'border-violet-500/20', icon_c: 'text-violet-400',
+            sub: teamData ? `SET DIFF ${teamData.sets_won - teamData.sets_lost > 0 ? '+' : ''}${teamData.sets_won - teamData.sets_lost}` : '',
+            accent: 'var(--epic)',
           },
           {
             label: 'Avg Rating', icon: Activity,
             value: avgOverall || '—',
-            sub: `${players.length} players`,
-            from: 'from-sky-500/10', border: 'border-sky-500/20', icon_c: 'text-sky-400',
+            sub: `${players.length} players on roster`,
+            accent: 'var(--info)',
           },
           {
             label: 'Budget', icon: DollarSign,
             value: teamData ? formatMoney(teamData.team_money) : '—',
-            sub: '',
-            from: 'from-emerald-500/10', border: 'border-emerald-500/20', icon_c: 'text-emerald-400',
+            sub: 'AVAILABLE FUNDS',
+            accent: 'var(--money)',
           },
-        ].map(c => (
+        ].map((c, idx) => (
           <div key={c.label}
-            className={`p-4 rounded-2xl bg-gradient-to-br ${c.from} to-transparent border ${c.border}`}>
-            <div className="flex items-center gap-2 mb-3">
-              <c.icon size={13} className={c.icon_c} />
-              <span className="text-[9px] uppercase tracking-[0.12em] text-slate-500 font-bold">{c.label}</span>
+            className="surface-raised relative p-5 card-hover overflow-hidden"
+            style={{ animationDelay: `${idx * 60}ms` }}>
+            <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: c.accent }} />
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-semibold">{c.label}</span>
+              <c.icon size={14} style={{ color: c.accent }} />
             </div>
-            <div className="text-2xl font-black text-white tracking-tight">{c.value}</div>
-            {c.sub && <div className="text-[10px] text-slate-600 mt-1">{c.sub}</div>}
+            <div className="font-display text-4xl tracking-wide text-[var(--bone)] leading-none tabular">{c.value}</div>
+            {c.sub && <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-500)] mt-2.5">{c.sub}</div>}
           </div>
         ))}
       </div>
@@ -611,36 +627,32 @@ export default function DashboardPage() {
         {/* ── Left Column: Calendar + Fixtures ─────────────────────────────── */}
         <div className="space-y-3">
 
-          <div className="rounded-2xl border border-white/[0.08] overflow-hidden shadow-xl flex flex-col"
-            style={{
-              background: 'linear-gradient(160deg, rgba(15,23,42,0.95) 0%, rgba(10,15,26,0.98) 100%)',
-              height: 'clamp(400px, 55vh, 800px)'
-            }}>
+          <div className="surface-raised overflow-hidden flex flex-col"
+            style={{ height: 'clamp(420px, 60vh, 820px)' }}>
 
             {/* Calendar header */}
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.06]"
-              style={{ background: 'linear-gradient(90deg, rgba(251,191,36,0.06) 0%, transparent 60%)' }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <button
                 onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); }}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all duration-150 cursor-pointer">
+                className="w-8 h-8 rounded flex items-center justify-center text-[var(--ink-400)] hover:text-[var(--volt)] hover:bg-white/[0.04] transition-all duration-150 cursor-pointer border border-white/[0.06]">
                 <ChevronLeft size={14} />
               </button>
-              <div className="flex items-center gap-2">
-                <Calendar size={12} className="text-amber-400/80" />
-                <span className="text-sm font-bold text-white tracking-wide">{MONTHS[calMonth]} {calYear}</span>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="font-mono text-[9px] uppercase tracking-[0.32em] text-[var(--ink-500)]">Calendar</span>
+                <span className="font-display text-2xl tracking-[0.06em] text-[var(--bone)] leading-none">{MONTHS[calMonth].toUpperCase()} <span className="text-[var(--volt)]">{calYear}</span></span>
               </div>
               <button
                 onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); }}
                 disabled={currentDateStr.endsWith('-12-31') && calMonth === 11 && calYear === parseInt(currentDateStr.slice(0, 4))}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all duration-150 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400">
+                className="w-8 h-8 rounded flex items-center justify-center text-[var(--ink-400)] hover:text-[var(--volt)] hover:bg-white/[0.04] transition-all duration-150 cursor-pointer border border-white/[0.06] disabled:opacity-20 disabled:cursor-not-allowed">
                 <ChevronRight size={14} />
               </button>
             </div>
 
             {/* Day headers */}
-            <div className="grid grid-cols-7 px-3 pt-3 pb-1">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} className="text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{d}</div>
+            <div className="grid grid-cols-7 px-3 pt-3 pb-1.5">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                <div key={i} className="text-center font-mono text-[10px] font-bold text-[var(--ink-500)] uppercase tracking-[0.28em]">{d}</div>
               ))}
             </div>
 
@@ -649,7 +661,7 @@ export default function DashboardPage() {
               {calCells.map((day, i) => {
                 if (!day) return <div key={i} className="h-full min-h-[60px]" />;
                 const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const oppName = userMatchOpponent.get(iso);
+                const opp = userMatchOpponent.get(iso);
                 const userStatus = userMatchDates.get(iso);
                 const hasAnyMatch = matchDates.has(iso);
                 const isAfterToday = iso > currentDateStr;
@@ -658,12 +670,11 @@ export default function DashboardPage() {
                   <div key={i}
                     className={dayCellClasses(day)}
                     onClick={() => { if (isClickable) selectDate(iso); }}
+                    title={opp ? `vs ${opp.name}` : undefined}
                   >
-                    <span className="leading-none z-10 text-xs font-semibold">{day}</span>
-                    {oppName && (
-                      <span className="text-[8px] leading-none text-amber-300/80 font-bold truncate max-w-full px-0.5 mt-0.5">
-                        {oppName.split(' ').map((w: string) => w[0]).join('').slice(0, 3).toUpperCase()}
-                      </span>
+                    <span className="leading-none z-10 font-mono text-xs font-bold tabular">{day}</span>
+                    {opp && (
+                      <OpponentBadge teamId={opp.teamId} oppName={opp.name} />
                     )}
                     <DayDot day={day} />
                   </div>
@@ -672,17 +683,16 @@ export default function DashboardPage() {
             </div>
 
             {/* Legend */}
-            <div className="flex items-center justify-center gap-4 px-4 py-3 border-t border-white/[0.05] flex-wrap"
-              style={{ background: 'rgba(255,255,255,0.01)' }}>
+            <div className="flex items-center justify-center gap-5 px-4 py-3 border-t border-white/[0.05] flex-wrap">
               {[
-                { color: 'bg-amber-400', label: 'Your Fixture' },
-                { color: 'bg-emerald-400', label: 'Win' },
-                { color: 'bg-red-400', label: 'Loss' },
-                { color: 'bg-sky-500/70', label: 'Matchday' },
+                { color: 'bg-[var(--volt)]', label: 'Your Fixture' },
+                { color: 'bg-[var(--win)]', label: 'Win' },
+                { color: 'bg-[var(--loss)]', label: 'Loss' },
+                { color: 'bg-[var(--info)]/70', label: 'Matchday' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${l.color}`} />
-                  <span className="text-[10px] text-slate-500 font-medium">{l.label}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${l.color}`} />
+                  <span className="font-mono text-[9.5px] text-[var(--ink-400)] uppercase tracking-[0.18em]">{l.label}</span>
                 </div>
               ))}
             </div>
@@ -690,56 +700,55 @@ export default function DashboardPage() {
 
           {/* Day Fixtures Panel */}
           {selectedDate && (
-            <div className="rounded-2xl border border-white/[0.07] overflow-hidden transition-all"
-              style={{ background: 'linear-gradient(160deg, rgba(15,23,42,0.9) 0%, rgba(10,15,26,0.95) 100%)' }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+            <div className="surface-raised overflow-hidden animate-fade-up">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
                 <div className="flex items-center gap-2">
-                  <Swords size={12} className="text-amber-400/80" />
-                  <span className="text-xs font-bold text-white">Fixtures — {formatDate(selectedDate)}</span>
+                  <Swords size={12} className="text-[var(--volt)]" />
+                  <span className="font-display text-base tracking-[0.05em] text-[var(--bone)]">FIXTURES — {formatDate(selectedDate).toUpperCase()}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedDate > currentDateStr && (
                     <button
                       onClick={() => handleSimToDate(selectedDate)}
                       disabled={simToDate}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all
-                        bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-[10px] uppercase tracking-[0.18em] font-bold
+                        bg-[var(--epic)]/15 text-[var(--epic)] border border-[var(--epic)]/30 hover:bg-[var(--epic)]/25
                         disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
                     >
                       {simToDate ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-                      {simToDate ? 'Simulating…' : 'Simulate to here'}
+                      {simToDate ? 'Simulating…' : 'Sim to here'}
                     </button>
                   )}
                   {simToDateError && (
-                    <span className="text-[10px] text-red-400">{simToDateError}</span>
+                    <span className="font-mono text-[10px] text-[var(--loss)]">{simToDateError}</span>
                   )}
                   <button onClick={() => { setSelectedDate(null); setSimToDateError(null); }}
-                    className="text-slate-500 hover:text-white transition-colors cursor-pointer w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/5">
-                    <X size={12} />
+                    className="text-[var(--ink-500)] hover:text-[var(--bone)] transition-colors cursor-pointer w-7 h-7 flex items-center justify-center rounded hover:bg-white/[0.05]">
+                    <X size={13} />
                   </button>
                 </div>
               </div>
 
               {simToDate && simProgress && (
-                <div className="px-4 py-3 border-b border-white/[0.05] bg-violet-500/5">
+                <div className="px-5 py-3 border-b border-white/[0.05] bg-[var(--epic)]/5">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-slate-400">Simulating day by day...</span>
-                    <span className="text-xs font-bold text-violet-400">{simProgress.percent}%</span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-400)]">Simulating day-by-day</span>
+                    <span className="font-mono text-xs font-bold text-[var(--epic)] tabular">{simProgress.percent}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1 bg-[var(--ink-800)] overflow-hidden">
                     <div
-                      className="h-full bg-violet-500 transition-all duration-300"
+                      className="h-full bg-[var(--epic)] transition-all duration-300"
                       style={{ width: `${simProgress.percent}%` }}
                     />
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-2">
-                    Day {simProgress.current} of {simProgress.total}
+                  <div className="font-mono text-[10px] text-[var(--ink-500)] mt-2 tabular">
+                    Day {simProgress.current} / {simProgress.total}
                   </div>
                   {simDayMatches.length > 0 && (
                     <div className="mt-3 max-h-32 overflow-y-auto space-y-1">
                       {simDayMatches.slice(-5).map((day, i) => (
-                        <div key={i} className="text-[10px] text-slate-400">
-                          <span className="text-violet-400 font-semibold">{day.date}:</span>
+                        <div key={i} className="font-mono text-[10px] text-[var(--ink-400)]">
+                          <span className="text-[var(--epic)] font-semibold">{day.date}:</span>
                           {day.matches.length > 0 ? (
                             <span> {day.matches.length} match{day.matches.length !== 1 ? 'es' : ''}</span>
                           ) : (
@@ -753,11 +762,11 @@ export default function DashboardPage() {
               )}
 
               {loadingDayFixtures ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-xs">
-                  <Loader2 size={13} className="animate-spin" /> Loading…
+                <div className="flex items-center justify-center gap-2 py-7 text-[var(--ink-500)] font-mono text-xs uppercase tracking-wider">
+                  <Loader2 size={13} className="animate-spin" /> Loading
                 </div>
               ) : dayFixtures.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-600">No fixtures on this date</div>
+                <div className="py-7 text-center font-mono text-xs text-[var(--ink-500)] uppercase tracking-[0.2em]">No fixtures on this date</div>
               ) : (
                 <div className="divide-y divide-white/[0.04]">
                   {dayFixtures.map(f => {
@@ -765,24 +774,24 @@ export default function DashboardPage() {
                     const completed = f.status === 'completed';
                     return (
                       <div key={f.id}
-                        className={`flex items-center gap-3 px-4 py-2.5 ${isUserMatch ? 'bg-amber-500/5' : 'hover:bg-white/[0.02]'} transition-colors`}>
-                        {isUserMatch && <div className="w-1 h-7 rounded-full bg-amber-500/60 shrink-0" />}
+                        className={`flex items-center gap-3 px-4 py-2.5 ${isUserMatch ? 'bg-[var(--volt)]/[0.05]' : 'hover:bg-white/[0.02]'} transition-colors`}>
+                        {isUserMatch && <div className="w-[3px] h-7 rounded-full bg-[var(--volt)] shrink-0" />}
                         <TeamLogo teamId={f.home_team_id} size={22} />
                         <div className="flex-1 min-w-0 flex items-center gap-2">
-                          <span className={`text-xs font-semibold truncate ${completed && (f.home_sets ?? 0) > (f.away_sets ?? 0) ? 'text-white' : 'text-slate-400'}`}>
+                          <span className={`text-xs font-semibold truncate ${completed && (f.home_sets ?? 0) > (f.away_sets ?? 0) ? 'text-[var(--bone)]' : 'text-[var(--ink-400)]'}`}>
                             {f.home_team_name}
                           </span>
                           {completed ? (
-                            <span className="text-xs font-black text-white shrink-0 mx-1">{f.home_sets} – {f.away_sets}</span>
+                            <span className="font-mono text-sm font-bold text-[var(--bone)] shrink-0 mx-1 tabular">{f.home_sets}–{f.away_sets}</span>
                           ) : (
-                            <span className="text-[10px] text-slate-600 shrink-0 mx-1">vs</span>
+                            <span className="font-mono text-[10px] text-[var(--ink-500)] shrink-0 mx-1 uppercase tracking-wider">vs</span>
                           )}
-                          <span className={`text-xs font-semibold truncate ${completed && (f.away_sets ?? 0) > (f.home_sets ?? 0) ? 'text-white' : 'text-slate-400'}`}>
+                          <span className={`text-xs font-semibold truncate ${completed && (f.away_sets ?? 0) > (f.home_sets ?? 0) ? 'text-[var(--bone)]' : 'text-[var(--ink-400)]'}`}>
                             {f.away_team_name}
                           </span>
                         </div>
                         <TeamLogo teamId={f.away_team_id} size={22} />
-                        <span className={`text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md shrink-0 ${completed ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/10 text-amber-500/80'
+                        <span className={`font-mono text-[9px] uppercase tracking-[0.18em] font-bold px-2 py-0.5 rounded shrink-0 ${completed ? 'bg-[var(--win)]/15 text-[var(--win)]' : 'bg-[var(--volt)]/15 text-[var(--volt)]'
                           }`}>
                           {completed ? 'FT' : f.is_cup ? 'CUP' : f.is_playoff ? 'PO' : `MD${f.game_week}`}
                         </span>
@@ -807,24 +816,23 @@ export default function DashboardPage() {
               onPlayMatch={(id, type) => setMatchSimData({ id, type })}
             />
           ) : (
-            <div className="p-6 rounded-2xl border border-white/[0.07] flex flex-col items-center justify-center text-center gap-3"
-              style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(10,15,26,0.9) 100%)' }}>
-              <CheckCircle2 size={28} className="text-emerald-400/60" />
-              <p className="text-sm font-semibold text-slate-300">All matches played!</p>
-              <p className="text-xs text-slate-600">No upcoming fixtures scheduled.</p>
+            <div className="surface-raised p-8 flex flex-col items-center justify-center text-center gap-3">
+              <CheckCircle2 size={32} className="text-[var(--win)]/70" />
+              <p className="font-display text-xl tracking-wide text-[var(--bone)]">ALL MATCHES PLAYED</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-500)]">No upcoming fixtures scheduled</p>
             </div>
           )}
 
           {/* Recent Results */}
-          <div className="rounded-2xl border border-white/[0.07] overflow-hidden"
-            style={{ background: 'linear-gradient(160deg, rgba(15,23,42,0.9) 0%, rgba(10,15,26,0.95) 100%)' }}>
-            <div className="px-5 py-3.5 border-b border-white/[0.05] flex items-center gap-2">
-              <TrendingUp size={13} className="text-slate-500" />
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Recent Results</span>
+          <div className="surface-raised overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+              <TrendingUp size={13} className="text-[var(--volt)]" />
+              <span className="font-display text-base tracking-[0.05em] text-[var(--bone)]">RECENT RESULTS</span>
+              <div className="ml-auto font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--ink-500)]">Form</div>
             </div>
             <div className="divide-y divide-white/[0.04]">
               {(gameState?.recentResults ?? []).length === 0 ? (
-                <div className="px-5 py-6 text-center text-xs text-slate-600">No matches played yet</div>
+                <div className="px-5 py-7 text-center font-mono text-[11px] text-[var(--ink-500)] uppercase tracking-[0.18em]">No matches played yet</div>
               ) : (gameState?.recentResults ?? []).map(f => {
                 const badge = getResultBadge(f);
                 const userIsHome = f.home_team_id === team?.id;
@@ -838,13 +846,13 @@ export default function DashboardPage() {
                   >
                     <TeamLogo teamId={oppTeamId} size={28} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white truncate group-hover:text-amber-300 transition-colors">{opponent}</p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{formatShortDate(f.scheduled_date)} · MD{f.game_week}</p>
+                      <p className="text-sm font-semibold text-[var(--bone)] truncate group-hover:text-[var(--volt)] transition-colors">{opponent}</p>
+                      <p className="font-mono text-[10px] text-[var(--ink-500)] mt-0.5 uppercase tracking-wider">{formatShortDate(f.scheduled_date)} · MD{f.game_week}</p>
                     </div>
                     {badge && (
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 ${badge.won ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-mono text-xs font-bold shrink-0 tabular ${badge.won ? 'bg-[var(--win)]/15 text-[var(--win)]' : 'bg-[var(--loss)]/15 text-[var(--loss)]'
                         }`}>
-                        {badge.won ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {badge.won ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                         {badge.us}–{badge.them}
                       </div>
                     )}
@@ -898,90 +906,84 @@ function NextMatchCard({
   const venue = userIsHome ? 'Home' : 'Away';
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-white/[0.08]"
-      style={{ background: 'linear-gradient(145deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.03) 40%, rgba(8,12,22,0.98) 100%)' }}>
+    <div className="surface-raised relative overflow-hidden">
+      {/* Top stripe — bold accent */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+      <div className="absolute top-0 left-6 w-20 h-1 bg-[var(--ink-950)]" />
+      {/* Corner glow */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-[var(--volt)]/10 blur-3xl pointer-events-none" />
 
-      {/* Top accent line */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
-      {/* Subtle corner glow */}
-      <div className="absolute top-0 left-0 w-32 h-32 rounded-full bg-amber-500/5 blur-2xl pointer-events-none" />
-
-      <div className="relative px-5 pt-4 pb-5">
+      <div className="relative px-6 pt-6 pb-5">
 
         {/* Header row */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             {isToday ? (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-400 bg-amber-500/15 border border-amber-500/25 px-2.5 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="tag-hot inline-flex items-center gap-1.5 animate-pulse-glow">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--ink-950)]" />
                 Match Day
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-white/[0.04] border border-white/[0.06] px-2.5 py-1 rounded-full">
-                <Clock size={9} className="text-slate-600" />
+              <span className="tag-ghost inline-flex items-center gap-1.5">
+                <Clock size={9} />
                 Next Match
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${venue === 'Home'
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+            <span className={`font-mono text-[9px] font-bold uppercase tracking-[0.22em] px-2 py-1 rounded ${venue === 'Home'
+              ? 'bg-[var(--win)]/12 text-[var(--win)] border border-[var(--win)]/25'
+              : 'bg-[var(--info)]/12 text-[var(--info)] border border-[var(--info)]/25'
               }`}>{venue}</span>
-            <span className="text-[10px] text-slate-600">{fixture.is_playoff ? 'Playoffs' : `MD${fixture.game_week}`}</span>
+            <span className="font-mono text-[10px] text-[var(--ink-500)] tabular">{fixture.is_playoff ? 'PLAYOFFS' : `MD${fixture.game_week}`}</span>
           </div>
         </div>
 
         {/* Teams matchup */}
-        <div className="flex items-center gap-3 mb-4">
-          {/* User team */}
-          <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex flex-col items-center gap-2.5 flex-1 min-w-0">
             <div className="relative">
-              <div className="absolute inset-0 rounded-2xl bg-amber-500/10 blur-md" />
-              <div className="relative w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center p-1.5 overflow-hidden">
-                <TeamLogo teamId={userTeamIdNum} size={44} />
+              <div className="absolute inset-0 rounded bg-[var(--volt)]/15 blur-lg" />
+              <div className="relative w-16 h-16 rounded bg-white/[0.04] border border-[var(--volt)]/30 flex items-center justify-center p-1.5 overflow-hidden">
+                <TeamLogo teamId={userTeamIdNum} size={48} />
               </div>
             </div>
-            <span className="text-[11px] font-bold text-white text-center leading-tight line-clamp-2 w-full px-1">{userTeamName}</span>
+            <span className="font-display text-sm tracking-wide text-[var(--bone)] text-center leading-tight line-clamp-2 w-full px-1">{userTeamName.toUpperCase()}</span>
           </div>
 
           {/* VS divider */}
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/20 flex items-center justify-center">
-              <Swords size={13} className="text-amber-400" />
+          <div className="flex flex-col items-center gap-1.5 shrink-0 px-1">
+            <div className="w-10 h-10 rounded-full bg-[var(--ink-850)] border border-white/[0.08] flex items-center justify-center">
+              <Swords size={14} className="text-[var(--volt)]" />
             </div>
-            <span className="text-[9px] text-slate-600 font-black uppercase tracking-widest">vs</span>
+            <span className="font-display text-base tracking-[0.18em] text-[var(--ink-500)] leading-none">VS</span>
           </div>
 
           {/* Opponent */}
-          <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+          <div className="flex flex-col items-center gap-2.5 flex-1 min-w-0">
             <div className="relative">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center p-1.5 overflow-hidden">
-                <TeamLogo teamId={oppTeamId} size={44} />
+              <div className="w-16 h-16 rounded bg-white/[0.02] border border-white/[0.08] flex items-center justify-center p-1.5 overflow-hidden">
+                <TeamLogo teamId={oppTeamId} size={48} />
               </div>
             </div>
-            <span className="text-[11px] font-semibold text-slate-400 text-center leading-tight line-clamp-2 w-full px-1">{oppTeamName}</span>
+            <span className="font-display text-sm tracking-wide text-[var(--ink-300)] text-center leading-tight line-clamp-2 w-full px-1">{oppTeamName.toUpperCase()}</span>
           </div>
         </div>
 
         {/* Date strip */}
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-          <Calendar size={11} className="text-slate-600 shrink-0" />
-          <span className="text-[10px] text-slate-500 font-medium">{formatDate(fixture.scheduled_date)}</span>
+        <div className="flex items-center gap-2 mb-5 px-3.5 py-2.5 rounded bg-white/[0.03] border border-white/[0.05]">
+          <Calendar size={11} className="text-[var(--ink-500)] shrink-0" />
+          <span className="font-mono text-[10.5px] text-[var(--ink-400)] uppercase tracking-[0.18em]">{formatDate(fixture.scheduled_date)}</span>
         </div>
 
         {/* Actions — only on match day */}
         {isToday && (
-          <div className="flex gap-2">
-                <button
-                  onClick={() => onPlayMatch(fixture.id, fixture.is_cup ? 'cup' : fixture.is_playoff ? 'playoff' : 'regular')}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold
-                    bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400
-                    transition-all duration-150 active:scale-95 cursor-pointer shadow-lg shadow-amber-500/25">
-                  <Play size={11} fill="currentColor" />
-                  {fixture.is_cup ? 'Play Cup Game' : fixture.is_playoff ? 'Play Playoff Game' : 'Play Match'}
-                </button>
-          </div>
+          <button
+            onClick={() => onPlayMatch(fixture.id, fixture.is_cup ? 'cup' : fixture.is_playoff ? 'playoff' : 'regular')}
+            className="btn-volt w-full flex items-center justify-center gap-2">
+            <Play size={12} fill="currentColor" />
+            {fixture.is_cup ? 'Play Cup Game' : fixture.is_playoff ? 'Play Playoff Game' : 'Play Match'}
+          </button>
         )}
       </div>
     </div>

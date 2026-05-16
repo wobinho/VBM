@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import PlayerCard from '@/components/player-card';
 import PlayerModal from '@/components/player-modal';
-import { Search, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { Search, SlidersHorizontal, ArrowUpDown, Users } from 'lucide-react';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
@@ -59,45 +59,73 @@ export default function TeamPage() {
 
     const positions = ['all', ...new Set(players.map(p => p.position))];
 
+    const avgOverall = players.length > 0
+        ? Math.round(players.reduce((s, p) => s + p.overall, 0) / players.length)
+        : 0;
+    const avgAge = players.length > 0
+        ? Math.round(players.reduce((s, p) => s + p.age, 0) / players.length)
+        : 0;
+
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-white">{team?.name || 'Team'} Roster</h1>
-                <p className="text-sm text-gray-400">{players.length} players total</p>
+        <div className="space-y-6 animate-fade-up">
+            {/* Header */}
+            <div className="relative flex flex-col sm:flex-row sm:items-end gap-4 sm:justify-between pb-5 border-b border-white/[0.06]">
+                <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
+                <div>
+                    <p className="eyebrow mb-2">Roster · Players</p>
+                    <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">
+                        {(team?.name || 'TEAM').toUpperCase()} <span className="text-[var(--volt)]">ROSTER</span>
+                    </h1>
+                </div>
+                <div className="flex gap-6 font-mono tabular">
+                    <div className="text-right">
+                        <div className="text-[9px] uppercase tracking-[0.28em] text-[var(--ink-500)]">Players</div>
+                        <div className="font-display text-3xl text-[var(--bone)] leading-none mt-1">{players.length}</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[9px] uppercase tracking-[0.28em] text-[var(--ink-500)]">Avg OVR</div>
+                        <div className="font-display text-3xl text-[var(--volt)] leading-none mt-1">{avgOverall || '—'}</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[9px] uppercase tracking-[0.28em] text-[var(--ink-500)]">Avg Age</div>
+                        <div className="font-display text-3xl text-[var(--bone)] leading-none mt-1">{avgAge || '—'}</div>
+                    </div>
+                </div>
             </div>
 
-            <div className="flex flex-col gap-3">
+            {/* Filters bar */}
+            <div className="surface p-4 flex flex-col gap-3">
                 <div className="relative">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ink-500)]" />
                     <input
-                        type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players..."
-                        className="w-full pl-10 pr-4 py-2 md:py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500/50 transition-all"
+                        type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, country, or jersey…"
+                        className="w-full pl-11 pr-4 py-3 bg-[var(--ink-850)] border border-white/[0.06] rounded text-[var(--bone)] text-sm placeholder-[var(--ink-500)] focus:outline-none focus:border-[var(--volt)]/60 focus:ring-2 focus:ring-[var(--volt)]/15 transition-all"
                     />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <SlidersHorizontal size={14} className="text-gray-500 shrink-0" />
+                    <SlidersHorizontal size={13} className="text-[var(--ink-500)] shrink-0" />
                     <div className="flex flex-wrap gap-1.5">
                         {positions.map(pos => (
                             <button key={pos} onClick={() => setPosFilter(pos)}
-                                className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-[11px] md:text-xs font-medium transition-all ${posFilter === pos ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'}`}>
+                                className={`px-3 py-1.5 rounded font-mono text-[10.5px] font-bold uppercase tracking-[0.18em] transition-all cursor-pointer ${posFilter === pos ? 'bg-[var(--volt)] text-[var(--ink-950)]' : 'bg-white/[0.04] text-[var(--ink-400)] hover:text-[var(--bone)] hover:bg-white/[0.08] border border-white/[0.06]'}`}>
                                 {pos === 'all' ? 'All' : pos.split(' ').map(w => w[0]).join('')}
                             </button>
                         ))}
                     </div>
 
                     <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                        className="px-2 md:px-3 py-1.5 md:py-2 bg-white/5 border border-white/10 rounded-xl text-xs md:text-sm text-gray-300 focus:outline-none ml-auto">
-                        <option value="overall">Overall</option>
-                        <option value="attack">Attack</option>
-                        <option value="defense">Defense</option>
-                        <option value="serve">Serve</option>
-                        <option value="player_value">Value</option>
-                        <option value="age">Age</option>
+                        className="px-3 py-1.5 bg-[var(--ink-850)] border border-white/[0.08] rounded font-mono text-xs text-[var(--ink-300)] focus:outline-none focus:border-[var(--volt)]/60 ml-auto cursor-pointer">
+                        <option value="overall">Sort: Overall</option>
+                        <option value="attack">Sort: Attack</option>
+                        <option value="defense">Sort: Defense</option>
+                        <option value="serve">Sort: Serve</option>
+                        <option value="player_value">Sort: Value</option>
+                        <option value="age">Sort: Age</option>
                     </select>
 
                     <button onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-                        className="p-1.5 md:p-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all shrink-0">
+                        className="p-2 bg-[var(--ink-850)] border border-white/[0.08] rounded text-[var(--ink-400)] hover:text-[var(--volt)] hover:border-[var(--volt)]/40 transition-all shrink-0 cursor-pointer">
                         <ArrowUpDown size={14} />
                     </button>
                 </div>
@@ -110,7 +138,11 @@ export default function TeamPage() {
             </div>
 
             {filtered.length === 0 && (
-                <div className="text-center py-12 text-gray-500">No players found matching your criteria.</div>
+                <div className="surface text-center py-16 flex flex-col items-center gap-4">
+                    <Users size={36} className="text-[var(--ink-600)]" />
+                    <p className="font-display text-xl tracking-wide text-[var(--ink-300)]">NO PLAYERS MATCH</p>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-500)]">Try a different filter</p>
+                </div>
             )}
 
             {selectedPlayer && <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}

@@ -1,9 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { Eye, EyeOff, LogIn, UserPlus, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, LogIn, UserPlus, Loader2, ArrowLeft } from 'lucide-react';
 
 interface Team { id: number; team_name: string; }
+
+const inputClass = "w-full px-4 py-3 bg-[var(--ink-850)] border border-white/10 rounded text-[var(--bone)] placeholder-[var(--ink-500)] focus:outline-none focus:border-[var(--volt)]/60 focus:ring-2 focus:ring-[var(--volt)]/15 transition-all font-body";
+const labelClass = "block font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--ink-400)] mb-2";
 
 export default function AuthModal() {
     const { user, team, login, register, createTeam, joinTeam, availableLeagues } = useAuth();
@@ -71,36 +74,42 @@ export default function AuthModal() {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-md mx-4 bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-                <div className="p-8 text-center border-b border-white/10 bg-gradient-to-br from-amber-500/10 to-orange-500/10">
-                    <div className="text-4xl mb-3">🏐</div>
-                    <h2 className="text-2xl font-bold text-white">Spike Dynasty</h2>
-                    <p className="text-sm text-gray-400 mt-1">Volleyball Manager</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+            <div className="w-full max-w-md surface-raised overflow-hidden animate-fade-up">
+                {/* Header */}
+                <div className="relative p-8 text-center border-b border-white/[0.06] overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+                    <div className="absolute -top-20 -right-16 w-48 h-48 rounded-full bg-[var(--volt)]/10 blur-3xl" />
+                    <div className="relative">
+                        <div className="text-5xl mb-3 animate-float inline-block">🏐</div>
+                        <h2 className="font-display text-3xl tracking-[0.06em] text-[var(--bone)]">SPIKE DYNASTY</h2>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--ink-400)] mt-2">Volleyball Manager · Season 1</p>
+                    </div>
                 </div>
 
-                <div className="p-6">
+                <div className="p-7">
                     {error && (
-                        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>
+                        <div className="mb-5 p-3.5 rounded border border-[var(--loss)]/40 bg-[var(--loss)]/10 text-[var(--loss)] text-sm font-medium">{error}</div>
                     )}
 
                     {view === 'team' ? (
-                        <div className="space-y-4">
+                        <div className="space-y-5">
                             {teamView === 'select' ? (
                                 <>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-white">Choose a Team</h3>
-                                        <p className="text-sm text-gray-400 mt-1">Join an existing team or create a new one.</p>
+                                        <p className="eyebrow mb-1.5">Step 02</p>
+                                        <h3 className="font-display text-2xl tracking-wide text-[var(--bone)]">CHOOSE A TEAM</h3>
+                                        <p className="text-sm text-[var(--ink-400)] mt-2">Join an existing squad or build your own dynasty.</p>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1.5">League</label>
+                                        <label className={labelClass}>League</label>
                                         <select
                                             value={selectedLeagueId}
                                             onChange={e => {
                                                 setSelectedLeagueId(e.target.value ? Number(e.target.value) : '');
                                                 setSelectedTeamId('');
                                             }}
-                                            className="w-full px-4 py-3 bg-gray-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                            className={inputClass}
                                         >
                                             <option value="">Select a league...</option>
                                             {availableLeagues.map(l => (
@@ -110,11 +119,11 @@ export default function AuthModal() {
                                     </div>
                                     {selectedLeagueId && leagueTeams.length > 0 && (
                                         <div>
-                                            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1.5">Available Teams</label>
+                                            <label className={labelClass}>Available Teams</label>
                                             <select
                                                 value={selectedTeamId}
                                                 onChange={e => setSelectedTeamId(e.target.value ? Number(e.target.value) : '')}
-                                                className="w-full px-4 py-3 bg-gray-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                                className={inputClass}
                                             >
                                                 <option value="">Select a team...</option>
                                                 {leagueTeams.map(t => (
@@ -127,43 +136,46 @@ export default function AuthModal() {
                                         <button
                                             onClick={handleJoinTeam}
                                             disabled={loading}
-                                            className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:from-green-400 hover:to-emerald-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                            className="btn-volt w-full flex items-center justify-center gap-2"
                                         >
-                                            {loading ? <><Loader2 size={16} className="animate-spin" /> Joining...</> : <>✓ Join Team</>}
+                                            {loading ? <><Loader2 size={15} className="animate-spin" /> Joining…</> : <>Join Team</>}
                                         </button>
                                     )}
+                                    <div className="flex items-center gap-3 py-2">
+                                        <div className="flex-1 h-px bg-white/[0.06]" />
+                                        <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--ink-500)]">or</span>
+                                        <div className="flex-1 h-px bg-white/[0.06]" />
+                                    </div>
                                     <button
-                                        onClick={() => {
-                                            setTeamView('create');
-                                            setTeamName('');
-                                        }}
-                                        className="w-full py-2 text-sm text-amber-400 hover:text-amber-300 font-medium border border-amber-500/30 rounded-xl hover:bg-amber-500/10 transition-all"
+                                        onClick={() => { setTeamView('create'); setTeamName(''); }}
+                                        className="btn-ghost w-full"
                                     >
-                                        Or Create a New Team
+                                        Create a New Franchise
                                     </button>
                                 </>
                             ) : teamView === 'create' ? (
                                 <>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-white">Create Your Team</h3>
-                                        <p className="text-sm text-gray-400 mt-1">Choose a name and league for your new team.</p>
+                                        <p className="eyebrow mb-1.5">New Franchise</p>
+                                        <h3 className="font-display text-2xl tracking-wide text-[var(--bone)]">FORGE YOUR DYNASTY</h3>
+                                        <p className="text-sm text-[var(--ink-400)] mt-2">Pick a name and league. Make it legendary.</p>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1.5">Team Name</label>
+                                        <label className={labelClass}>Team Name</label>
                                         <input
                                             type="text"
                                             value={teamName}
                                             onChange={e => setTeamName(e.target.value)}
-                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                            className={inputClass}
                                             placeholder="e.g. Coastal Thunder"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1.5">League</label>
+                                        <label className={labelClass}>League</label>
                                         <select
                                             value={selectedLeagueId}
                                             onChange={e => setSelectedLeagueId(e.target.value ? Number(e.target.value) : '')}
-                                            className="w-full px-4 py-3 bg-gray-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                            className={inputClass}
                                         >
                                             <option value="">Select a league...</option>
                                             {availableLeagues.map(l => (
@@ -174,66 +186,69 @@ export default function AuthModal() {
                                     <button
                                         onClick={handleCreateTeam}
                                         disabled={loading || !teamName.trim() || !selectedLeagueId}
-                                        className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold hover:from-amber-400 hover:to-orange-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="btn-volt w-full flex items-center justify-center gap-2"
                                     >
-                                        {loading ? <><Loader2 size={16} className="animate-spin" /> Creating...</> : <>🏐 Create Team</>}
+                                        {loading ? <><Loader2 size={15} className="animate-spin" /> Creating…</> : <>Create Team</>}
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            setTeamView('select');
-                                            setSelectedLeagueId('');
-                                            setSelectedTeamId('');
-                                        }}
-                                        className="w-full py-2 text-sm text-gray-400 hover:text-gray-300 font-medium transition-all"
+                                        onClick={() => { setTeamView('select'); setSelectedLeagueId(''); setSelectedTeamId(''); }}
+                                        className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono uppercase tracking-[0.22em] text-[var(--ink-400)] hover:text-[var(--bone)] transition-colors"
                                     >
-                                        Back
+                                        <ArrowLeft size={12} /> Back
                                     </button>
                                 </>
                             ) : null}
                         </div>
                     ) : (
-                        <form onSubmit={view === 'login' ? handleLogin : handleRegister} className="space-y-4">
+                        <form onSubmit={view === 'login' ? handleLogin : handleRegister} className="space-y-5">
+                            <div>
+                                <p className="eyebrow mb-1.5">{view === 'login' ? 'Welcome back' : 'New manager'}</p>
+                                <h3 className="font-display text-2xl tracking-wide text-[var(--bone)]">
+                                    {view === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
+                                </h3>
+                            </div>
+
                             {view === 'register' && (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Username</label>
+                                        <label className={labelClass}>Username</label>
                                         <input type="text" value={username} onChange={e => setUsername(e.target.value)} required
-                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="johndoe" />
+                                            className={inputClass} placeholder="johndoe" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Display Name</label>
+                                        <label className={labelClass}>Display Name</label>
                                         <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} required
-                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="John Doe" />
+                                            className={inputClass} placeholder="John Doe" />
                                     </div>
                                 </>
                             )}
                             <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1.5">Email</label>
+                                <label className={labelClass}>Email</label>
                                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="you@example.com" />
+                                    className={inputClass} placeholder="you@example.com" />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1.5">Password</label>
+                                <label className={labelClass}>Password</label>
                                 <div className="relative">
                                     <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
-                                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all pr-10" placeholder="••••••••" />
-                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                                        className={`${inputClass} pr-11`} placeholder="••••••••" />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-500)] hover:text-[var(--bone)] transition-colors">
                                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
                                 </div>
                             </div>
                             <button type="submit" disabled={loading}
-                                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold hover:from-amber-400 hover:to-orange-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                                {loading ? 'Loading...' : view === 'login' ? <><LogIn size={16} /> Sign In</> : <><UserPlus size={16} /> Create Account</>}
+                                className="btn-volt w-full flex items-center justify-center gap-2">
+                                {loading ? <><Loader2 size={15} className="animate-spin" /> Loading…</> : view === 'login' ? <><LogIn size={15} /> Sign In</> : <><UserPlus size={15} /> Create Account</>}
                             </button>
                         </form>
                     )}
 
                     {view !== 'team' && (
-                        <p className="mt-4 text-center text-sm text-gray-500">
+                        <p className="mt-6 text-center text-sm text-[var(--ink-400)]">
                             {view === 'login' ? "Don't have an account? " : 'Already have an account? '}
                             <button onClick={() => { setView(view === 'login' ? 'register' : 'login'); setError(''); }}
-                                className="text-amber-400 hover:text-amber-300 font-medium">
+                                className="text-[var(--volt)] hover:text-[var(--volt-bright)] font-bold font-mono uppercase tracking-[0.15em] text-xs ml-1">
                                 {view === 'login' ? 'Register' : 'Sign In'}
                             </button>
                         </p>

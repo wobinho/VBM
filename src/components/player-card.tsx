@@ -16,46 +16,114 @@ function getPositionAbbrev(pos: string) {
     return map[pos] || pos.substring(0, 2).toUpperCase();
 }
 
-function getPositionAccent(position: string) {
-    const colors: Record<string, { badge: string; glow: string }> = {
-        'Setter': { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30', glow: 'shadow-blue-500/10' },
-        'Outside Hitter': { badge: 'bg-red-500/20 text-red-300 border-red-500/30', glow: 'shadow-red-500/10' },
-        'Middle Blocker': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30', glow: 'shadow-purple-500/10' },
-        'Opposite Hitter': { badge: 'bg-orange-500/20 text-orange-300 border-orange-500/30', glow: 'shadow-orange-500/10' },
-        'Libero': { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', glow: 'shadow-emerald-500/10' },
+type PositionTheme = {
+    badge: string;
+    ring: string;
+    glow: string;
+    bar: string;
+    text: string;
+    bgWash: string;
+    photoGlow: string;
+    shadowHex: string;
+    accent: string;
+};
+
+function getPositionTheme(position: string): PositionTheme {
+    const map: Record<string, PositionTheme> = {
+        'Setter': {
+            badge: 'bg-sky-400/15 text-sky-300 border-sky-400/40',
+            ring: 'ring-sky-400/40',
+            glow: 'from-sky-500/30 via-sky-500/10',
+            bar: 'bg-sky-400',
+            text: 'text-sky-300',
+            bgWash: 'from-sky-500/[0.15] via-sky-500/[0.05]',
+            photoGlow: 'bg-sky-500/40',
+            shadowHex: '14,165,233',
+            accent: 'border-sky-400/50',
+        },
+        'Outside Hitter': {
+            badge: 'bg-rose-400/15 text-rose-300 border-rose-400/40',
+            ring: 'ring-rose-400/40',
+            glow: 'from-rose-500/30 via-rose-500/10',
+            bar: 'bg-rose-400',
+            text: 'text-rose-300',
+            bgWash: 'from-rose-500/[0.15] via-rose-500/[0.05]',
+            photoGlow: 'bg-rose-500/40',
+            shadowHex: '244,63,94',
+            accent: 'border-rose-400/50',
+        },
+        'Middle Blocker': {
+            badge: 'bg-violet-400/15 text-violet-300 border-violet-400/40',
+            ring: 'ring-violet-400/40',
+            glow: 'from-violet-500/30 via-violet-500/10',
+            bar: 'bg-violet-400',
+            text: 'text-violet-300',
+            bgWash: 'from-violet-500/[0.15] via-violet-500/[0.05]',
+            photoGlow: 'bg-violet-500/40',
+            shadowHex: '139,92,246',
+            accent: 'border-violet-400/50',
+        },
+        'Opposite Hitter': {
+            badge: 'bg-orange-400/15 text-orange-300 border-orange-400/40',
+            ring: 'ring-orange-400/40',
+            glow: 'from-orange-500/30 via-orange-500/10',
+            bar: 'bg-orange-400',
+            text: 'text-orange-300',
+            bgWash: 'from-orange-500/[0.15] via-orange-500/[0.05]',
+            photoGlow: 'bg-orange-500/40',
+            shadowHex: '249,115,22',
+            accent: 'border-orange-400/50',
+        },
+        'Libero': {
+            badge: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/40',
+            ring: 'ring-emerald-400/40',
+            glow: 'from-emerald-500/30 via-emerald-500/10',
+            bar: 'bg-emerald-400',
+            text: 'text-emerald-300',
+            bgWash: 'from-emerald-500/[0.15] via-emerald-500/[0.05]',
+            photoGlow: 'bg-emerald-500/40',
+            shadowHex: '16,185,129',
+            accent: 'border-emerald-400/50',
+        },
     };
-    return colors[position] || { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/30', glow: 'shadow-gray-500/10' };
+    return map[position] ?? {
+        badge: 'bg-white/10 text-zinc-300 border-white/15',
+        ring: 'ring-white/20',
+        glow: 'from-white/15 via-white/5',
+        bar: 'bg-zinc-400',
+        text: 'text-zinc-300',
+        bgWash: 'from-white/[0.08] via-white/[0.03]',
+        photoGlow: 'bg-white/20',
+        shadowHex: '120,120,140',
+        accent: 'border-white/20',
+    };
 }
 
-function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
-    const colorMap: Record<string, string> = {
-        red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-emerald-500',
-        purple: 'bg-purple-500', cyan: 'bg-cyan-500', amber: 'bg-amber-500',
-    };
-    const numColor = value >= 80 ? 'text-emerald-400' : value >= 60 ? 'text-amber-400' : 'text-red-400';
+function overallTone(v: number) {
+    if (v >= 85) return { text: 'text-emerald-300', glow: 'shadow-emerald-500/40', tier: 'ELITE' };
+    if (v >= 75) return { text: 'text-yellow-300', glow: 'shadow-yellow-500/30', tier: 'STAR' };
+    if (v >= 65) return { text: 'text-amber-300', glow: 'shadow-amber-500/25', tier: 'PRO' };
+    if (v >= 55) return { text: 'text-zinc-300', glow: 'shadow-zinc-500/20', tier: 'STARTER' };
+    return { text: 'text-rose-300', glow: 'shadow-rose-500/20', tier: 'DEV' };
+}
+
+function MiniStatBar({ value, bar }: { value: number; bar: string }) {
     return (
-        <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="text-[10px] sm:text-[11px] text-gray-400 w-16 sm:w-20 shrink-0">{label}</span>
-            <div className="flex-1 h-1 sm:h-[5px] bg-white/5 rounded-full overflow-hidden">
-                <div
-                    className={`h-full rounded-full ${colorMap[color] || colorMap.amber}`}
-                    style={{ width: `${value}%` }}
-                />
-            </div>
-            <span className={`text-[10px] sm:text-[11px] font-bold w-5 text-right ${numColor}`}>{value}</span>
+        <div className="flex-1 h-[3px] bg-white/[0.06] overflow-hidden rounded-full">
+            <div className={`h-full ${bar} transition-all duration-500`} style={{ width: `${value}%` }} />
         </div>
     );
 }
 
 function PlayerPhoto({ playerId }: { playerId: number }) {
     const [useFallback, setUseFallback] = useState(false);
-    const src = useFallback ? '/assets/players/default.png' : `/assets/players/${playerId}.png`;
     const [finalFallback, setFinalFallback] = useState(false);
+    const src = useFallback ? '/assets/players/default.png' : `/assets/players/${playerId}.png`;
 
     if (finalFallback) {
         return (
-            <div className="w-full h-full flex items-center justify-center">
-                <svg viewBox="0 0 80 100" className="w-24 h-28 opacity-60" fill="none">
+            <div className="w-full h-full flex items-end justify-center pb-4">
+                <svg viewBox="0 0 80 100" className="w-3/4 h-3/4 opacity-30" fill="none">
                     <ellipse cx="40" cy="28" rx="18" ry="20" fill="#4B5563" />
                     <path d="M10 100 Q10 60 40 58 Q70 60 70 100Z" fill="#4B5563" />
                 </svg>
@@ -69,7 +137,7 @@ function PlayerPhoto({ playerId }: { playerId: number }) {
             alt="Player"
             fill
             unoptimized
-            className="object-contain object-bottom"
+            className="object-cover object-top drop-shadow-[0_12px_24px_rgba(0,0,0,0.6)]"
             onError={() => {
                 if (!useFallback) setUseFallback(true);
                 else setFinalFallback(true);
@@ -81,183 +149,185 @@ function PlayerPhoto({ playerId }: { playerId: number }) {
 function TeamLogo({ teamId }: { teamId?: number | null }) {
     const [useFallback, setUseFallback] = useState(false);
     const [failed, setFailed] = useState(false);
-
     if (!teamId || failed) return null;
-
     const src = useFallback ? '/assets/teams/default.png' : `/assets/teams/${teamId}.png`;
-
     return (
-        <div className="relative w-16 h-16">
-            <Image
-                src={src}
-                alt="Team"
-                fill
-                unoptimized
-                className="object-contain drop-shadow-lg"
-                onError={() => {
-                    if (!useFallback) setUseFallback(true);
-                    else setFailed(true);
-                }}
-            />
+        <div className="relative w-8 h-8">
+            <Image src={src} alt="Team" fill unoptimized className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                onError={() => { if (!useFallback) setUseFallback(true); else setFailed(true); }} />
         </div>
     );
 }
 
 function CountryFlag({ countryCode }: { countryCode: string }) {
     const [failed, setFailed] = useState(false);
-
-    // Convert country name to code if needed
     const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
-
-    if (failed) {
-        return (
-            <div className="w-10 h-7 rounded overflow-hidden shadow-md bg-gray-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-[9px] font-bold text-white uppercase">{code}</span>
-            </div>
-        );
-    }
-
+    if (failed) return (
+        <div className="w-7 h-5 rounded-sm bg-zinc-700 flex items-center justify-center ring-1 ring-white/10">
+            <span className="text-[8px] font-bold text-white uppercase">{code}</span>
+        </div>
+    );
     return (
-        <div className="w-10 h-7 rounded overflow-hidden shadow-md flex-shrink-0">
-            <img
-                src={`/assets/flags/${code}.svg`}
-                alt={getCountryName(code)}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={() => setFailed(true)}
-            />
+        <div className="w-7 h-5 rounded-sm overflow-hidden ring-1 ring-white/20 shadow-md">
+            <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover" loading="lazy" onError={() => setFailed(true)} />
         </div>
     );
 }
 
-export default function PlayerCard({ player, onClick, compact = false, onSign, onShortlist, shortlistLabel }: { player: Player; onClick?: () => void; compact?: boolean; onSign?: (player: Player) => void; onShortlist?: (player: Player) => void; shortlistLabel?: string; }) {
+export default function PlayerCard({ player, onClick, compact = false, onSign, onShortlist, shortlistLabel }: {
+    player: Player; onClick?: () => void; compact?: boolean;
+    onSign?: (player: Player) => void; onShortlist?: (player: Player) => void; shortlistLabel?: string;
+}) {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
     if (compact) {
-        // Handle both country codes and country names
         const countryDisplay = player.country.length > 2 ? player.country : getCountryName(player.country);
+        const tone = overallTone(player.overall);
+        const theme = getPositionTheme(player.position);
         return (
-            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl bg-white/5 border border-white/5 hover:border-amber-500/30 hover:bg-white/[0.08] transition-all cursor-pointer group" onClick={onClick}>
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center text-xs sm:text-sm font-bold text-amber-400 shrink-0">
+            <div
+                className="group flex items-center gap-3 p-2.5 sm:p-3 rounded-md bg-white/[0.025] border border-white/[0.05] hover:border-yellow-400/40 hover:bg-white/[0.06] transition-all cursor-pointer relative overflow-hidden"
+                onClick={onClick}
+            >
+                <div className={`absolute inset-y-0 left-0 w-[3px] ${theme.bar} opacity-70 group-hover:opacity-100 transition-opacity`} />
+                <div className="w-10 h-10 rounded bg-yellow-400/10 border border-yellow-400/25 flex items-center justify-center font-display text-sm text-yellow-300 shrink-0 tabular-nums">
                     {player.jersey_number}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-amber-400 transition-colors">{player.player_name}</p>
-                    <p className="text-[10px] sm:text-xs text-gray-500">{getPositionAbbrev(player.position)} • {countryDisplay}</p>
+                    <p className="text-sm font-semibold text-zinc-100 truncate group-hover:text-yellow-300 transition-colors">{player.player_name}</p>
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{getPositionAbbrev(player.position)} · {countryDisplay}</p>
                 </div>
-                <div className={`text-base sm:text-lg font-black shrink-0 ${player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                <div className={`font-display text-2xl shrink-0 tabular-nums ${tone.text}`}>
                     {player.overall}
                 </div>
             </div>
         );
     }
 
-    const accent = getPositionAccent(player.position);
-    const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
+    const theme = getPositionTheme(player.position);
+    const tone = overallTone(player.overall);
+    const stats = [
+        { label: 'ATK', value: player.attack },
+        { label: 'DEF', value: player.defense },
+        { label: 'SRV', value: player.serve },
+        { label: 'BLK', value: player.block },
+        { label: 'RCV', value: player.receive },
+        { label: 'SET', value: player.setting },
+    ];
 
     return (
         <div
-            className={`relative w-full rounded-2xl overflow-hidden border border-white/8 cursor-pointer hover:border-white/30 hover:shadow-2xl hover:scale-105 transition-all duration-300 shadow-xl ${accent.glow} hover:${accent.glow}`}
-            style={{
-                background: '#0d1117',
-                boxShadow: `0 0 30px ${accent.glow.includes('blue') ? 'rgba(59, 130, 246, 0.2)' : accent.glow.includes('red') ? 'rgba(239, 68, 68, 0.2)' : accent.glow.includes('purple') ? 'rgba(168, 85, 247, 0.2)' : accent.glow.includes('orange') ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`
-            }}
+            className={`group relative w-full rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl border ${theme.accent} bg-zinc-950`}
+            style={{ boxShadow: `0 0 0 0 rgba(${theme.shadowHex},0)`, transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease' }}
+            onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 20px 60px -10px rgba(${theme.shadowHex},0.35)`)}
+            onMouseLeave={e => (e.currentTarget.style.boxShadow = `0 0 0 0 rgba(${theme.shadowHex},0)`)}
             onClick={onClick}
         >
-            {/* ── HEADER ZONE ── */}
-            <div className="relative h-40 sm:h-48 md:h-52 overflow-hidden" style={{ background: 'linear-gradient(160deg, #111827 0%, #0d1117 100%)' }}>
-                {/* Team logo — top left, allowed to overlap other elements */}
-                <div className="absolute top-1.5 left-1.5 z-20">
-                    <TeamLogo teamId={player.team_id} />
-                </div>
+            {/* Top accent line */}
+            <div className={`absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-current to-transparent ${theme.text} opacity-90 z-20`} />
 
-                {/* Overall rating — top center */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 text-center z-10">
-                    <div className={`text-4xl sm:text-5xl font-black leading-none ${overallColor}`} style={{ textShadow: '0 0 20px currentColor' }}>
-                        {player.overall}
+            {/* ── PORTRAIT ZONE (dominant, 3:4 aspect ratio) ── */}
+            <div className={`relative aspect-[3/4] overflow-hidden bg-gradient-to-b ${theme.bgWash} to-zinc-950`}>
+                {/* Radial glow behind player */}
+                <div className={`absolute inset-x-0 bottom-0 mx-auto h-40 w-40 rounded-full ${theme.photoGlow} blur-3xl opacity-50 pointer-events-none`} />
+
+                {/* Subtle grid texture */}
+                <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
+                    style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+
+                {/* Overall rating — top left glass badge */}
+                <div className="absolute top-3 left-3 z-20 flex flex-col items-center">
+                    <div className={`px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md ring-1 ${theme.ring} shadow-lg`}>
+                        <div className={`font-display text-3xl leading-none tabular-nums ${tone.text}`}>{player.overall}</div>
                     </div>
-                    <div className="text-[8px] sm:text-[9px] font-semibold tracking-[0.2em] text-gray-500 uppercase mt-0.5">Overall</div>
+                    <span className={`mt-1 font-mono text-[8px] font-bold tracking-[0.3em] ${theme.text} bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-md`}>{tone.tier}</span>
                 </div>
 
                 {/* Country flag — top right */}
-                <div className="absolute top-2 right-2 z-10">
+                <div className="absolute top-3 right-3 z-20">
                     <CountryFlag countryCode={player.country} />
                 </div>
 
-                {/* Player photo */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-32 sm:w-32 sm:h-40 md:w-36 md:h-44">
+                {/* Player photo — fills full 3:4 portrait area edge-to-edge */}
+                <div className="absolute inset-0 z-10">
                     <PlayerPhoto playerId={player.id} />
                 </div>
 
-                {/* Bottom gradient fade */}
-                <div className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
+                {/* Bottom vignette */}
+                <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent pointer-events-none z-10" />
             </div>
 
-            {/* ── PLAYER IDENTITY ── */}
-            <div className="px-3 sm:px-4 pt-2 sm:pt-3 pb-1.5 sm:pb-2 text-center">
-                <h3 className="text-sm sm:text-[15px] font-bold text-white leading-tight truncate">{player.player_name}</h3>
-                <div className="flex items-center justify-center gap-1 sm:gap-2 mt-1 sm:mt-1.5 flex-wrap">
-                    <span className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold border ${accent.badge}`}>
-                        {getPositionAbbrev(player.position)}
-                    </span>
-                    <span className="text-[10px] sm:text-[11px] text-gray-400">#{player.jersey_number}</span>
-                    <span className="text-[10px] sm:text-[11px] text-gray-500 hidden sm:inline">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
+            {/* ── NAME + META ── */}
+            <div className="relative px-4 pt-3 pb-2 bg-zinc-950">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        <h3 className="font-display text-base tracking-wide text-zinc-50 leading-tight truncate">{player.player_name.toUpperCase()}</h3>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`font-mono text-[9px] font-bold uppercase tracking-[0.2em] ${theme.text}`}>{player.position}</span>
+                            <span className="font-mono text-[9px] text-zinc-600">·</span>
+                            <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-wider truncate">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                        <TeamLogo teamId={player.team_id} />
+                        <span className={`font-mono text-[11px] font-bold tabular-nums ${theme.text}`}>#{player.jersey_number}</span>
+                    </div>
                 </div>
             </div>
 
-            {/* ── INFO GRID ── */}
-            <div className="px-2 sm:px-3 pb-2 sm:pb-3">
-                <div className="grid grid-cols-3 gap-1 sm:gap-1.5 mb-2 sm:mb-3">
-                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{formatMoney(player.player_value)}</div>
-                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Value</div>
-                    </div>
-                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{player.age}</div>
-                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Age</div>
-                    </div>
-                    <div className="rounded-lg p-1.5 sm:p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="text-[11px] sm:text-[12px] font-bold text-white leading-tight">{player.height ? `${player.height}cm` : '—'}</div>
-                        <div className="text-[8px] sm:text-[9px] text-gray-500 mt-0.5">Height</div>
-                    </div>
+            {/* ── VITALS ── */}
+            <div className="px-4 py-2.5 bg-zinc-950 border-t border-white/[0.04]">
+                <div className="grid grid-cols-3 divide-x divide-white/[0.05]">
+                    {[
+                        { label: 'VAL', value: formatMoney(player.player_value) },
+                        { label: 'AGE', value: player.age },
+                        { label: 'HT', value: player.height ? `${player.height}` : '—' },
+                    ].map(s => (
+                        <div key={s.label} className="text-center px-1 first:pl-0 last:pr-0">
+                            <div className="font-display text-sm tracking-wider text-zinc-100 leading-none tabular-nums">{s.value}</div>
+                            <div className="font-mono text-[8px] uppercase tracking-[0.22em] text-zinc-600 mt-0.5">{s.label}</div>
+                        </div>
+                    ))}
                 </div>
-
-                {/* ── STAT BARS ── */}
-                <div className="space-y-1 sm:space-y-[6px]">
-                    <StatBar label="Attack" value={player.attack} color="red" />
-                    <StatBar label="Defense" value={player.defense} color="blue" />
-                    <StatBar label="Serve" value={player.serve} color="green" />
-                    <StatBar label="Block" value={player.block} color="purple" />
-                    <StatBar label="Receive" value={player.receive} color="cyan" />
-                    <StatBar label="Setting" value={player.setting} color="amber" />
-                </div>
-
-                {/* ── ACTION BUTTONS ── */}
-                {(onSign || onShortlist) && (
-                    <div className="grid grid-cols-2 gap-1.5 mt-2 sm:mt-3">
-                        {onSign && (
-                            <button
-                                onClick={e => { e.stopPropagation(); onSign(player); }}
-                                className="py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 transition-all duration-150 cursor-pointer"
-                            >
-                                Sign Player
-                            </button>
-                        )}
-                        {onShortlist && (
-                            <button
-                                onClick={e => { e.stopPropagation(); onShortlist(player); }}
-                                className={`py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all duration-150 cursor-pointer ${
-                                    shortlistLabel && shortlistLabel.startsWith('✓')
-                                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400'
-                                        : 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white'
-                                }`}
-                            >
-                                {shortlistLabel ?? '+ Shortlist'}
-                            </button>
-                        )}
-                    </div>
-                )}
             </div>
+
+            {/* ── MINI STAT BARS ── */}
+            <div className="px-4 pb-3 pt-2.5 bg-zinc-950 border-t border-white/[0.04]">
+                <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
+                    {stats.map(s => {
+                        const numColor = s.value >= 80 ? 'text-emerald-300' : s.value >= 60 ? 'text-yellow-300' : 'text-rose-300';
+                        return (
+                            <div key={s.label} className="flex items-center gap-1.5">
+                                <span className="font-mono text-[8px] uppercase tracking-[0.14em] text-zinc-500 w-7 shrink-0">{s.label}</span>
+                                <MiniStatBar value={s.value} bar={theme.bar} />
+                                <span className={`font-mono text-[9px] font-bold tabular-nums w-5 text-right ${numColor}`}>{s.value}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── ACTIONS ── */}
+            {(onSign || onShortlist) && (
+                <div className="grid grid-cols-2 gap-px bg-black border-t border-white/[0.06]">
+                    {onSign && (
+                        <button onClick={e => { e.stopPropagation(); onSign(player); }}
+                            className="py-2.5 font-display text-[11px] tracking-[0.18em] uppercase bg-yellow-400 text-black hover:bg-yellow-300 transition-colors duration-150 cursor-pointer">
+                            Sign Player
+                        </button>
+                    )}
+                    {onShortlist && (
+                        <button onClick={e => { e.stopPropagation(); onShortlist(player); }}
+                            className={`py-2.5 font-display text-[11px] tracking-[0.18em] uppercase transition-colors duration-150 cursor-pointer ${
+                                shortlistLabel && shortlistLabel.startsWith('✓')
+                                    ? 'bg-yellow-400/10 text-yellow-300 hover:bg-rose-500/15 hover:text-rose-300'
+                                    : 'bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-50'
+                            }`}>
+                            {shortlistLabel ?? '+ Shortlist'}
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

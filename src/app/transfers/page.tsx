@@ -98,17 +98,17 @@ function Stepper({ label, value, min, max, step = 1, format, onChange }: {
 }) {
     return (
         <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
+            <span className="font-mono text-[10px] font-bold text-[var(--ink-400)] uppercase tracking-[0.22em]">{label}</span>
             <div className="flex items-center gap-3">
                 <button onClick={() => onChange(Math.max(min, value - step))} disabled={value <= min}
-                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    className="w-9 h-9 rounded bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[var(--ink-300)] hover:bg-white/[0.08] hover:border-[var(--volt)]/40 hover:text-[var(--volt)] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
                     <Minus size={14} />
                 </button>
                 <div className="flex-1 text-center">
-                    <span className="text-lg font-bold text-white">{format(value)}</span>
+                    <span className="font-display text-xl text-[var(--bone)] tabular">{format(value)}</span>
                 </div>
                 <button onClick={() => onChange(Math.min(max, value + step))} disabled={value >= max}
-                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    className="w-9 h-9 rounded bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[var(--ink-300)] hover:bg-white/[0.08] hover:border-[var(--volt)]/40 hover:text-[var(--volt)] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
                     <Plus size={14} />
                 </button>
             </div>
@@ -122,9 +122,9 @@ function PatienceDots({ patience }: { patience: number }) {
     return (
         <div className="flex items-center gap-1.5">
             {Array.from({ length: MAX_PATIENCE }).map((_, i) => (
-                <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${i < patience
-                    ? 'bg-emerald-400 border-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
-                    : 'bg-transparent border-gray-600'}`} />
+                <div key={i} className={`w-3.5 h-3.5 rounded-full border transition-all duration-300 ${i < patience
+                    ? 'bg-[var(--win)] border-[var(--win)] shadow-[0_0_8px_rgba(34,197,94,0.55)]'
+                    : 'bg-transparent border-[var(--ink-600)]'}`} />
             ))}
         </div>
     );
@@ -177,169 +177,149 @@ function ClubNegotiationModal({ player, teamMoney, onClose, onAccepted }: ClubNe
     const isFreeAgent = !player.team_id;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
             onClick={onClose}>
-            <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
-                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+            <div className="relative w-full max-w-md rounded-xl overflow-hidden border border-amber-400/20 shadow-[0_32px_80px_-10px_rgba(0,0,0,0.9)] bg-zinc-950"
                 onClick={e => e.stopPropagation()}>
+                {/* Gold top accent */}
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+                {/* Ambient glow */}
+                <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-32 bg-amber-500/10 blur-3xl pointer-events-none" />
 
-                {/* Header */}
-                <div className="relative px-6 pt-8 pb-5 border-b border-white/10"
-                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(249,115,22,0.05) 100%)' }}>
+                {/* Header with portrait */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-white/[0.06] overflow-hidden">
                     <button onClick={onClose}
-                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer z-10">
+                        className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:border-amber-400/30 transition-all cursor-pointer z-10">
                         <X size={14} />
                     </button>
 
-                    <div className="flex items-center gap-5">
-                        <div className="relative shrink-0">
-                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 overflow-hidden shadow-2xl">
-                                <PlayerPhoto playerId={player.id} className="w-full h-full" />
-                            </div>
+                    <div className="flex items-end gap-4">
+                        {/* Player portrait */}
+                        <div className="relative shrink-0 w-24 h-28 rounded-lg overflow-hidden bg-zinc-900 border border-white/[0.08]">
+                            <PlayerPhoto playerId={player.id} className="w-full h-full" />
                             {!isFreeAgent && (
-                                <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-lg bg-gray-900 border border-white/20 p-1 shadow-xl">
+                                <div className="absolute bottom-1 right-1 w-7 h-7 rounded-md bg-zinc-950/90 border border-white/15 p-1">
                                     <TeamLogo teamId={player.team_id} className="w-full h-full" />
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+
+                        <div className="min-w-0 pb-1">
+                            <p className="font-mono text-[9.5px] font-bold text-amber-400 uppercase tracking-[0.3em] mb-1.5 flex items-center gap-1.5">
                                 <ShoppingBag size={10} /> Club Negotiation
                             </p>
-                            <h2 className="text-xl font-black text-white truncate leading-tight">{player.player_name}</h2>
+                            <h2 className="font-display text-2xl tracking-[0.02em] text-zinc-50 truncate leading-tight">{player.player_name}</h2>
                             <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-gray-400 font-medium">{player.position}</span>
-                                <span className="w-1 h-1 rounded-full bg-gray-700" />
-                                <span className="text-xs text-gray-500 truncate">{isFreeAgent ? 'Free Agent' : player.team_name}</span>
+                                <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">{player.position}</span>
+                                <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                                <span className="font-mono text-[10px] text-zinc-500 truncate uppercase tracking-wider">{isFreeAgent ? 'Free Agent' : player.team_name}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {isFreeAgent ? (
-                    // Free agent: skip straight through
                     <div className="px-6 py-6 space-y-4">
-                        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/25 p-5 text-center">
                             <CheckCircle size={24} className="mx-auto text-emerald-400 mb-2" />
-                            <p className="text-sm font-semibold text-emerald-400">No transfer fee needed</p>
-                            <p className="text-xs text-gray-400 mt-1">This player is a free agent.</p>
+                            <p className="font-display text-base tracking-wide text-emerald-300">NO TRANSFER FEE</p>
+                            <p className="font-mono text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">This player is a free agent</p>
                         </div>
                         <button onClick={() => onAccepted(0)}
-                            className="w-full py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 transition-all cursor-pointer">
+                            className="w-full py-3 rounded-lg font-display text-sm tracking-[0.12em] uppercase bg-amber-400 text-black hover:bg-amber-300 transition-colors cursor-pointer">
                             Proceed to Contract
                         </button>
                     </div>
                 ) : (
-                    <div className="px-6 py-5 space-y-5">
+                    <div className="px-6 py-5 space-y-4">
                         {/* Value info */}
                         <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className="rounded-xl bg-white/[0.03] border border-white/5 px-2 py-2.5">
-                                <p className="text-[9px] text-gray-600 uppercase tracking-widest mb-0.5">Player Value</p>
-                                <p className="text-xs font-bold text-gray-300">{fmt(player.player_value)}</p>
-                            </div>
-                            <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-2 py-2.5">
-                                <p className="text-[9px] text-amber-500/60 uppercase tracking-widest mb-0.5">Asking Price</p>
-                                <p className="text-xs font-bold text-amber-400">{fmt(suggestedFee)}</p>
-                            </div>
-                            <div className="rounded-xl bg-white/[0.03] border border-white/5 px-2 py-2.5">
-                                <p className="text-[9px] text-gray-600 uppercase tracking-widest mb-0.5">Contract</p>
-                                <p className="text-xs font-bold text-gray-300">{player.contract_years}yr</p>
-                            </div>
+                            {[
+                                { label: 'Player Value', value: fmt(player.player_value), accent: false },
+                                { label: 'Asking Price', value: fmt(suggestedFee), accent: true },
+                                { label: 'Contract', value: `${player.contract_years}yr`, accent: false },
+                            ].map(s => (
+                                <div key={s.label} className={`rounded-lg px-2 py-2.5 border ${s.accent ? 'bg-amber-500/8 border-amber-500/20' : 'bg-white/[0.025] border-white/[0.05]'}`}>
+                                    <p className={`text-[9px] uppercase tracking-widest mb-0.5 ${s.accent ? 'text-amber-500/60' : 'text-zinc-600'}`}>{s.label}</p>
+                                    <p className={`text-xs font-bold ${s.accent ? 'text-amber-400' : 'text-zinc-300'}`}>{s.value}</p>
+                                </div>
+                            ))}
                         </div>
 
                         {/* Patience */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-gray-500 uppercase tracking-widest">Club Patience</span>
+                        <div className="flex items-center justify-between px-1">
+                            <span className="font-mono text-[9.5px] text-zinc-500 uppercase tracking-widest">Club Patience</span>
                             <PatienceDots patience={patience} />
                         </div>
 
                         {/* Fee Input */}
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
-                            <div className="flex items-start justify-between mb-4">
+                        <div className="rounded-lg bg-white/[0.025] border border-white/[0.07] p-4 focus-within:border-amber-500/30 transition-all">
+                            <div className="flex items-center justify-between mb-3">
                                 <div>
-                                    <p className="text-xs font-bold text-white">Transfer Fee</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">Your offer to the club</p>
+                                    <p className="font-mono text-[10px] font-bold text-zinc-100 uppercase tracking-[0.18em]">Transfer Fee</p>
+                                    <p className="font-mono text-[9px] text-zinc-500 mt-0.5">Your offer to the selling club</p>
                                 </div>
-                                <div className="px-2 py-1 rounded bg-white/5 border border-white/5">
-                                    <DollarSign size={12} className="text-amber-500" />
-                                </div>
+                                <DollarSign size={13} className="text-amber-500" />
                             </div>
-                            
-                            <div className="relative group">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-amber-500 group-focus-within:text-amber-400 transition-colors">$</span>
-                                <input 
-                                    type="text" 
-                                    value={fee.toLocaleString()}
-                                    onChange={(e) => {
-                                        const raw = e.target.value.replace(/[^0-9]/g, '');
-                                        setFee(Math.max(0, parseInt(raw) || 0));
-                                    }}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-9 pr-24 py-3.5 text-xl font-bold text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
-                                />
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                    <button 
-                                        onClick={() => setFee(Math.max(0, fee - 50000))}
-                                        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                                    >
-                                        <Minus size={12} />
-                                    </button>
-                                    <button 
-                                        onClick={() => setFee(fee + 50000)}
-                                        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                                    >
-                                        <Plus size={12} />
-                                    </button>
+                            <div className="relative flex items-center gap-2">
+                                <button onClick={() => setFee(Math.max(0, fee - 50000))}
+                                    className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 transition-all cursor-pointer">
+                                    <Minus size={13} />
+                                </button>
+                                <div className="relative flex-1">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base font-bold text-amber-400">$</span>
+                                    <input type="text" value={fee.toLocaleString()}
+                                        onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ''); setFee(Math.max(0, parseInt(raw) || 0)); }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" />
                                 </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-end mt-3 px-1">
-                                <button 
-                                    onClick={() => setFee(suggestedFee)} 
-                                    className="text-[10px] font-bold text-amber-500/70 hover:text-amber-400 uppercase tracking-widest transition-colors"
-                                >
-                                    Reset to Asking Price
+                                <button onClick={() => setFee(fee + 50000)}
+                                    className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 transition-all cursor-pointer">
+                                    <Plus size={13} />
                                 </button>
                             </div>
-                            {!canAfford && (
-                                <p className="text-[10px] text-red-400 mt-2">Insufficient club funds for this fee.</p>
-                            )}
+                            <div className="flex items-center justify-between mt-2.5 px-0.5">
+                                <button onClick={() => setFee(suggestedFee)}
+                                    className="font-mono text-[9px] font-bold text-amber-500/60 hover:text-amber-400 uppercase tracking-widest transition-colors">
+                                    Reset to asking price
+                                </button>
+                                {!canAfford && <p className="font-mono text-[9px] text-rose-400">Insufficient funds</p>}
+                            </div>
                         </div>
 
                         {/* Rejection message */}
                         {rejectMsg && (
-                            <div className="flex items-start gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5">
-                                <AlertTriangle size={13} className="text-red-400 mt-0.5 shrink-0" />
-                                <p className="text-[11px] text-red-300">{rejectMsg}</p>
+                            <div className="flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+                                <AlertTriangle size={12} className="text-rose-400 mt-0.5 shrink-0" />
+                                <p className="font-mono text-[10px] text-rose-300">{rejectMsg}</p>
                             </div>
                         )}
 
                         {/* Funds display */}
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Your funds</span>
-                            <span className={`font-semibold ${canAfford ? 'text-gray-300' : 'text-red-400'}`}>{formatMoney(teamMoney)}</span>
+                        <div className="flex items-center justify-between px-1">
+                            <span className="font-mono text-[9.5px] text-zinc-500 uppercase tracking-widest">Your funds</span>
+                            <span className={`font-display text-sm tabular-nums ${canAfford ? 'text-zinc-200' : 'text-rose-400'}`}>{formatMoney(teamMoney)}</span>
                         </div>
 
                         {result === 'accepted' ? (
-                            <div className="w-full py-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
-                                <CheckCircle size={16} />Deal Agreed!
+                            <div className="w-full py-3.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-display text-sm tracking-[0.08em] uppercase">
+                                <CheckCircle size={15} />Deal Agreed!
                             </div>
                         ) : result === 'rejected' ? (
                             <button onClick={onClose}
-                                className="w-full py-3.5 rounded-xl font-bold text-sm bg-white/5 border border-white/10 text-gray-400 cursor-pointer">
+                                className="w-full py-3.5 rounded-lg font-display text-sm tracking-[0.08em] uppercase bg-white/[0.04] border border-white/[0.08] text-zinc-400 cursor-pointer hover:bg-white/[0.07] transition-colors">
                                 Close
                             </button>
                         ) : (
                             <button onClick={makeOffer} disabled={result === 'thinking' || !canAfford || patience <= 0}
-                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2
+                                className={`w-full py-3.5 rounded-lg font-display text-sm tracking-[0.1em] uppercase transition-all cursor-pointer flex items-center justify-center gap-2
                                     ${result === 'thinking'
-                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                                         : !canAfford || patience <= 0
-                                            ? 'bg-white/5 text-gray-600 border border-white/5 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
+                                            ? 'bg-white/[0.03] text-zinc-600 border border-white/[0.05] cursor-not-allowed'
+                                            : 'bg-amber-400 text-black hover:bg-amber-300 shadow-lg shadow-amber-500/20'
                                     }`}>
-                                <DollarSign size={16} />
-                                {result === 'thinking' ? 'Waiting for response...' : 'Make Offer'}
+                                <DollarSign size={15} />
+                                {result === 'thinking' ? 'Awaiting response...' : 'Make Offer'}
                             </button>
                         )}
                     </div>
@@ -383,166 +363,162 @@ function ContractSigningModal({ player, transferFee, teamMoney, onClose, onSigne
     const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
             onClick={onClose}>
-            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
-                style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
+            <div className="relative w-full max-w-lg rounded-xl overflow-hidden border border-amber-400/20 shadow-[0_32px_80px_-10px_rgba(0,0,0,0.9)] bg-zinc-950"
                 onClick={e => e.stopPropagation()}>
+                {/* Gold top accent */}
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+                <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-32 bg-amber-500/8 blur-3xl pointer-events-none" />
 
-                {/* Header */}
-                <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
-                    style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
+                {/* Header with portrait */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-white/[0.06] overflow-hidden bg-gradient-to-br from-amber-500/[0.06] via-transparent to-transparent">
                     <button onClick={onClose}
-                        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+                        className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:border-amber-400/30 transition-all cursor-pointer">
                         <X size={14} />
                     </button>
-                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-3">Contract Negotiation</p>
-                    <div className="flex items-center gap-4">
-                        <div>
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <h2 className="text-lg font-bold text-white leading-none">{player.player_name}</h2>
-                                <span className={`text-sm font-black ${overallColor}`}>{player.overall}</span>
+
+                    <div className="flex items-end gap-5">
+                        {/* Player portrait */}
+                        <div className="relative shrink-0 w-28 h-32 rounded-lg overflow-hidden bg-zinc-900 border border-amber-400/15">
+                            <PlayerPhoto playerId={player.id} className="w-full h-full" />
+                            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-950 to-transparent" />
+                            <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 font-display text-base tabular-nums ${overallColor} drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]`}>
+                                {player.overall}
                             </div>
-                            <p className="text-xs text-gray-500">Age {player.age} · {player.position}</p>
-                            {transferFee > 0 && (
-                                <p className="text-[10px] text-amber-400 mt-1">Transfer fee paid: {fmt(transferFee)}</p>
-                            )}
                         </div>
-                        <div className="ml-auto shrink-0 text-right">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Patience</p>
-                            <PatienceDots patience={patience} />
+
+                        <div className="min-w-0 pb-1 flex-1">
+                            <p className="font-mono text-[9.5px] font-bold text-amber-400 uppercase tracking-[0.3em] mb-2">Contract Negotiation</p>
+                            <h2 className="font-display text-2xl tracking-[0.02em] text-zinc-50 truncate leading-tight">{player.player_name}</h2>
+                            <p className="font-mono text-[10px] text-zinc-400 mt-1 uppercase tracking-wider">Age {player.age} · {player.position}</p>
+                            {transferFee > 0 && (
+                                <p className="font-mono text-[9px] text-amber-400/80 mt-1">Fee paid: {fmt(transferFee)}</p>
+                            )}
+                            <div className="flex items-center justify-between mt-3">
+                                <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Patience</span>
+                                <PatienceDots patience={patience} />
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Controls */}
-                <div className="px-6 py-5 space-y-5">
-                    {/* Suggested wage banner */}
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
-                            <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Current Wage</p>
-                            <p className="text-sm font-bold text-gray-300">{formatMoney(player.monthly_wage)}<span className="text-xs text-gray-600">/mo</span></p>
+                <div className="px-6 py-5 space-y-4">
+                    {/* Funds info */}
+                    <div className="grid grid-cols-2 gap-2">
+                        {[
+                            { label: 'Current Wage', value: `${formatMoney(player.monthly_wage)}/mo`, accent: false },
+                            { label: 'Available Funds', value: formatMoney(fundsAfterFee), accent: true },
+                        ].map(s => (
+                            <div key={s.label} className={`rounded-lg px-3 py-2.5 border text-center ${s.accent ? 'bg-amber-500/8 border-amber-500/20' : 'bg-white/[0.025] border-white/[0.05]'}`}>
+                                <p className={`font-mono text-[9px] uppercase tracking-widest mb-0.5 ${s.accent ? 'text-amber-500/60' : 'text-zinc-600'}`}>{s.label}</p>
+                                <p className={`text-sm font-bold ${s.accent ? 'text-amber-400' : 'text-zinc-300'}`}>{s.value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Contract length */}
+                    <div className="rounded-lg bg-white/[0.025] border border-white/[0.07] p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <p className="font-mono text-[10px] font-bold text-zinc-100 uppercase tracking-[0.18em]">Contract Length</p>
+                                <p className="font-mono text-[9px] text-zinc-500 mt-0.5">Years on new contract</p>
+                            </div>
+                            <Calendar size={13} className="text-zinc-500" />
                         </div>
-                        <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
-                            <p className="text-[10px] text-amber-500/60 uppercase tracking-widest mb-0.5">Available Funds</p>
-                            <p className="text-sm font-bold text-amber-400">{formatMoney(fundsAfterFee)}</p>
+                        <Stepper label="Years" value={years} min={1} max={5} format={v => `${v} yr${v !== 1 ? 's' : ''}`} onChange={setYears} />
+                    </div>
+
+                    {/* Monthly Wage */}
+                    <div className="rounded-lg bg-white/[0.025] border border-white/[0.07] p-4 focus-within:border-amber-500/30 transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <p className="font-mono text-[10px] font-bold text-zinc-100 uppercase tracking-[0.18em]">Monthly Wage</p>
+                                <p className="font-mono text-[9px] text-zinc-500 mt-0.5">New monthly salary offer</p>
+                            </div>
+                            <DollarSign size={13} className="text-amber-500" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setWage(Math.max(500, wage - 500))} disabled={wage <= 500}
+                                className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 disabled:opacity-20 transition-all cursor-pointer">
+                                <Minus size={13} />
+                            </button>
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-400">$</span>
+                                <input type="text" value={wage.toLocaleString()}
+                                    onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ''); setWage(Math.max(0, parseInt(raw) || 0)); }}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" />
+                            </div>
+                            <button onClick={() => setWage(Math.min(100000, wage + 500))} disabled={wage >= 100000}
+                                className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 disabled:opacity-20 transition-all cursor-pointer">
+                                <Plus size={13} />
+                            </button>
                         </div>
                     </div>
 
-                    {/* Steppers */}
-                    <div className="space-y-3">
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
-                            <div className="flex items-start justify-between mb-3">
-                                <div>
-                                    <p className="text-xs font-semibold text-white">Contract Length</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">Years on new contract</p>
-                                </div>
-                                <Calendar size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                    {/* Signing Bonus */}
+                    <div className="rounded-lg bg-white/[0.025] border border-white/[0.07] p-4 focus-within:border-amber-500/30 transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <p className="font-mono text-[10px] font-bold text-zinc-100 uppercase tracking-[0.18em]">Signing Bonus</p>
+                                <p className="font-mono text-[9px] text-zinc-500 mt-0.5">One-time payment from funds</p>
                             </div>
-                            <Stepper label="Years" value={years} min={1} max={5}
-                                format={v => `${v} yr${v !== 1 ? 's' : ''}`} onChange={setYears} />
+                            <Star size={13} className="text-amber-500" />
                         </div>
-
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
-                            <div className="flex items-start justify-between mb-4">
-                                <div>
-                                    <p className="text-xs font-bold text-white">Monthly Wage</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">New monthly salary offer</p>
-                                </div>
-                                <DollarSign size={14} className="text-amber-500" />
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setBonus(Math.max(0, bonus - 5000))} disabled={bonus <= 0}
+                                className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 disabled:opacity-20 transition-all cursor-pointer">
+                                <Minus size={13} />
+                            </button>
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-400">$</span>
+                                <input type="text" value={bonus.toLocaleString()}
+                                    onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ''); setBonus(Math.max(0, parseInt(raw) || 0)); }}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all" />
                             </div>
-                            <div className="relative group flex items-center gap-3">
-                                <button onClick={() => setWage(Math.max(500, wage - 500))} disabled={wage <= 500}
-                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
-                                    <Minus size={14} />
-                                </button>
-                                <div className="relative flex-1 group">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
-                                    <input 
-                                        type="text" 
-                                        value={wage.toLocaleString()}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            setWage(Math.max(0, parseInt(raw) || 0));
-                                        }}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
-                                    />
-                                </div>
-                                <button onClick={() => setWage(Math.min(100000, wage + 500))} disabled={wage >= 100000}
-                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
-                                    <Plus size={14} />
-                                </button>
-                            </div>
+                            <button onClick={() => setBonus(Math.min(fundsAfterFee, bonus + 5000))} disabled={bonus >= fundsAfterFee}
+                                className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center text-zinc-300 hover:text-amber-300 hover:border-amber-400/30 disabled:opacity-20 transition-all cursor-pointer">
+                                <Plus size={13} />
+                            </button>
                         </div>
-
-                        <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
-                            <div className="flex items-start justify-between mb-4">
-                                <div>
-                                    <p className="text-xs font-bold text-white">Signing Bonus</p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5 font-medium">One-time payment from funds</p>
-                                </div>
-                                <Star size={14} className="text-amber-500" />
-                            </div>
-                            <div className="relative group flex items-center gap-3">
-                                <button onClick={() => setBonus(Math.max(0, bonus - 5000))} disabled={bonus <= 0}
-                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
-                                    <Minus size={14} />
-                                </button>
-                                <div className="relative flex-1 group">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
-                                    <input 
-                                        type="text" 
-                                        value={bonus.toLocaleString()}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            setBonus(Math.max(0, parseInt(raw) || 0));
-                                        }}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-6 pr-3 py-2.5 text-lg font-bold text-white text-center focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
-                                    />
-                                </div>
-                                <button onClick={() => setBonus(Math.min(fundsAfterFee, bonus + 5000))} disabled={bonus >= fundsAfterFee}
-                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-20 transition-all cursor-pointer">
-                                    <Plus size={14} />
-                                </button>
-                            </div>
-                            {bonus > 0 && !canAffordBonus && (
-                                <p className="text-[10px] text-red-400 mt-2">Insufficient funds for this bonus.</p>
-                            )}
-                        </div>
+                        {bonus > 0 && !canAffordBonus && (
+                            <p className="font-mono text-[9px] text-rose-400 mt-2">Insufficient funds for this bonus.</p>
+                        )}
                     </div>
 
                     {/* Cost summary */}
-                    <div className="rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Wage over contract ({years} yr{years !== 1 ? 's' : ''})</span>
-                            <span className="text-gray-300 font-semibold">{formatMoney(wage * years * 12)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Signing bonus (from funds)</span>
-                            <span className={`font-semibold ${bonus > 0 ? 'text-amber-400' : 'text-gray-600'}`}>{bonus > 0 ? `-${formatMoney(bonus)}` : '—'}</span>
-                        </div>
-                        <div className="border-t border-white/5 pt-1.5 flex items-center justify-between text-xs">
-                            <span className="text-gray-400 font-medium">Total Commitment</span>
-                            <span className="text-white font-bold">{formatMoney(totalCost)}</span>
+                    <div className="rounded-lg bg-white/[0.025] border border-white/[0.05] px-4 py-3 space-y-1.5">
+                        {[
+                            { label: `Wage over contract (${years} yr${years !== 1 ? 's' : ''})`, value: formatMoney(wage * years * 12), accent: false },
+                            { label: 'Signing bonus (from funds)', value: bonus > 0 ? `-${formatMoney(bonus)}` : '—', accent: bonus > 0 },
+                        ].map((row, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                                <span className="font-mono text-[9.5px] text-zinc-500">{row.label}</span>
+                                <span className={`font-mono text-[10px] font-semibold ${row.accent ? 'text-amber-400' : 'text-zinc-400'}`}>{row.value}</span>
+                            </div>
+                        ))}
+                        <div className="border-t border-white/[0.06] pt-1.5 flex items-center justify-between">
+                            <span className="font-mono text-[10px] font-bold text-zinc-300 uppercase tracking-[0.14em]">Total Commitment</span>
+                            <span className="font-display text-sm text-white tabular-nums">{formatMoney(totalCost)}</span>
                         </div>
                     </div>
 
                     {!signed ? (
                         <button onClick={handleSign} disabled={signing || !canAffordBonus}
-                            className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2
+                            className={`w-full py-3.5 rounded-lg font-display text-sm tracking-[0.1em] uppercase transition-all cursor-pointer flex items-center justify-center gap-2
                                 ${signing
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                                     : !canAffordBonus
-                                        ? 'bg-white/5 text-gray-600 border border-white/5 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
+                                        ? 'bg-white/[0.03] text-zinc-600 border border-white/[0.05] cursor-not-allowed'
+                                        : 'bg-amber-400 text-black hover:bg-amber-300 shadow-lg shadow-amber-500/20'
                                 }`}>
-                            <FileSignature size={16} />
+                            <FileSignature size={15} />
                             {signing ? 'Processing...' : 'Sign Contract'}
                         </button>
                     ) : (
-                        <div className="w-full py-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
-                            <CheckCircle size={16} />Contract Signed!
+                        <div className="w-full py-3.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-display text-sm tracking-[0.08em] uppercase">
+                            <CheckCircle size={15} />Contract Signed!
                         </div>
                     )}
                 </div>
@@ -556,9 +532,9 @@ function ContractSigningModal({ player, transferFee, teamMoney, onClose, onSigne
 function FilterPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
         <button onClick={onClick}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${active
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:border-white/20 hover:text-gray-200'}`}>
+            className={`px-3 py-1.5 rounded font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] transition-all cursor-pointer whitespace-nowrap text-left ${active
+                ? 'bg-[var(--volt)] text-[var(--ink-950)]'
+                : 'bg-white/[0.025] text-[var(--ink-400)] border border-white/[0.06] hover:border-[var(--volt)]/30 hover:text-[var(--bone)]'}`}>
             {label}
         </button>
     );
@@ -569,7 +545,7 @@ function CollapsibleSection({ title, children, defaultOpen = true }: { title: st
     return (
         <div>
             <button onClick={() => setOpen(!open)}
-                className="flex items-center justify-between w-full text-[10px] uppercase tracking-widest text-gray-500 font-semibold mb-2 cursor-pointer hover:text-gray-300 transition-colors">
+                className="flex items-center justify-between w-full font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--ink-400)] font-bold mb-2 cursor-pointer hover:text-[var(--bone)] transition-colors">
                 {title}
                 <ChevronDown size={12} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
             </button>
@@ -755,28 +731,32 @@ export default function TransfersPage() {
     ];
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-6 animate-fade-up">
             {/* Page header */}
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-white">Transfer Market</h1>
+            <div className="relative flex flex-col sm:flex-row sm:items-end gap-4 sm:justify-between pb-5 border-b border-white/[0.06]">
+                <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
+                <div>
+                    <p className="eyebrow mb-2">Market · Recruitment</p>
+                    <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">TRANSFER MARKET</h1>
+                </div>
                 {hasActiveFilters && (
                     <button onClick={clearFilters}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all cursor-pointer">
+                        className="flex items-center gap-1.5 px-3 py-2 rounded font-mono text-[11px] font-bold uppercase tracking-[0.18em] bg-[var(--loss)]/10 text-[var(--loss)] border border-[var(--loss)]/25 hover:bg-[var(--loss)]/20 transition-all cursor-pointer">
                         <X size={12} />Clear Filters
                     </button>
                 )}
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 md:gap-2 flex-wrap">
+            <div className="flex gap-1.5 md:gap-2 flex-wrap">
                 {tabs.map(t => (
                     <button key={t.key} onClick={() => setTab(t.key)}
-                        className={`flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-medium transition-all cursor-pointer ${tab === t.key
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm shadow-amber-900/20'
-                            : 'bg-white/5 text-gray-400 border border-white/10 hover:border-white/20'}`}>
-                        <t.icon size={12} className="md:w-3.5 md:h-3.5" />
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded font-display tracking-[0.1em] uppercase text-sm transition-all cursor-pointer border ${tab === t.key
+                            ? 'bg-[var(--volt)] text-[var(--ink-950)] border-[var(--volt-deep)]'
+                            : 'bg-white/[0.03] text-[var(--ink-400)] border-white/[0.06] hover:border-[var(--volt)]/30 hover:text-[var(--bone)]'}`}>
+                        <t.icon size={13} />
                         <span className="hidden sm:inline">{t.label}</span>
-                        <span className="px-1.5 py-0.5 rounded-md text-[9px] md:text-[10px] font-bold bg-white/10 text-gray-500">{t.count}</span>
+                        <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold tabular ${tab === t.key ? 'bg-[var(--ink-950)]/15 text-[var(--ink-950)]' : 'bg-white/10 text-[var(--ink-500)]'}`}>{t.count}</span>
                     </button>
                 ))}
             </div>
@@ -785,16 +765,16 @@ export default function TransfersPage() {
             {tab === 'market' && (
                 <div className="flex gap-4 items-start">
                     {/* Filters sidebar */}
-                    <aside className="hidden lg:flex flex-col w-56 shrink-0 gap-4">
-                        <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-4 space-y-5">
+                    <aside className="hidden lg:flex flex-col w-60 shrink-0 gap-4">
+                        <div className="surface-raised p-5 space-y-5">
                             <div className="flex items-center gap-2">
-                                <Filter size={13} className="text-amber-400" />
-                                <span className="text-xs font-bold uppercase tracking-wider text-gray-300">Filters</span>
+                                <Filter size={14} className="text-[var(--volt)]" />
+                                <span className="font-display text-base tracking-[0.05em] text-[var(--bone)]">FILTERS</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400">Free Agents Only</span>
+                                <span className="font-mono text-[10.5px] text-[var(--ink-400)] uppercase tracking-[0.18em]">Free Agents Only</span>
                                 <button onClick={() => setShowFreeOnly(!showFreeOnly)}
-                                    className={`relative w-10 h-5 rounded-full transition-all cursor-pointer ${showFreeOnly ? 'bg-amber-500' : 'bg-white/10'}`}>
+                                    className={`relative w-10 h-5 rounded-full transition-all cursor-pointer ${showFreeOnly ? 'bg-[var(--volt)]' : 'bg-white/10'}`}>
                                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showFreeOnly ? 'translate-x-5' : ''}`} />
                                 </button>
                             </div>
@@ -842,16 +822,16 @@ export default function TransfersPage() {
                     <div className="flex-1 min-w-0 space-y-4">
                         <div className="flex gap-2">
                             <div className="relative flex-1">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players..."
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ink-500)]" />
+                                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players…"
+                                    className="w-full pl-11 pr-4 py-3 bg-[var(--ink-850)] border border-white/[0.06] rounded text-[var(--bone)] text-sm placeholder-[var(--ink-500)] focus:outline-none focus:border-[var(--volt)]/60 focus:ring-2 focus:ring-[var(--volt)]/15 transition-all" />
                             </div>
                             <button onClick={() => setFiltersOpen(!filtersOpen)}
-                                className={`lg:hidden px-3 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer ${hasActiveFilters ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-white/5 text-gray-400 border-white/10'}`}>
+                                className={`lg:hidden px-3 py-2.5 rounded border transition-all cursor-pointer ${hasActiveFilters ? 'bg-[var(--volt)]/20 text-[var(--volt)] border-[var(--volt)]/35' : 'bg-white/[0.04] text-[var(--ink-400)] border-white/[0.08]'}`}>
                                 <Filter size={16} />
                             </button>
                             <button onClick={() => setShowFreeOnly(!showFreeOnly)}
-                                className={`lg:hidden px-3 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${showFreeOnly ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-gray-400 border border-white/10'}`}>
+                                className={`lg:hidden px-3 py-2 rounded font-mono text-[10.5px] font-bold uppercase tracking-[0.16em] transition-all shrink-0 cursor-pointer ${showFreeOnly ? 'bg-[var(--win)]/15 text-[var(--win)] border border-[var(--win)]/30' : 'bg-white/[0.04] text-[var(--ink-400)] border border-white/[0.08]'}`}>
                                 Free
                             </button>
                         </div>
@@ -919,8 +899,8 @@ export default function TransfersPage() {
                             </div>
                         )}
 
-                        <p className="text-xs text-gray-500">
-                            {filtered.length} player{filtered.length !== 1 ? 's' : ''} found
+                        <p className="font-mono text-[11px] text-[var(--ink-400)] uppercase tracking-[0.2em] tabular">
+                            <span className="text-[var(--volt)] font-bold">{filtered.length}</span> player{filtered.length !== 1 ? 's' : ''} found
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -934,15 +914,15 @@ export default function TransfersPage() {
                         </div>
 
                         {filtered.length === 0 && (
-                            <div className="text-center py-16 rounded-2xl bg-white/[0.02] border border-white/5">
-                                <Search size={32} className="mx-auto text-gray-700 mb-3" />
-                                <p className="text-gray-500 font-medium">No players match your filters</p>
-                                <button onClick={clearFilters} className="mt-3 text-xs text-amber-400 hover:text-amber-300 cursor-pointer">Clear all filters</button>
+                            <div className="surface text-center py-16 px-6 flex flex-col items-center gap-3">
+                                <Search size={32} className="text-[var(--ink-600)]" />
+                                <p className="font-display text-xl tracking-wide text-[var(--ink-300)]">NO PLAYERS MATCH</p>
+                                <button onClick={clearFilters} className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--volt)] hover:text-[var(--volt-bright)] cursor-pointer">Clear all filters</button>
                             </div>
                         )}
 
                         {filtered.length > 60 && (
-                            <p className="text-center text-xs text-gray-600">Showing first 60 results — refine filters to narrow down</p>
+                            <p className="text-center font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-500)]">Showing first 60 — refine filters to narrow</p>
                         )}
                     </div>
                 </div>

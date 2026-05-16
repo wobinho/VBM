@@ -101,48 +101,56 @@ export default function CupsPage() {
 
   if (loading) return (
     <div className="min-h-[60vh] flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+      <div className="text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-[var(--volt)] animate-spin mx-auto" />
+        <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
+      </div>
     </div>
   );
 
   if (!data?.rounds?.length) return (
-    <div className="text-center py-24 bg-gradient-to-br from-slate-900/40 via-purple-900/20 to-slate-900/40 rounded-3xl border border-white/5">
-      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-6">
-        <Trophy className="w-12 h-12 text-amber-400" />
+    <div className="surface-raised text-center py-24 px-8 relative overflow-hidden animate-fade-up">
+      <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-[var(--volt)]/8 blur-3xl" />
+      <div className="relative">
+        <div className="w-20 h-20 rounded-full bg-[var(--volt)]/15 border border-[var(--volt)]/30 flex items-center justify-center mx-auto mb-6">
+          <Trophy className="w-10 h-10 text-[var(--volt)]" />
+        </div>
+        <p className="eyebrow mb-2">Cup Block</p>
+        <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-2">NO ACTIVE CUPS</h2>
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--ink-500)]">Copa Italia generates after June 30</p>
       </div>
-      <h2 className="text-2xl font-bold text-white mb-2">No Active Cups</h2>
-      <p className="text-gray-400">The Copa Italia will be generated after June 30.</p>
     </div>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       {/* ── Hero ── */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br from-[#0d0d0d] via-[#111108] to-[#0d0d0d] p-8">
-        <div className="absolute inset-0 overflow-hidden rounded-3xl">
-          <Image src="/assets/team-backgrounds/copa_italia_bg.png" alt="Copa Italia Background" fill unoptimized className="object-cover opacity-50" />
+      <div className="surface-raised relative overflow-hidden p-8">
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+        <div className="absolute inset-0 overflow-hidden">
+          <Image src="/assets/team-backgrounds/copa_italia_bg.png" alt="Copa Italia Background" fill unoptimized className="object-cover opacity-40 mix-blend-overlay" />
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_50%,rgba(202,138,4,0.07),transparent)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_40%_at_100%_50%,rgba(251,146,60,0.04),transparent)]" />
-        <div className="relative flex items-center justify-between gap-6 my-8">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_50%,rgba(250,204,21,0.10),transparent)]" />
+
+        <div className="relative flex items-center justify-between gap-6 my-4">
           <div className="relative shrink-0">
-            <div className="absolute inset-0 rounded-2xl bg-amber-500/25 blur-2xl" />
-            <div className="relative w-[100px] h-[100px] rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-600/15 border border-amber-500/35 flex items-center justify-center shadow-2xl shadow-amber-500/20 overflow-hidden">
+            <div className="absolute inset-0 rounded bg-[var(--volt)]/30 blur-2xl" />
+            <div className="relative w-[100px] h-[100px] rounded bg-gradient-to-br from-[var(--volt)]/25 to-transparent border-2 border-[var(--volt)]/40 flex items-center justify-center shadow-2xl shadow-[var(--volt)]/20 overflow-hidden">
               <Image src="/assets/flags/it.svg" alt="Italian Flag" width={60} height={60} className="object-cover" />
             </div>
           </div>
           <div className="flex-1 min-w-0 px-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-500/70 mb-0.5">National Championship</p>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-none">{data.cup.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">{data.cup.year} Season</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)] mb-2">National Championship</p>
+            <h1 className="font-display text-4xl md:text-5xl tracking-[0.02em] text-[var(--bone)] leading-none">{data.cup.name.toUpperCase()}</h1>
+            <p className="font-mono text-xs text-[var(--ink-400)] mt-2 uppercase tracking-wider tabular">{data.cup.year} SEASON</p>
           </div>
           <div className="hidden sm:flex shrink-0 items-center">
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold uppercase tracking-widest ${
+            <div className={`inline-flex items-center gap-2 px-3.5 py-2 rounded font-mono text-[11px] font-bold uppercase tracking-[0.22em] border ${
               data.cup.status === 'completed'
-                ? 'bg-slate-800/60 border-slate-600/30 text-slate-400'
-                : 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+                ? 'bg-[var(--ink-850)] border-white/[0.08] text-[var(--ink-400)]'
+                : 'bg-[var(--win)]/10 border-[var(--win)]/30 text-[var(--win)]'
             }`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${data.cup.status === 'completed' ? 'bg-slate-400' : 'bg-emerald-400 animate-pulse'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full ${data.cup.status === 'completed' ? 'bg-[var(--ink-400)]' : 'bg-[var(--win)] animate-pulse'}`} />
               {data.cup.status === 'completed' ? 'Completed' : 'Active'}
             </div>
           </div>
@@ -155,14 +163,14 @@ export default function CupsPage() {
           <button
             key={mode}
             onClick={() => setViewMode(mode)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer border ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded font-display tracking-[0.12em] uppercase text-sm transition-all duration-200 cursor-pointer border ${
               viewMode === mode
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/35 shadow-md shadow-amber-500/10'
-                : 'bg-white/[0.03] text-gray-500 border-white/5 hover:bg-white/[0.06] hover:text-gray-300'
+                ? 'bg-[var(--volt)] text-[var(--ink-950)] border-[var(--volt-deep)]'
+                : 'bg-white/[0.03] text-[var(--ink-400)] border-white/[0.06] hover:bg-white/[0.06] hover:text-[var(--bone)]'
             }`}
           >
-            {mode === 'list' ? <LayoutList size={16} /> : <Share2 size={16} className="rotate-90" />}
-            <span className="capitalize">{mode}</span>
+            {mode === 'list' ? <LayoutList size={15} /> : <Share2 size={15} className="rotate-90" />}
+            {mode}
           </button>
         ))}
       </div>
@@ -204,15 +212,15 @@ function ListView({ activeRound }: { activeRound: CupRound }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <div className={`px-3 py-1.5 rounded-full flex items-center gap-2 border text-xs font-bold uppercase tracking-widest ${
-          activeRound.status === 'completed' ? 'bg-emerald-950/60 border-emerald-500/25 text-emerald-400' : 'bg-amber-950/60 border-amber-500/25 text-amber-400'
+        <div className={`px-3 py-1.5 rounded flex items-center gap-2 border font-mono text-[10px] font-bold uppercase tracking-[0.22em] ${
+          activeRound.status === 'completed' ? 'bg-[var(--win)]/10 border-[var(--win)]/25 text-[var(--win)]' : 'bg-[var(--volt)]/10 border-[var(--volt)]/25 text-[var(--volt)]'
         }`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${activeRound.status === 'completed' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+          <div className={`w-1.5 h-1.5 rounded-full ${activeRound.status === 'completed' ? 'bg-[var(--win)]' : 'bg-[var(--volt)] animate-pulse'}`} />
           {activeRound.status === 'completed' ? 'Completed' : 'In Progress'}
         </div>
-        <div className="h-px flex-1 bg-white/5" />
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          <Calendar size={13} />
+        <div className="h-px flex-1 bg-white/[0.05]" />
+        <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--ink-500)] uppercase tracking-wider tabular">
+          <Calendar size={12} />
           {new Date(activeRound.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </div>
       </div>
@@ -227,27 +235,27 @@ function ListFixtureCard({ fixture: f }: { fixture: CupFixture }) {
   const homeWon = f.status === 'completed' && f.home_sets! > f.away_sets!;
   const awayWon = f.status === 'completed' && f.away_sets! > f.home_sets!;
   return (
-    <div className="bg-[#0d0d0d] border border-white/8 rounded-2xl overflow-hidden hover:border-white/15 transition-all duration-200 cursor-pointer group">
+    <div className="surface-raised overflow-hidden card-hover cursor-pointer group">
       {[
         { id: f.home_team_id, name: f.home_team_name, sets: f.home_sets, won: homeWon },
         { id: f.away_team_id, name: f.away_team_name, sets: f.away_sets, won: awayWon },
       ].map((side, i) => (
         <div key={i}>
-          <div className={`flex items-center gap-3 px-4 py-3 ${side.won ? 'bg-amber-500/6' : ''}`}>
+          <div className={`flex items-center gap-3 px-4 py-3 ${side.won ? 'bg-[var(--volt)]/[0.07]' : ''}`}>
             <TeamLogo teamId={side.id} size={36} />
-            <span className={`text-sm font-bold flex-1 truncate ${side.won ? 'text-amber-300' : f.status === 'completed' ? 'text-gray-400' : 'text-gray-200'}`}>{side.name}</span>
-            {f.status === 'completed' && <span className={`text-xl font-black tabular-nums ${side.won ? 'text-amber-400' : 'text-gray-600'}`}>{side.sets}</span>}
-            {side.won && <div className="w-0.5 h-5 rounded-full bg-amber-400 ml-1" />}
+            <span className={`text-sm font-bold flex-1 truncate ${side.won ? 'text-[var(--volt)]' : f.status === 'completed' ? 'text-[var(--ink-400)]' : 'text-[var(--bone)]'}`}>{side.name}</span>
+            {f.status === 'completed' && <span className={`font-display text-2xl tabular ${side.won ? 'text-[var(--volt)]' : 'text-[var(--ink-500)]'}`}>{side.sets}</span>}
+            {side.won && <div className="w-[3px] h-5 rounded-full bg-[var(--volt)] ml-1" />}
           </div>
-          {i === 0 && <div className="mx-4 h-px bg-white/5" />}
+          {i === 0 && <div className="mx-4 h-px bg-white/[0.05]" />}
         </div>
       ))}
-      <div className="px-4 py-2.5 bg-white/[0.015] border-t border-white/5 flex items-center justify-between">
-        <span className={`text-[10px] font-bold uppercase tracking-widest ${f.status === 'completed' ? 'text-emerald-500' : 'text-amber-500/60'}`}>
+      <div className="px-4 py-2.5 border-t border-white/[0.05] flex items-center justify-between">
+        <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.22em] ${f.status === 'completed' ? 'text-[var(--win)]' : 'text-[var(--volt)]/70'}`}>
           {f.status === 'completed' ? 'Final' : 'Scheduled'}
         </span>
-        {f.status !== 'completed' && <span className="text-[10px] text-gray-600">{new Date(f.scheduled_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}</span>}
-        {f.status === 'completed' && <Trophy size={11} className="text-amber-500/50" />}
+        {f.status !== 'completed' && <span className="font-mono text-[10px] text-[var(--ink-500)] uppercase tracking-wider tabular">{new Date(f.scheduled_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}</span>}
+        {f.status === 'completed' && <Trophy size={11} className="text-[var(--volt)]/60" />}
       </div>
     </div>
   );
@@ -290,21 +298,21 @@ function CupBracket({ rounds, userTeamId, cupStatus }: { rounds: CupRound[]; use
     <div className="space-y-4">
       {/* Champion Banner */}
       {cupStatus === 'completed' && championId && (
-        <div className="relative rounded-2xl overflow-hidden border border-amber-500/30 bg-[#0d0a00]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_30%_50%,rgba(202,138,4,0.14),transparent)]" />
-          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-amber-500/5 to-transparent" />
+        <div className="surface-raised relative overflow-hidden border-[var(--volt)]/40">
+          <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_30%_50%,rgba(250,204,21,0.15),transparent)]" />
           <div className="relative flex items-center gap-5 px-6 py-5">
             <div className="relative shrink-0">
-              <div className="absolute inset-0 rounded-xl bg-amber-500/30 blur-xl" />
-              <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/35 to-orange-500/15 border border-amber-500/40 flex items-center justify-center">
-                <Crown size={22} className="text-amber-300" />
+              <div className="absolute inset-0 rounded-full bg-[var(--volt)]/30 blur-xl" />
+              <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-[var(--volt)]/25 to-transparent border-2 border-[var(--volt)]/40 flex items-center justify-center">
+                <Crown size={24} className="text-[var(--volt)]" />
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600/80 mb-0.5">Copa Italia Champion</p>
-              <p className="text-xl font-black text-amber-200 truncate">{championName}</p>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)]/85 mb-1.5">Copa Italia Champion</p>
+              <p className="font-display text-2xl tracking-[0.04em] text-[var(--volt)] truncate">{championName?.toUpperCase()}</p>
             </div>
-            <TeamLogo teamId={championId} size={52} />
+            <TeamLogo teamId={championId} size={56} />
           </div>
         </div>
       )}
@@ -410,43 +418,39 @@ function BracketCard({ fixture: f, userTeamId }: { fixture: CupFixture; userTeam
   return (
     <div
       style={{ height: CARD_H }}
-      className={`relative rounded-xl border overflow-hidden transition-all duration-200 cursor-pointer ${
+      className={`relative rounded border overflow-hidden transition-all duration-200 cursor-pointer ${
         isUser
-          ? 'bg-gradient-to-br from-amber-950/50 to-[#0d0d0d] border-amber-500/35 hover:border-amber-500/55'
+          ? 'bg-[var(--ink-900)] border-[var(--volt)]/45 hover:border-[var(--volt)]/65 shadow-lg shadow-[var(--volt)]/10'
           : done
-            ? 'bg-[#0d0d0d] border-white/8 hover:border-white/14'
-            : 'bg-[#0a0a0a] border-white/5 hover:border-white/10'
+            ? 'bg-[var(--ink-900)] border-white/[0.08] hover:border-white/[0.18]'
+            : 'bg-[var(--ink-850)] border-white/[0.05] hover:border-white/[0.12]'
       }`}
     >
-      {/* Top team */}
-      <div className={`flex items-center gap-2 px-2.5 transition-colors ${homeWon ? 'bg-amber-500/[0.07]' : ''}`} style={{ height: CARD_H / 2 - 0.5 }}>
+      <div className={`flex items-center gap-2 px-2.5 transition-colors ${homeWon ? 'bg-[var(--volt)]/[0.08]' : ''}`} style={{ height: CARD_H / 2 - 0.5 }}>
         <TeamLogo teamId={f.home_team_id} size={24} />
-        <span className={`text-[11px] font-semibold truncate flex-1 leading-tight ${homeWon ? 'text-amber-300' : done ? 'text-gray-400' : 'text-gray-300'}`}>
+        <span className={`text-[11px] font-semibold truncate flex-1 leading-tight ${homeWon ? 'text-[var(--volt)]' : done ? 'text-[var(--ink-400)]' : 'text-[var(--ink-300)]'}`}>
           {f.home_team_name}
         </span>
-        {done && <span className={`text-xs font-black tabular-nums mr-1 ${homeWon ? 'text-amber-400' : 'text-gray-600'}`}>{f.home_sets}</span>}
-        {homeWon && <div className="w-[3px] h-4 rounded-full bg-amber-400 shrink-0" />}
+        {done && <span className={`font-mono text-xs font-bold tabular mr-1 ${homeWon ? 'text-[var(--volt)]' : 'text-[var(--ink-500)]'}`}>{f.home_sets}</span>}
+        {homeWon && <div className="w-[3px] h-4 rounded-full bg-[var(--volt)] shrink-0" />}
         {!homeWon && done && <div className="w-[3px] h-4 shrink-0" />}
       </div>
 
-      {/* Divider */}
       <div className="h-px bg-white/[0.05] mx-2.5" />
 
-      {/* Bottom team */}
-      <div className={`flex items-center gap-2 px-2.5 transition-colors ${awayWon ? 'bg-amber-500/[0.07]' : ''}`} style={{ height: CARD_H / 2 - 0.5 }}>
+      <div className={`flex items-center gap-2 px-2.5 transition-colors ${awayWon ? 'bg-[var(--volt)]/[0.08]' : ''}`} style={{ height: CARD_H / 2 - 0.5 }}>
         <TeamLogo teamId={f.away_team_id} size={24} />
-        <span className={`text-[11px] font-semibold truncate flex-1 leading-tight ${awayWon ? 'text-amber-300' : done ? 'text-gray-400' : 'text-gray-300'}`}>
+        <span className={`text-[11px] font-semibold truncate flex-1 leading-tight ${awayWon ? 'text-[var(--volt)]' : done ? 'text-[var(--ink-400)]' : 'text-[var(--ink-300)]'}`}>
           {f.away_team_name}
         </span>
-        {done && <span className={`text-xs font-black tabular-nums mr-1 ${awayWon ? 'text-amber-400' : 'text-gray-600'}`}>{f.away_sets}</span>}
-        {awayWon && <div className="w-[3px] h-4 rounded-full bg-amber-400 shrink-0" />}
+        {done && <span className={`font-mono text-xs font-bold tabular mr-1 ${awayWon ? 'text-[var(--volt)]' : 'text-[var(--ink-500)]'}`}>{f.away_sets}</span>}
+        {awayWon && <div className="w-[3px] h-4 rounded-full bg-[var(--volt)] shrink-0" />}
         {!awayWon && done && <div className="w-[3px] h-4 shrink-0" />}
       </div>
 
-      {/* Pending date overlay */}
       {!done && (
         <div className="absolute bottom-1 right-2">
-          <span className="text-[9px] text-gray-700 font-medium">
+          <span className="font-mono text-[9px] text-[var(--ink-600)] uppercase tracking-wider">
             {new Date(f.scheduled_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </span>
         </div>
@@ -457,8 +461,8 @@ function BracketCard({ fixture: f, userTeamId }: { fixture: CupFixture; userTeam
 
 function TBDCard() {
   return (
-    <div style={{ height: CARD_H }} className="rounded-xl border border-white/[0.04] bg-white/[0.01] flex items-center justify-center">
-      <span className="text-[10px] font-bold text-gray-700 uppercase tracking-widest">TBD</span>
+    <div style={{ height: CARD_H }} className="rounded border border-white/[0.04] bg-white/[0.01] flex items-center justify-center">
+      <span className="font-mono text-[10px] font-bold text-[var(--ink-600)] uppercase tracking-[0.22em]">TBD</span>
     </div>
   );
 }

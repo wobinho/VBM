@@ -1,55 +1,68 @@
 'use client';
 import Image from 'next/image';
-import { X, History } from 'lucide-react';
+import { X, History, TrendingUp, Calendar, DollarSign, Ruler, Cake, FileSignature } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
 
 interface Player {
     id: number; player_name: string; position: string; age: number; country: string;
     jersey_number: number; overall: number; height?: number;
-    // Core
     attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
-    // Technical
     precision?: number; flair?: number; digging?: number; positioning?: number;
     ball_control?: number; technique?: number; playmaking?: number; spin?: number;
-    // Physical
     speed?: number; agility?: number; strength?: number; endurance?: number;
     vertical?: number; flexibility?: number; torque?: number; balance?: number;
-    // Mental
     leadership?: number; teamwork?: number; concentration?: number; pressure?: number;
     consistency?: number; vision?: number; game_iq?: number; intimidation?: number;
-    // Contract
     contract_years?: number; monthly_wage?: number; player_value?: number;
     team_id?: number | null; team_name?: string; team_country?: string;
 }
 
-function getPositionAccent(position: string): { badge: string; glow: string; bar: string } {
-    const colors: Record<string, { badge: string; glow: string; bar: string }> = {
-        'Setter':         { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',     glow: 'from-blue-900/40',    bar: 'bg-blue-500' },
-        'Outside Hitter': { badge: 'bg-red-500/20 text-red-300 border-red-500/40',        glow: 'from-red-900/40',     bar: 'bg-red-500' },
-        'Middle Blocker': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', glow: 'from-purple-900/40', bar: 'bg-purple-500' },
-        'Opposite Hitter':{ badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40', glow: 'from-orange-900/40', bar: 'bg-orange-500' },
-        'Libero':         { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', glow: 'from-emerald-900/40', bar: 'bg-emerald-500' },
+type Theme = {
+    badge: string; badgeSolid: string; bar: string; text: string;
+    ring: string; glow: string; photoGlow: string; radial: string;
+};
+
+function getTheme(position: string): Theme {
+    const map: Record<string, Theme> = {
+        'Setter': { badge: 'bg-sky-400/15 text-sky-300 border-sky-400/40', badgeSolid: 'bg-sky-400 text-black', bar: 'bg-sky-400', text: 'text-sky-300', ring: 'ring-sky-400/40', glow: 'shadow-sky-500/30', photoGlow: 'bg-sky-500/35', radial: 'from-sky-500/25 via-sky-500/[0.06]' },
+        'Outside Hitter': { badge: 'bg-rose-400/15 text-rose-300 border-rose-400/40', badgeSolid: 'bg-rose-400 text-black', bar: 'bg-rose-400', text: 'text-rose-300', ring: 'ring-rose-400/40', glow: 'shadow-rose-500/30', photoGlow: 'bg-rose-500/35', radial: 'from-rose-500/25 via-rose-500/[0.06]' },
+        'Middle Blocker': { badge: 'bg-violet-400/15 text-violet-300 border-violet-400/40', badgeSolid: 'bg-violet-400 text-black', bar: 'bg-violet-400', text: 'text-violet-300', ring: 'ring-violet-400/40', glow: 'shadow-violet-500/30', photoGlow: 'bg-violet-500/35', radial: 'from-violet-500/25 via-violet-500/[0.06]' },
+        'Opposite Hitter': { badge: 'bg-orange-400/15 text-orange-300 border-orange-400/40', badgeSolid: 'bg-orange-400 text-black', bar: 'bg-orange-400', text: 'text-orange-300', ring: 'ring-orange-400/40', glow: 'shadow-orange-500/30', photoGlow: 'bg-orange-500/35', radial: 'from-orange-500/25 via-orange-500/[0.06]' },
+        'Libero': { badge: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/40', badgeSolid: 'bg-emerald-400 text-black', bar: 'bg-emerald-400', text: 'text-emerald-300', ring: 'ring-emerald-400/40', glow: 'shadow-emerald-500/30', photoGlow: 'bg-emerald-500/35', radial: 'from-emerald-500/25 via-emerald-500/[0.06]' },
     };
-    return colors[position] || { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/40', glow: 'from-gray-900/40', bar: 'bg-gray-500' };
+    return map[position] ?? { badge: 'bg-white/10 text-zinc-300 border-white/15', badgeSolid: 'bg-zinc-300 text-black', bar: 'bg-zinc-400', text: 'text-zinc-300', ring: 'ring-white/20', glow: 'shadow-black/40', photoGlow: 'bg-white/15', radial: 'from-white/15 via-white/[0.04]' };
 }
 
-function StatBar({ label, value, color = 'amber' }: { label: string; value: number; color?: string }) {
-    const colorMap: Record<string, string> = {
-        amber: 'bg-amber-500', green: 'bg-emerald-500', blue: 'bg-blue-500',
-        purple: 'bg-purple-500', red: 'bg-red-500', cyan: 'bg-cyan-500',
-    };
-    const numColor = value >= 80 ? 'text-emerald-400' : value >= 60 ? 'text-amber-400' : 'text-red-400';
+function overallTone(v: number) {
+    if (v >= 85) return { text: 'text-emerald-300', tier: 'ELITE', glow: 'drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]' };
+    if (v >= 75) return { text: 'text-yellow-300', tier: 'STAR', glow: 'drop-shadow-[0_0_24px_rgba(250,204,21,0.5)]' };
+    if (v >= 65) return { text: 'text-amber-300', tier: 'PRO', glow: 'drop-shadow-[0_0_18px_rgba(251,191,36,0.4)]' };
+    if (v >= 55) return { text: 'text-zinc-200', tier: 'STARTER', glow: 'drop-shadow-[0_0_14px_rgba(228,228,231,0.3)]' };
+    return { text: 'text-rose-300', tier: 'PROSPECT', glow: 'drop-shadow-[0_0_14px_rgba(244,63,94,0.3)]' };
+}
+
+// Section-specific color palettes
+const SECTION_COLORS = {
+    core: { bar: 'bg-amber-400', text: 'text-amber-300', label: 'text-amber-400/70', header: 'text-amber-300', divider: 'border-amber-400/20', pill: 'bg-amber-400/10 text-amber-300 border-amber-400/25' },
+    technical: { bar: 'bg-sky-400', text: 'text-sky-300', label: 'text-sky-400/70', header: 'text-sky-300', divider: 'border-sky-400/20', pill: 'bg-sky-400/10 text-sky-300 border-sky-400/25' },
+    physical: { bar: 'bg-rose-400', text: 'text-rose-300', label: 'text-rose-400/70', header: 'text-rose-300', divider: 'border-rose-400/20', pill: 'bg-rose-400/10 text-rose-300 border-rose-400/25' },
+    mental: { bar: 'bg-purple-400', text: 'text-purple-300', label: 'text-purple-400/70', header: 'text-purple-300', divider: 'border-purple-400/20', pill: 'bg-purple-400/10 text-purple-300 border-purple-400/25' },
+};
+
+function StatBar({ label, value, sectionKey }: { label: string; value: number; sectionKey: keyof typeof SECTION_COLORS }) {
+    const sc = SECTION_COLORS[sectionKey];
+    const numColor = value >= 80 ? 'text-emerald-300' : value >= 60 ? 'text-yellow-300' : 'text-rose-300';
     return (
-        <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 w-28 shrink-0">{label}</span>
-            <div className="flex-1 h-[5px] bg-white/5 rounded-full overflow-hidden">
-                <div
-                    className={`h-full rounded-full ${colorMap[color] || colorMap.amber} transition-all duration-500`}
-                    style={{ width: `${value}%` }}
-                />
+        <div className="flex items-center gap-3 group/stat">
+            <span className={`font-mono text-[10px] uppercase tracking-[0.16em] ${sc.label} w-28 shrink-0 group-hover/stat:text-zinc-200 transition-colors`}>{label}</span>
+            <div className="flex-1 h-[4px] bg-white/[0.06] rounded-full overflow-hidden">
+                <div className={`h-full ${sc.bar} transition-all duration-700 ease-out relative`} style={{ width: `${value}%` }}>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+                </div>
             </div>
-            <span className={`text-xs font-bold w-7 text-right ${numColor}`}>{value}</span>
+            <span className={`font-mono text-xs font-bold tabular-nums w-7 text-right ${numColor}`}>{value}</span>
         </div>
     );
 }
@@ -62,94 +75,56 @@ function ModalPlayerPhoto({ playerId }: { playerId: number }) {
     if (finalFallback) {
         return (
             <div className="w-full h-full flex items-end justify-center pb-0">
-                <svg viewBox="0 0 80 100" className="w-40 h-52 opacity-70" fill="none">
+                <svg viewBox="0 0 80 100" className="w-48 h-60 opacity-60" fill="none">
                     <ellipse cx="40" cy="28" rx="18" ry="20" fill="#6B7280" />
                     <path d="M10 100 Q10 60 40 58 Q70 60 70 100Z" fill="#6B7280" />
                 </svg>
             </div>
         );
     }
-
     return (
-        <Image
-            src={src}
-            alt="Player"
-            fill
-            unoptimized
-            className="object-contain object-bottom"
-            onError={() => {
-                if (!useFallback) setUseFallback(true);
-                else setFinalFallback(true);
-            }}
-        />
+        <Image src={src} alt="Player" fill unoptimized
+            className="object-contain object-bottom drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)]"
+            onError={() => { if (!useFallback) setUseFallback(true); else setFinalFallback(true); }} />
     );
 }
 
 function ModalTeamBackground({ teamId }: { teamId?: number | null }) {
     const [useFallback, setUseFallback] = useState(false);
     const [failed, setFailed] = useState(false);
-
     if (!teamId || failed) return null;
     const src = useFallback ? '/assets/team-backgrounds/default.png' : `/assets/team-backgrounds/${teamId}.png`;
-
     return (
-        <Image
-            src={src}
-            alt=""
-            fill
-            unoptimized
-            className="object-cover object-center opacity-[0.07]"
-            onError={() => {
-                if (!useFallback) setUseFallback(true);
-                else setFailed(true);
-            }}
-        />
+        <Image src={src} alt="" fill unoptimized
+            className="object-cover object-center opacity-[0.07] mix-blend-luminosity"
+            onError={() => { if (!useFallback) setUseFallback(true); else setFailed(true); }} />
     );
 }
 
 function ModalTeamLogo({ teamId }: { teamId?: number | null }) {
     const [useFallback, setUseFallback] = useState(false);
     const [failed, setFailed] = useState(false);
-
     if (!teamId || failed) return null;
     const src = useFallback ? '/assets/teams/default.png' : `/assets/teams/${teamId}.png`;
-
     return (
-        <div className="relative w-[84px] h-[84px]">
-            <Image
-                src={src}
-                alt="Team"
-                fill
-                unoptimized
-                className="object-contain drop-shadow-lg"
-                onError={() => {
-                    if (!useFallback) setUseFallback(true);
-                    else setFailed(true);
-                }}
-            />
+        <div className="relative w-14 h-14">
+            <Image src={src} alt="Team" fill unoptimized className="object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.7)]"
+                onError={() => { if (!useFallback) setUseFallback(true); else setFailed(true); }} />
         </div>
     );
 }
 
 function ModalCountryFlag({ countryCode }: { countryCode: string }) {
     const [failed, setFailed] = useState(false);
-
-    if (failed) {
-        return <span className="text-4xl leading-none">🌍</span>;
-    }
-
-    // Convert country name to code if needed
     const code = countryCode.length > 2 ? getCountryCode(countryCode) : countryCode.toLowerCase();
-    const src = `/assets/flags/${code}.svg`;
-
+    if (failed) return (
+        <div className="w-14 h-9 rounded-sm bg-zinc-700 flex items-center justify-center ring-1 ring-white/15">
+            <span className="text-[10px] font-bold text-white uppercase">{code}</span>
+        </div>
+    );
     return (
-        <div className="w-[72px] h-12 rounded-md overflow-hidden shadow-lg shrink-0">
-            <img
-                src={src}
-                alt={getCountryName(code)}
-                className="w-full h-full object-cover"
-                onError={() => setFailed(true)}
-            />
+        <div className="w-14 h-9 rounded-sm overflow-hidden shadow-lg shrink-0 ring-1 ring-white/20">
+            <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover" onError={() => setFailed(true)} />
         </div>
     );
 }
@@ -158,32 +133,34 @@ function TeamCountryFlag({ code }: { code: string }) {
     const [failed, setFailed] = useState(false);
     if (failed) return null;
     return (
-        <div className="w-5 h-3.5 rounded overflow-hidden shrink-0">
+        <div className="w-5 h-3.5 rounded-[2px] overflow-hidden shrink-0 ring-1 ring-white/10">
             <img src={`/assets/flags/${code}.svg`} alt={getCountryName(code)} className="w-full h-full object-cover" onError={() => setFailed(true)} />
         </div>
     );
 }
 
-function InfoTile({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function VitalTile({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
     return (
-        <div className="relative rounded-xl py-2.5 px-2 text-center overflow-hidden border border-white/8"
-            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}>
-            {accent && <div className={`absolute inset-0 opacity-10 ${accent}`} />}
-            <div className="relative text-[16px] font-bold text-white leading-tight">{value}</div>
-            <div className="relative text-[11px] text-gray-500 mt-1 uppercase tracking-widest">{label}</div>
+        <div className="group relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.05] hover:border-white/[0.10] transition-colors overflow-hidden">
+            <div className="flex items-center gap-1.5 text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                <Icon size={10} strokeWidth={2} />
+                <span className="font-mono text-[9px] uppercase tracking-[0.22em] font-medium">{label}</span>
+            </div>
+            <div className="font-display text-lg text-zinc-50 tabular-nums leading-none">{value}</div>
         </div>
     );
 }
 
-function StatSection({ title, children }: { title: string; children: React.ReactNode }) {
+function StatSection({ title, eyebrow, sectionKey, children }: { title: string; eyebrow?: string; sectionKey: keyof typeof SECTION_COLORS; children: React.ReactNode }) {
+    const sc = SECTION_COLORS[sectionKey];
     return (
-        <div className="rounded-xl border border-white/6 overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%)' }}>
-            <div className="px-4 py-2.5 border-b border-white/6"
-                style={{ background: 'rgba(255,255,255,0.03)' }}>
-                <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">{title}</h4>
+        <div>
+            <div className={`flex items-baseline gap-3 mb-3 pb-1.5 border-b ${sc.divider}`}>
+                <h4 className={`font-display text-base tracking-[0.06em] ${sc.header}`}>{title.toUpperCase()}</h4>
+                {eyebrow && <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-zinc-600">{eyebrow}</span>}
+                <div className="flex-1" />
             </div>
-            <div className="px-4 py-3 space-y-2.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-1.5">
                 {children}
             </div>
         </div>
@@ -200,7 +177,7 @@ function TeamLogoSmall({ teamId }: { teamId?: number | null }) {
     );
 }
 
-function PlayerTeamHistory({ playerId, currentTeamId }: { playerId: number; currentTeamId?: number | null }) {
+function PlayerTeamHistory({ playerId, currentTeamId, theme }: { playerId: number; currentTeamId?: number | null; theme: Theme }) {
     const [history, setHistory] = useState<{ season_year: number; team_name: string; team_id: number | null }[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -211,49 +188,43 @@ function PlayerTeamHistory({ playerId, currentTeamId }: { playerId: number; curr
             .catch(() => setLoading(false));
     }, [playerId]);
 
-    if (loading) return (
-        <div className="rounded-xl border border-white/8 overflow-hidden">
-            <div className="px-4 py-3 bg-white/4 border-b border-white/8 flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                <History size={12} className="text-amber-400" /> Team History
-            </div>
-            <div className="px-4 py-4 flex justify-center">
-                <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-        </div>
-    );
-
     return (
-        <div className="rounded-xl border border-white/8 overflow-hidden">
-            <div className="px-4 py-3 bg-white/4 border-b border-white/8 flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                <History size={12} className="text-amber-400" /> Team History
+        <div>
+            <div className="flex items-baseline gap-3 mb-3 pb-1.5 border-b border-white/[0.06]">
+                <h4 className="font-display text-base tracking-[0.06em] text-zinc-100 flex items-center gap-2">
+                    <History size={13} className={theme.text} />
+                    CAREER ARC
+                </h4>
+                <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-zinc-600">By season</span>
             </div>
-            {history.length === 0 ? (
-                <p className="px-4 py-4 text-xs text-gray-600 italic">No team history recorded yet.</p>
+            {loading ? (
+                <div className="py-6 flex justify-center">
+                    <div className={`w-5 h-5 border-2 ${theme.bar.replace('bg-', 'border-')} border-t-transparent rounded-full animate-spin`} />
+                </div>
+            ) : history.length === 0 ? (
+                <p className="py-4 text-xs text-zinc-600 font-mono uppercase tracking-wider">No team history recorded</p>
             ) : (
-                <table className="w-full text-sm">
-                    <thead>
-                        <tr className="border-b border-white/5">
-                            <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Season</th>
-                            <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Team</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {history.map((h, i) => (
-                            <tr key={i} className={`border-b border-white/5 last:border-0 ${h.team_id === currentTeamId ? 'bg-amber-500/5' : ''}`}>
-                                <td className="px-4 py-2.5 font-bold text-amber-500/80 w-20">{h.season_year}</td>
-                                <td className="px-4 py-2.5">
-                                    <div className="flex items-center gap-2">
+                <div className="relative pl-6">
+                    <div className="absolute left-[7px] top-1 bottom-1 w-px bg-white/[0.08]" />
+                    <div className="space-y-2.5">
+                        {history.map((h, i) => {
+                            const isCurrent = h.team_id === currentTeamId;
+                            return (
+                                <div key={i} className="relative">
+                                    <span className={`absolute -left-[22px] top-2.5 w-[9px] h-[9px] rounded-full ring-2 ring-zinc-950 ${isCurrent ? theme.bar : 'bg-zinc-600'}`} />
+                                    <div className={`flex items-center gap-3 py-2 px-3 rounded-lg transition-colors ${isCurrent ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
+                                        <span className={`font-mono text-xs font-bold tabular-nums ${isCurrent ? theme.text : 'text-zinc-500'} w-12`}>{h.season_year}</span>
                                         <TeamLogoSmall teamId={h.team_id} />
-                                        <span className="text-gray-300">{h.team_name}</span>
-                                        {h.team_id === currentTeamId && (
-                                            <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 font-medium">Current</span>
+                                        <span className={`text-sm flex-1 truncate ${isCurrent ? 'text-zinc-100 font-semibold' : 'text-zinc-400'}`}>{h.team_name}</span>
+                                        {isCurrent && (
+                                            <span className={`font-mono text-[9px] font-bold uppercase tracking-[0.22em] px-1.5 py-0.5 rounded-sm ${theme.badgeSolid}`}>Current</span>
                                         )}
                                     </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -262,153 +233,289 @@ function PlayerTeamHistory({ playerId, currentTeamId }: { playerId: number; curr
 export default function PlayerModal({ player, onClose }: { player: Player; onClose: () => void }) {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n}`;
 
-    const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
-    const accent = getPositionAccent(player.position);
+    const tone = overallTone(player.overall);
+    const theme = getTheme(player.position);
 
-    return (
+    const physicals = [player.speed, player.agility, player.strength, player.endurance, player.vertical, player.flexibility, player.torque, player.balance].filter((v): v is number => typeof v === 'number');
+    const technicals = [player.precision, player.flair, player.digging, player.positioning, player.ball_control, player.technique, player.playmaking, player.spin].filter((v): v is number => typeof v === 'number');
+    const mentals = [player.leadership, player.teamwork, player.concentration, player.pressure, player.consistency, player.vision, player.game_iq, player.intimidation].filter((v): v is number => typeof v === 'number');
+    const core = [player.attack, player.defense, player.serve, player.block, player.receive, player.setting];
+    const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+
+    const summary = [
+        { label: 'Core', value: avg(core), sectionKey: 'core' as const, sc: SECTION_COLORS.core },
+        { label: 'Technical', value: avg(technicals), sectionKey: 'technical' as const, sc: SECTION_COLORS.technical },
+        { label: 'Physical', value: avg(physicals), sectionKey: 'physical' as const, sc: SECTION_COLORS.physical },
+        { label: 'Mental', value: avg(mentals), sectionKey: 'mental' as const, sc: SECTION_COLORS.mental },
+    ];
+
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+    if (!mounted) return null;
+
+    return createPortal((
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
             onClick={onClose}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
         >
             <div
-                className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-white/10 shadow-2xl"
-                style={{ background: '#0d1117' }}
+                className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-xl border border-white/[0.08] shadow-[0_32px_80px_-15px_rgba(0,0,0,0.9)] bg-zinc-950"
                 onClick={e => e.stopPropagation()}
             >
-                {/* ── HERO HEADER ── */}
-                <div className="relative h-[300px] overflow-hidden rounded-t-2xl" style={{ background: `linear-gradient(160deg, #111827 0%, #0d1117 100%)` }}>
-                    {/* Position colour tint */}
-                    <div className={`absolute inset-0 bg-gradient-to-br ${accent.glow} to-transparent opacity-60 pointer-events-none`} />
+                {/* Position-tint top line */}
+                <div className={`absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-transparent via-current to-transparent ${theme.text} z-30 rounded-t-xl`} />
 
-                    {/* Team watermark */}
-                    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
-                        <ModalTeamBackground teamId={player.team_id} />
-                    </div>
+                {/* Close button */}
+                <button onClick={onClose}
+                    className="absolute top-4 right-4 z-40 w-9 h-9 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md ring-1 ring-white/15 hover:ring-white/30 flex items-center justify-center text-zinc-300 hover:text-white transition-all cursor-pointer"
+                    aria-label="Close">
+                    <X size={16} />
+                </button>
 
-                    {/* Close button */}
-                    <button
-                        onClick={onClose}
-                        className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all cursor-pointer"
-                        aria-label="Close"
-                    >
-                        <X size={15} />
-                    </button>
+                {/* ── HERO: split portrait + identity ── */}
+                <div className="relative">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${theme.radial} to-transparent pointer-events-none`} />
+                    <div className="absolute inset-0 pointer-events-none"><ModalTeamBackground teamId={player.team_id} /></div>
+                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay"
+                        style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-                    {/* Overall + team logo — top left */}
-                    <div className="absolute top-4 left-5 z-10 flex items-start gap-3">
-                        <div>
-                            <div className={`text-7xl font-black leading-none ${overallColor}`} style={{ textShadow: '0 0 32px currentColor' }}>
-                                {player.overall}
+                    <div className="relative grid grid-cols-1 md:grid-cols-[320px_1fr] gap-0 items-stretch">
+                        {/* LEFT — Portrait (dominant); stretches to match identity column */}
+                        <div className="relative min-h-[380px] overflow-hidden">
+                            {/* Big glow halo */}
+                            <div className={`absolute left-1/2 bottom-8 -translate-x-1/2 w-56 h-56 rounded-full ${theme.photoGlow} blur-3xl opacity-60`} />
+                            {/* Player image — fills the full available height, 3:4 friendly via object-contain */}
+                            <div className="absolute inset-x-0 inset-y-0 flex justify-center">
+                                <div className="relative w-full h-full max-w-[340px]">
+                                    <ModalPlayerPhoto playerId={player.id} />
+                                </div>
                             </div>
-                            <div className="text-[9px] font-semibold tracking-[0.2em] text-gray-500 uppercase mt-1">Overall</div>
+                            {/* Floor fade */}
+                            <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-zinc-950 via-zinc-950/50 to-transparent pointer-events-none" />
+                            {/* Side fade */}
+                            <div className="absolute top-0 bottom-0 right-0 w-16 bg-gradient-to-l from-zinc-950 to-transparent pointer-events-none hidden md:block" />
                         </div>
-                        <div className="mt-1">
-                            <ModalTeamLogo teamId={player.team_id} />
-                        </div>
-                    </div>
 
-                    {/* Country flag — top right (left of close btn) */}
-                    <div className="absolute top-4 right-14 z-10">
-                        <ModalCountryFlag countryCode={player.country} />
-                    </div>
+                        {/* RIGHT — Identity */}
+                        <div className="relative px-6 md:px-8 py-6 md:py-8 flex flex-col gap-5 min-w-0">
+                            {/* Top meta */}
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <ModalTeamLogo teamId={player.team_id} />
+                                    {player.team_name && (
+                                        <div className="min-w-0">
+                                            <p className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-zinc-500 font-medium">Club</p>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                {player.team_country && (() => {
+                                                    const code = player.team_country!.length > 2 ? getCountryCode(player.team_country!) : player.team_country!.toLowerCase();
+                                                    return <TeamCountryFlag code={code} />;
+                                                })()}
+                                                <p className="text-sm font-semibold text-zinc-200 truncate">{player.team_name}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                {/* Overall + flag cluster */}
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <div className="flex flex-col items-end">
+                                        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.32em] text-zinc-500">Overall</span>
+                                        <div className="flex items-baseline gap-2 mt-0.5">
+                                            <span className={`font-display text-5xl leading-[0.85] tabular-nums ${tone.text} ${tone.glow}`}>
+                                                {player.overall}
+                                            </span>
+                                            <span className={`font-mono text-[9px] font-bold tracking-[0.28em] px-1.5 py-0.5 rounded-sm ${theme.badgeSolid}`}>{tone.tier}</span>
+                                        </div>
+                                    </div>
+                                    <ModalCountryFlag countryCode={player.country} />
+                                </div>
+                            </div>
 
-                    {/* Player photo — centered, 50% bigger: was 160×190 → 240×285 */}
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[240px] h-[285px]">
-                        <ModalPlayerPhoto playerId={player.id} />
-                    </div>
+                            {/* Eyebrow + name */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.32em] ${theme.text}`}>{player.position}</span>
+                                    <span className="font-mono text-[10px] text-zinc-600">/</span>
+                                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400">#{player.jersey_number}</span>
+                                    <span className="font-mono text-[10px] text-zinc-600">/</span>
+                                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400">
+                                        {player.country.length > 2 ? player.country : getCountryName(player.country)}
+                                    </span>
+                                </div>
+                                <h2 className="font-display text-5xl md:text-6xl tracking-[0.01em] text-zinc-50 leading-[0.95]">
+                                    {player.player_name.toUpperCase()}
+                                </h2>
+                            </div>
 
-                    {/* Fade to card bg */}
-                    <div className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
-                </div>
-
-                {/* ── PLAYER IDENTITY ── */}
-                <div className="px-6 pt-4 pb-5 text-center border-b border-white/5">
-                    <h2 className="text-2xl font-bold text-white">{player.player_name}</h2>
-                    {player.team_name && (
-                        <div className="flex items-center justify-center gap-2 mt-1 mb-2.5">
-                            {player.team_country && (() => {
-                                const code = player.team_country!.length > 2 ? getCountryCode(player.team_country!) : player.team_country!.toLowerCase();
-                                return <TeamCountryFlag code={code} />;
+                            {/* Top strengths radar */}
+                            {(() => {
+                                const allAttrs: { label: string; value: number; sec: 'core' | 'technical' | 'physical' | 'mental' }[] = [
+                                    { label: 'Attack', value: player.attack, sec: 'core' },
+                                    { label: 'Defense', value: player.defense, sec: 'core' },
+                                    { label: 'Serve', value: player.serve, sec: 'core' },
+                                    { label: 'Block', value: player.block, sec: 'core' },
+                                    { label: 'Receive', value: player.receive, sec: 'core' },
+                                    { label: 'Setting', value: player.setting, sec: 'core' },
+                                    ...(player.precision != null ? [
+                                        { label: 'Precision', value: player.precision ?? 0, sec: 'technical' as const },
+                                        { label: 'Flair', value: player.flair ?? 0, sec: 'technical' as const },
+                                        { label: 'Digging', value: player.digging ?? 0, sec: 'technical' as const },
+                                        { label: 'Positioning', value: player.positioning ?? 0, sec: 'technical' as const },
+                                        { label: 'Ball Control', value: player.ball_control ?? 0, sec: 'technical' as const },
+                                        { label: 'Technique', value: player.technique ?? 0, sec: 'technical' as const },
+                                        { label: 'Playmaking', value: player.playmaking ?? 0, sec: 'technical' as const },
+                                        { label: 'Spin', value: player.spin ?? 0, sec: 'technical' as const },
+                                    ] : []),
+                                    ...(player.speed != null ? [
+                                        { label: 'Speed', value: player.speed, sec: 'physical' as const },
+                                        { label: 'Agility', value: player.agility ?? 0, sec: 'physical' as const },
+                                        { label: 'Strength', value: player.strength ?? 0, sec: 'physical' as const },
+                                        { label: 'Endurance', value: player.endurance ?? 0, sec: 'physical' as const },
+                                        { label: 'Vertical', value: player.vertical ?? 0, sec: 'physical' as const },
+                                    ] : []),
+                                    ...(player.leadership != null ? [
+                                        { label: 'Leadership', value: player.leadership, sec: 'mental' as const },
+                                        { label: 'Game IQ', value: player.game_iq ?? 0, sec: 'mental' as const },
+                                        { label: 'Pressure', value: player.pressure ?? 0, sec: 'mental' as const },
+                                        { label: 'Concentration', value: player.concentration ?? 0, sec: 'mental' as const },
+                                    ] : []),
+                                ];
+                                const sorted = [...allAttrs].sort((a, b) => b.value - a.value);
+                                const top5 = sorted.slice(0, 5);
+                                const weakest = sorted[sorted.length - 1];
+                                return (
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`w-1 h-3.5 ${theme.bar}`} />
+                                                <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.28em] text-zinc-400">Signature Strengths</span>
+                                            </div>
+                                            <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-zinc-600">Top 5</span>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            {top5.map((a) => {
+                                                const sc = SECTION_COLORS[a.sec];
+                                                return (
+                                                    <div key={a.label} className="flex items-center gap-2.5">
+                                                        <span className={`font-mono text-[9.5px] uppercase tracking-[0.18em] ${sc.label} w-24 shrink-0`}>{a.label}</span>
+                                                        <div className="flex-1 h-[3px] bg-white/[0.05] rounded-full overflow-hidden">
+                                                            <div className={`h-full ${sc.bar} relative`} style={{ width: `${a.value}%` }}>
+                                                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+                                                            </div>
+                                                        </div>
+                                                        <span className={`font-mono text-[11px] font-bold tabular-nums w-7 text-right ${a.value >= 80 ? 'text-emerald-300' : a.value >= 60 ? 'text-yellow-300' : 'text-rose-300'}`}>{a.value}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-white/[0.05]">
+                                            <span className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-zinc-600">Hot</span>
+                                            <span className={`font-mono text-[9.5px] font-bold uppercase tracking-[0.18em] px-1.5 py-0.5 rounded-sm ${SECTION_COLORS[top5[0].sec].pill}`}>{top5[0].label} {top5[0].value}</span>
+                                            <span className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-zinc-600 ml-1">Cold</span>
+                                            <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.18em] px-1.5 py-0.5 rounded-sm bg-rose-400/10 text-rose-300 border border-rose-400/25">{weakest.label} {weakest.value}</span>
+                                        </div>
+                                    </div>
+                                );
                             })()}
-                            <p className="text-sm text-gray-500">{player.team_name}</p>
+
                         </div>
-                    )}
-                    <div className="flex items-center justify-center gap-3 mt-2.5 flex-wrap">
-                        <span className={`px-3 py-1 rounded-md text-sm font-bold border ${accent.badge}`}>
-                            {player.position}
-                        </span>
-                        <span className="text-base text-gray-400 font-semibold">#{player.jersey_number}</span>
-                        <span className="text-base text-gray-500">{player.country.length > 2 ? player.country : getCountryName(player.country)}</span>
                     </div>
                 </div>
 
-                {/* ── STATS BODY ── */}
-                <div className="p-6 space-y-4">
-                    {/* Info row — 5 tiles */}
-                    <div className="grid grid-cols-5 gap-2">
-                        <InfoTile label="Value"    value={player.player_value ? formatMoney(player.player_value) : '—'} accent="bg-emerald-500" />
-                        <InfoTile label="Wage/mo"  value={player.monthly_wage ? formatMoney(player.monthly_wage) : '—'} accent="bg-amber-500" />
-                        <InfoTile label="Contract" value={player.contract_years ? `${player.contract_years}y` : '—'}    accent="bg-blue-500" />
-                        <InfoTile label="Age"      value={String(player.age)}                                            accent="bg-purple-500" />
-                        <InfoTile label="Height"   value={player.height ? `${player.height} cm` : '—'}                  accent="bg-cyan-500" />
-                    </div>
+                {/* ── VITALS STRIP ── */}
+                <div className="relative grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 px-6 md:px-8 py-5 border-y border-white/[0.06] bg-zinc-950/80">
+                    <VitalTile icon={DollarSign} label="Value" value={player.player_value ? formatMoney(player.player_value) : '—'} />
+                    <VitalTile icon={FileSignature} label="Wage / mo" value={player.monthly_wage ? formatMoney(player.monthly_wage) : '—'} />
+                    <VitalTile icon={Calendar} label="Contract" value={player.contract_years ? `${player.contract_years} yr` : '—'} />
+                    <VitalTile icon={Cake} label="Age" value={String(player.age)} />
+                    <VitalTile icon={Ruler} label="Height" value={player.height ? `${player.height} cm` : '—'} />
+                </div>
 
-                    {/* Core Skills */}
-                    <StatSection title="Core Skills">
-                        <StatBar label="Attack"  value={player.attack}  color="red" />
-                        <StatBar label="Defense" value={player.defense} color="blue" />
-                        <StatBar label="Serve"   value={player.serve}   color="green" />
-                        <StatBar label="Block"   value={player.block}   color="purple" />
-                        <StatBar label="Receive" value={player.receive} color="cyan" />
-                        <StatBar label="Setting" value={player.setting} color="amber" />
+                {/* ── ATTRIBUTE SUMMARY DASHBOARD ── */}
+                <div className="px-6 md:px-8 py-6 border-b border-white/[0.06] bg-gradient-to-b from-white/[0.012] to-transparent">
+                    <div className="flex items-baseline gap-3 mb-4">
+                        <h3 className="font-display text-base tracking-[0.06em] text-zinc-100 flex items-center gap-2">
+                            <TrendingUp size={14} className={theme.text} />
+                            ATTRIBUTE BREAKDOWN
+                        </h3>
+                        <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-zinc-600">Section averages</span>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        {summary.map(s => {
+                            const filled = Math.max(0, Math.min(100, s.value));
+                            return (
+                                <div key={s.label} className={`relative rounded-lg border ${s.sc.pill.includes('border') ? '' : 'border-white/[0.05]'} bg-white/[0.02] p-3.5 overflow-hidden border-white/[0.05]`}>
+                                    <div className={`absolute bottom-0 left-0 right-0 h-[2px] ${s.sc.bar}`} style={{ opacity: filled / 100 }} />
+                                    <div className="flex items-baseline justify-between mb-2">
+                                        <span className={`font-mono text-[10px] uppercase tracking-[0.22em] font-bold ${s.sc.text}`}>{s.label}</span>
+                                    </div>
+                                    <div className={`font-display text-4xl tabular-nums leading-none ${s.value >= 80 ? 'text-emerald-300' : s.value >= 60 ? 'text-yellow-300' : 'text-rose-300'}`}>
+                                        {s.value || '—'}
+                                    </div>
+                                    <div className="mt-3 flex gap-[3px] h-2">
+                                        {Array.from({ length: 10 }).map((_, i) => (
+                                            <div key={i} className={`flex-1 rounded-[1px] ${i < Math.round(s.value / 10) ? s.sc.bar : 'bg-white/[0.06]'}`} />
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* ── STAT GRID ── */}
+                <div className="px-6 md:px-8 py-6 space-y-7">
+                    <StatSection title="Core Skills" eyebrow="On-court fundamentals" sectionKey="core">
+                        <StatBar label="Attack"  value={player.attack}  sectionKey="core" />
+                        <StatBar label="Defense" value={player.defense} sectionKey="core" />
+                        <StatBar label="Serve"   value={player.serve}   sectionKey="core" />
+                        <StatBar label="Block"   value={player.block}   sectionKey="core" />
+                        <StatBar label="Receive" value={player.receive} sectionKey="core" />
+                        <StatBar label="Setting" value={player.setting} sectionKey="core" />
                     </StatSection>
 
-                    {/* Technical Skills */}
                     {player.precision != null && (
-                        <StatSection title="Technical">
-                            <StatBar label="Precision"   value={player.precision}           color="amber" />
-                            <StatBar label="Flair"       value={player.flair ?? 0}          color="red" />
-                            <StatBar label="Digging"     value={player.digging ?? 0}        color="cyan" />
-                            <StatBar label="Positioning" value={player.positioning ?? 0}    color="blue" />
-                            <StatBar label="Ball Control" value={player.ball_control ?? 0}  color="green" />
-                            <StatBar label="Technique"   value={player.technique ?? 0}      color="purple" />
-                            <StatBar label="Playmaking"  value={player.playmaking ?? 0}     color="amber" />
-                            <StatBar label="Spin"        value={player.spin ?? 0}           color="cyan" />
+                        <StatSection title="Technical" eyebrow="Skill & finesse" sectionKey="technical">
+                            <StatBar label="Precision"    value={player.precision}        sectionKey="technical" />
+                            <StatBar label="Flair"        value={player.flair ?? 0}        sectionKey="technical" />
+                            <StatBar label="Digging"      value={player.digging ?? 0}      sectionKey="technical" />
+                            <StatBar label="Positioning"  value={player.positioning ?? 0}  sectionKey="technical" />
+                            <StatBar label="Ball Control" value={player.ball_control ?? 0} sectionKey="technical" />
+                            <StatBar label="Technique"    value={player.technique ?? 0}    sectionKey="technical" />
+                            <StatBar label="Playmaking"   value={player.playmaking ?? 0}   sectionKey="technical" />
+                            <StatBar label="Spin"         value={player.spin ?? 0}         sectionKey="technical" />
                         </StatSection>
                     )}
 
-                    {/* Physical Attributes */}
                     {player.speed != null && (
-                        <StatSection title="Physical">
-                            <StatBar label="Speed"       value={player.speed}               color="green" />
-                            <StatBar label="Agility"     value={player.agility ?? 0}        color="cyan" />
-                            <StatBar label="Strength"    value={player.strength ?? 0}       color="red" />
-                            <StatBar label="Endurance"   value={player.endurance ?? 0}      color="blue" />
-                            <StatBar label="Vertical"    value={player.vertical ?? 0}       color="purple" />
-                            <StatBar label="Flexibility" value={player.flexibility ?? 0}    color="amber" />
-                            <StatBar label="Torque"      value={player.torque ?? 0}         color="red" />
-                            <StatBar label="Balance"     value={player.balance ?? 0}        color="green" />
+                        <StatSection title="Physical" eyebrow="Body & athletic capacity" sectionKey="physical">
+                            <StatBar label="Speed"       value={player.speed}            sectionKey="physical" />
+                            <StatBar label="Agility"     value={player.agility ?? 0}     sectionKey="physical" />
+                            <StatBar label="Strength"    value={player.strength ?? 0}    sectionKey="physical" />
+                            <StatBar label="Endurance"   value={player.endurance ?? 0}   sectionKey="physical" />
+                            <StatBar label="Vertical"    value={player.vertical ?? 0}    sectionKey="physical" />
+                            <StatBar label="Flexibility" value={player.flexibility ?? 0} sectionKey="physical" />
+                            <StatBar label="Torque"      value={player.torque ?? 0}      sectionKey="physical" />
+                            <StatBar label="Balance"     value={player.balance ?? 0}     sectionKey="physical" />
                         </StatSection>
                     )}
 
-                    {/* Mental */}
                     {player.leadership != null && (
-                        <StatSection title="Mental">
-                            <StatBar label="Leadership"    value={player.leadership}             color="amber" />
-                            <StatBar label="Teamwork"      value={player.teamwork ?? 0}          color="green" />
-                            <StatBar label="Concentration" value={player.concentration ?? 0}     color="blue" />
-                            <StatBar label="Pressure"      value={player.pressure ?? 0}          color="purple" />
-                            <StatBar label="Consistency"   value={player.consistency ?? 0}       color="cyan" />
-                            <StatBar label="Vision"        value={player.vision ?? 0}            color="amber" />
-                            <StatBar label="Game IQ"       value={player.game_iq ?? 0}           color="green" />
-                            <StatBar label="Intimidation"  value={player.intimidation ?? 0}      color="red" />
+                        <StatSection title="Mental" eyebrow="Mindset & composure" sectionKey="mental">
+                            <StatBar label="Leadership"    value={player.leadership}           sectionKey="mental" />
+                            <StatBar label="Teamwork"      value={player.teamwork ?? 0}        sectionKey="mental" />
+                            <StatBar label="Concentration" value={player.concentration ?? 0}   sectionKey="mental" />
+                            <StatBar label="Pressure"      value={player.pressure ?? 0}        sectionKey="mental" />
+                            <StatBar label="Consistency"   value={player.consistency ?? 0}     sectionKey="mental" />
+                            <StatBar label="Vision"        value={player.vision ?? 0}          sectionKey="mental" />
+                            <StatBar label="Game IQ"       value={player.game_iq ?? 0}         sectionKey="mental" />
+                            <StatBar label="Intimidation"  value={player.intimidation ?? 0}    sectionKey="mental" />
                         </StatSection>
                     )}
 
-                    {/* Team History */}
-                    <PlayerTeamHistory playerId={player.id} currentTeamId={player.team_id} />
+                    <PlayerTeamHistory playerId={player.id} currentTeamId={player.team_id} theme={theme} />
                 </div>
             </div>
         </div>
-    );
+    ), document.body);
 }

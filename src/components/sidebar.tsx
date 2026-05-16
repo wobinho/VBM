@@ -6,19 +6,19 @@ import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, 
 import { useState } from 'react';
 
 const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
-    { href: '/squad', label: 'Squad Selection', icon: Users, adminOnly: false },
-    { href: '/team', label: 'Team Management', icon: UserCircle, adminOnly: false },
-    { href: '/office', label: 'Office', icon: Briefcase, adminOnly: false },
-    { href: '/standings', label: 'Standings', icon: ListOrdered, adminOnly: false },
-    { href: '/playoffs', label: 'Playoffs', icon: Trophy, adminOnly: false },
-    { href: '/cups', label: 'Cups', icon: Shield, adminOnly: false },
-    { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart, adminOnly: false },
-    { href: '/transfers/stats', label: 'Stats', icon: BarChart2, adminOnly: false },
-    { href: '/match', label: 'Match Simulation', icon: Swords, adminOnly: true },
-    { href: '/admin', label: 'Database Admin', icon: Database, adminOnly: true },
-    { href: '/player-admin', label: 'Player Admin', icon: UserCog, adminOnly: true },
-    { href: '/team-admin', label: 'Team Admin', icon: Shield, adminOnly: true },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false, group: 'PLAY' },
+    { href: '/squad', label: 'Squad', icon: Users, adminOnly: false, group: 'PLAY' },
+    { href: '/team', label: 'Team', icon: UserCircle, adminOnly: false, group: 'PLAY' },
+    { href: '/office', label: 'Office', icon: Briefcase, adminOnly: false, group: 'PLAY' },
+    { href: '/standings', label: 'Standings', icon: ListOrdered, adminOnly: false, group: 'COMPETE' },
+    { href: '/playoffs', label: 'Playoffs', icon: Trophy, adminOnly: false, group: 'COMPETE' },
+    { href: '/cups', label: 'Cups', icon: Shield, adminOnly: false, group: 'COMPETE' },
+    { href: '/transfers', label: 'Transfer Market', icon: ShoppingCart, adminOnly: false, group: 'COMPETE' },
+    { href: '/transfers/stats', label: 'Stats', icon: BarChart2, adminOnly: false, group: 'COMPETE' },
+    { href: '/match', label: 'Match Sim', icon: Swords, adminOnly: true, group: 'ADMIN' },
+    { href: '/admin', label: 'Database', icon: Database, adminOnly: true, group: 'ADMIN' },
+    { href: '/player-admin', label: 'Player Admin', icon: UserCog, adminOnly: true, group: 'ADMIN' },
+    { href: '/team-admin', label: 'Team Admin', icon: Shield, adminOnly: true, group: 'ADMIN' },
 ];
 
 export default function Sidebar() {
@@ -27,70 +27,112 @@ export default function Sidebar() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
+    const grouped = visibleNavItems.reduce<Record<string, typeof navItems>>((acc, item) => {
+        (acc[item.group] ||= []).push(item);
+        return acc;
+    }, {});
+
     return (
         <>
             <button
-                className="fixed top-4 left-4 z-50 lg:hidden bg-gray-800/80 backdrop-blur-sm text-white p-2 rounded-lg border border-white/10"
+                className="fixed top-4 left-4 z-50 lg:hidden bg-[var(--ink-900)]/90 backdrop-blur-sm text-[var(--bone)] p-2.5 rounded border border-white/10"
                 onClick={() => setMobileOpen(!mobileOpen)}
             >
-                {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+                {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
 
-            <aside className={`fixed lg:sticky lg:top-0 lg:self-start inset-y-0 left-0 z-40 w-64 h-screen bg-gray-900/95 backdrop-blur-xl border-r border-white/10 flex flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-                <div className="p-6 border-b border-white/10">
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-                        🏐 Spike Dynasty
-                    </h1>
-                    {user && (
-                        <div className="mt-3 space-y-2">
-                            <p className="text-xs text-gray-500 uppercase tracking-widest font-medium">Manager</p>
-                            <p className="text-sm font-semibold text-white">{user.displayName}</p>
-                            {team && (
-                                <div className="mt-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                    <p className="text-xs text-amber-400/60 uppercase tracking-widest font-medium">My Team</p>
-                                    <p className="text-sm font-bold text-amber-400 mt-0.5 truncate">{team.name}</p>
-                                </div>
-                            )}
+            <aside className={`fixed lg:sticky lg:top-0 lg:self-start inset-y-0 left-0 z-40 w-72 h-screen flex flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+                style={{
+                    background: 'linear-gradient(180deg, #0c0c10 0%, #08080b 100%)',
+                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                }}>
+                {/* Top brand band */}
+                <div className="relative px-6 pt-7 pb-5 border-b border-white/[0.05]">
+                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl leading-none">🏐</span>
+                        <div>
+                            <h1 className="font-display text-2xl tracking-[0.05em] text-[var(--bone)] leading-none">SPIKE</h1>
+                            <p className="font-display text-2xl tracking-[0.05em] text-[var(--volt)] leading-none mt-0.5">DYNASTY</p>
                         </div>
-                    )}
+                    </div>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--ink-500)] mt-3">v0.4 // est. 2026</p>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                    {visibleNavItems.map(item => {
-                        const isActive = pathname === item.href;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                onClick={() => setMobileOpen(false)}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
-                                    ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 shadow-lg shadow-amber-500/10'
-                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                <Icon size={18} className={isActive ? 'text-amber-400' : ''} />
-                                {item.label}
-                            </Link>
-                        );
-                    })}
+                {/* Manager card */}
+                {user && (
+                    <div className="px-6 py-4 border-b border-white/[0.05]">
+                        <p className="eyebrow mb-2">Manager</p>
+                        <p className="font-display text-lg tracking-wide text-[var(--bone)] leading-tight">{user.displayName.toUpperCase()}</p>
+                        {team && (
+                            <div className="mt-3 p-3 relative overflow-hidden"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(250,204,21,0.08) 0%, rgba(250,204,21,0.02) 100%)',
+                                    border: '1px solid rgba(250,204,21,0.18)',
+                                    borderRadius: '6px',
+                                }}>
+                                <div className="absolute top-0 right-0 w-12 h-12 bg-[var(--volt)]/10 rounded-full blur-xl" />
+                                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--volt)]/80">My Franchise</p>
+                                <p className="font-display text-xl tracking-wide text-[var(--volt)] mt-1 leading-tight truncate">{team.name.toUpperCase()}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Navigation */}
+                <nav className="flex-1 px-4 py-5 overflow-y-auto space-y-6">
+                    {Object.entries(grouped).map(([group, items]) => (
+                        <div key={group}>
+                            <div className="flex items-center gap-2 px-3 mb-2">
+                                <span className="font-mono text-[9px] uppercase tracking-[0.32em] text-[var(--ink-500)]">{group}</span>
+                                <div className="flex-1 h-px bg-white/[0.05]" />
+                            </div>
+                            <div className="space-y-0.5">
+                                {items.map(item => {
+                                    const isActive = pathname === item.href;
+                                    const Icon = item.icon;
+                                    return (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            onClick={() => setMobileOpen(false)}
+                                            className={`group relative flex items-center gap-3 px-3 py-2.5 text-sm font-semibold transition-all duration-150 ${isActive
+                                                ? 'text-[var(--volt)]'
+                                                : 'text-[var(--ink-400)] hover:text-[var(--bone)]'
+                                                }`}
+                                        >
+                                            {isActive && (
+                                                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[var(--volt)] rounded-r" />
+                                            )}
+                                            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+                                            <span className={`tracking-wide ${isActive ? 'font-bold' : ''}`}>{item.label}</span>
+                                            {isActive && (
+                                                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--volt)] animate-pulse" />
+                                            )}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
                 </nav>
 
+                {/* Footer */}
                 {user && (
-                    <div className="p-4 border-t border-white/10">
+                    <div className="px-4 py-4 border-t border-white/[0.05]">
                         <button
                             onClick={logout}
-                            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-mono uppercase tracking-[0.22em] text-[var(--ink-400)] hover:text-[var(--loss)] border border-white/[0.06] hover:border-[var(--loss)]/40 rounded transition-all duration-150 cursor-pointer"
                         >
-                            <LogOut size={18} />
-                            Logout
+                            <LogOut size={13} />
+                            Sign Out
                         </button>
                     </div>
                 )}
             </aside>
 
             {mobileOpen && (
-                <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} />
+                <div className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />
             )}
         </>
     );

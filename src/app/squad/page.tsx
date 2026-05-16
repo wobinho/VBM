@@ -41,22 +41,36 @@ const SLOT_DESC: Record<string, string> = {
     L:   'Defensive specialist',
 };
 
-const POS_ACCENT: Record<string, { badge: string; border: string; glow: string; slotBg: string; slotBorder: string }> = {
-    'Setter':         { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',       border: 'border-blue-500/40',    glow: 'shadow-blue-500/20',    slotBg: 'bg-blue-500/5',    slotBorder: 'border-blue-500/25' },
-    'Outside Hitter': { badge: 'bg-red-500/20 text-red-300 border-red-500/40',          border: 'border-red-500/40',     glow: 'shadow-red-500/20',     slotBg: 'bg-red-500/5',     slotBorder: 'border-red-500/25'  },
-    'Middle Blocker': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', border: 'border-purple-500/40',  glow: 'shadow-purple-500/20',  slotBg: 'bg-purple-500/5',  slotBorder: 'border-purple-500/25' },
-    'Opposite Hitter':{ badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40', border: 'border-orange-500/40',  glow: 'shadow-orange-500/20',  slotBg: 'bg-orange-500/5',  slotBorder: 'border-orange-500/25' },
-    'Libero':         { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', border: 'border-emerald-500/40', glow: 'shadow-emerald-500/20', slotBg: 'bg-emerald-500/5', slotBorder: 'border-emerald-500/25' },
+type PosTheme = {
+    badge: string; border: string; glow: string; slotBg: string; slotBorder: string;
+    hex: string; text: string; rail: string; radial: string; chip: string; halo: string;
 };
-function posAccent(pos: string) {
-    return POS_ACCENT[pos] || { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/40', border: 'border-gray-500/40', glow: 'shadow-gray-500/20', slotBg: 'bg-gray-500/5', slotBorder: 'border-gray-500/25' };
+
+const POS_ACCENT: Record<string, PosTheme> = {
+    'Setter':         { badge: 'bg-[#3b82f6]/15 text-[#60a5fa] border-[#3b82f6]/40',     border: 'border-[#3b82f6]/40', glow: 'shadow-[#3b82f6]/20', slotBg: 'bg-[#3b82f6]/[0.04]', slotBorder: 'border-[#3b82f6]/25', hex: '#3b82f6', text: 'text-[#60a5fa]', rail: 'bg-[#3b82f6]', radial: 'from-[#3b82f6]/25 via-[#3b82f6]/[0.06]', chip: 'bg-[#3b82f6] text-black', halo: 'bg-[#3b82f6]/35' },
+    'Outside Hitter': { badge: 'bg-[#ef4444]/15 text-[#fca5a5] border-[#ef4444]/40',     border: 'border-[#ef4444]/40', glow: 'shadow-[#ef4444]/20', slotBg: 'bg-[#ef4444]/[0.04]', slotBorder: 'border-[#ef4444]/25', hex: '#ef4444', text: 'text-[#fca5a5]', rail: 'bg-[#ef4444]', radial: 'from-[#ef4444]/25 via-[#ef4444]/[0.06]', chip: 'bg-[#ef4444] text-black', halo: 'bg-[#ef4444]/35' },
+    'Middle Blocker': { badge: 'bg-[#a78bfa]/15 text-[#c4b5fd] border-[#a78bfa]/40',     border: 'border-[#a78bfa]/40', glow: 'shadow-[#a78bfa]/20', slotBg: 'bg-[#a78bfa]/[0.04]', slotBorder: 'border-[#a78bfa]/25', hex: '#a78bfa', text: 'text-[#c4b5fd]', rail: 'bg-[#a78bfa]', radial: 'from-[#a78bfa]/25 via-[#a78bfa]/[0.06]', chip: 'bg-[#a78bfa] text-black', halo: 'bg-[#a78bfa]/35' },
+    'Opposite Hitter':{ badge: 'bg-[#fb923c]/15 text-[#fdba74] border-[#fb923c]/40',     border: 'border-[#fb923c]/40', glow: 'shadow-[#fb923c]/20', slotBg: 'bg-[#fb923c]/[0.04]', slotBorder: 'border-[#fb923c]/25', hex: '#fb923c', text: 'text-[#fdba74]', rail: 'bg-[#fb923c]', radial: 'from-[#fb923c]/25 via-[#fb923c]/[0.06]', chip: 'bg-[#fb923c] text-black', halo: 'bg-[#fb923c]/35' },
+    'Libero':         { badge: 'bg-[#22c55e]/15 text-[#86efac] border-[#22c55e]/40',     border: 'border-[#22c55e]/40', glow: 'shadow-[#22c55e]/20', slotBg: 'bg-[#22c55e]/[0.04]', slotBorder: 'border-[#22c55e]/25', hex: '#22c55e', text: 'text-[#86efac]', rail: 'bg-[#22c55e]', radial: 'from-[#22c55e]/25 via-[#22c55e]/[0.06]', chip: 'bg-[#22c55e] text-black', halo: 'bg-[#22c55e]/35' },
+};
+function posAccent(pos: string): PosTheme {
+    return POS_ACCENT[pos] || { badge: 'bg-white/10 text-[var(--ink-300)] border-white/15', border: 'border-white/15', glow: 'shadow-black/20', slotBg: 'bg-white/[0.03]', slotBorder: 'border-white/15', hex: '#a1a1aa', text: 'text-zinc-300', rail: 'bg-zinc-400', radial: 'from-white/15 via-white/[0.04]', chip: 'bg-zinc-300 text-black', halo: 'bg-white/15' };
+}
+
+// Rating tier (FUT-style: Gold/Silver/Bronze) — drives plate finish
+function ratingTier(v: number): { name: string; tier: 'elite' | 'gold' | 'silver' | 'bronze'; text: string; ring: string; plate: string } {
+    if (v >= 85) return { name: 'ELITE', tier: 'elite', text: 'text-emerald-300', ring: 'ring-emerald-300/45', plate: 'from-emerald-300/25 via-emerald-300/[0.04] to-transparent' };
+    if (v >= 75) return { name: 'GOLD',  tier: 'gold',  text: 'text-yellow-300',   ring: 'ring-yellow-300/45',   plate: 'from-yellow-300/22 via-yellow-300/[0.04] to-transparent' };
+    if (v >= 65) return { name: 'PRO',   tier: 'gold',  text: 'text-amber-300',     ring: 'ring-amber-300/40',    plate: 'from-amber-300/18 via-amber-300/[0.04] to-transparent' };
+    if (v >= 55) return { name: 'SILVER',tier: 'silver',text: 'text-zinc-200',      ring: 'ring-zinc-200/35',     plate: 'from-zinc-200/15 via-zinc-200/[0.04] to-transparent' };
+    return         { name: 'BRONZE',tier: 'bronze',text: 'text-orange-300',     ring: 'ring-orange-300/35',   plate: 'from-orange-400/18 via-orange-400/[0.04] to-transparent' };
 }
 function posAbbrev(pos: string) {
     const m: Record<string, string> = { 'Setter': 'S', 'Outside Hitter': 'OH', 'Middle Blocker': 'MB', 'Opposite Hitter': 'OPP', 'Libero': 'L' };
     return m[pos] || pos.substring(0, 2).toUpperCase();
 }
 function overallColor(v: number) {
-    return v >= 80 ? 'text-emerald-400' : v >= 60 ? 'text-amber-400' : 'text-red-400';
+    return v >= 80 ? 'text-[var(--win)]' : v >= 60 ? 'text-[var(--volt)]' : 'text-[var(--loss)]';
 }
 
 // Check if a player's position is valid for a given lineup slot
@@ -107,92 +121,164 @@ function TeamLogoImg({ teamId, size = 10 }: { teamId?: number; size?: number }) 
     );
 }
 
-/* ── Bench mini-card ── */
+/* ── Bench mini-card (FUT-style trading card) ── */
 function BenchCard({ player, onDragStart, onClick }: { player: Player; onDragStart: () => void; onClick: () => void }) {
     const acc = posAccent(player.position);
+    const tier = ratingTier(player.overall);
     return (
         <div
             draggable
             onDragStart={onDragStart}
             onClick={onClick}
-            className={`relative rounded-xl border overflow-hidden cursor-grab active:cursor-grabbing transition-all duration-200 shadow-lg ${acc.glow} ${acc.border}`}
-            style={{ background: '#0d1117' }}
+            className={`group relative rounded-md overflow-hidden cursor-grab active:cursor-grabbing transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] ring-1 ${tier.ring} hover:ring-2`}
+            style={{
+                background: `linear-gradient(155deg, ${acc.hex}18 0%, var(--ink-900) 38%, var(--ink-950) 100%)`,
+                boxShadow: `0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px -10px ${acc.hex}55`,
+            }}
         >
-            {/* Photo zone */}
-            <div className="relative h-[120px]" style={{ background: 'linear-gradient(160deg, #111827 0%, #0d1117 100%)' }}>
-                {/* Team logo — top left */}
-                <div className="absolute top-1.5 left-1.5 z-20">
-                    <TeamLogoImg teamId={player.team_id} size={9} />
+            {/* Position rail */}
+            <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${acc.rail}`} />
+            {/* Tier plate (gold/silver/bronze tint behind portrait) */}
+            <div className={`absolute inset-0 bg-gradient-to-b ${tier.plate} pointer-events-none`} />
+            {/* Subtle diagonal grain */}
+            <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
+                style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 1px, transparent 1px 6px)' }} />
+            {/* Holographic sheen on hover */}
+            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[900ms] ease-out pointer-events-none"
+                style={{ background: 'linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.10) 50%, transparent 62%)' }} />
+
+            <div className="relative h-[128px]">
+                {/* Top row: rating block + flag */}
+                <div className="absolute top-2 left-2 z-20 flex flex-col items-center gap-0">
+                    <div className={`font-display text-[34px] leading-[0.85] ${tier.text} tabular drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
+                        {player.overall}
+                    </div>
+                    <span className={`mt-0.5 px-1.5 py-[1px] rounded-sm text-[8px] font-mono font-black tracking-[0.18em] ${acc.chip}`}>
+                        {posAbbrev(player.position)}
+                    </span>
                 </div>
-                {/* Overall — top center */}
-                <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 text-center">
-                    <div className={`text-2xl font-black leading-none ${overallColor(player.overall)}`} style={{ textShadow: '0 0 10px currentColor' }}>{player.overall}</div>
-                </div>
-                {/* Flag — top right */}
-                <div className="absolute top-1 right-1 z-10">
+                <div className="absolute top-1.5 right-1.5 z-20">
                     <FlagImg countryCode={player.country} size="md" />
                 </div>
-                {/* Photo */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[90px] h-[108px]">
+                {/* Team logo, lower-right */}
+                <div className="absolute bottom-2 right-1.5 z-20 opacity-80">
+                    <TeamLogoImg teamId={player.team_id} size={8} />
+                </div>
+                {/* Color halo behind portrait */}
+                <div className={`absolute left-1/2 bottom-2 -translate-x-1/2 w-20 h-20 rounded-full ${acc.halo} blur-2xl opacity-70 pointer-events-none`} />
+                {/* Portrait — 3:4 aspect (w:h) */}
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[90px] h-[120px]">
                     <PlayerPhoto playerId={player.id} />
                 </div>
-                {/* Fade */}
-                <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
+                {/* Floor fade */}
+                <div className="absolute bottom-0 left-0 right-0 h-9 pointer-events-none"
+                    style={{ background: 'linear-gradient(to top, var(--ink-950), transparent)' }} />
             </div>
 
-            {/* Identity */}
-            <div className="px-2 pt-1.5 pb-2 text-center">
-                <p className="text-[11px] font-bold text-white truncate leading-tight">{player.player_name}</p>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${acc.badge}`}>{posAbbrev(player.position)}</span>
-                    <span className="text-[9px] text-gray-500">#{player.jersey_number}</span>
+            {/* Name plate */}
+            <div className="relative px-2.5 py-1.5 text-center"
+                style={{ background: 'linear-gradient(180deg, var(--ink-900) 0%, var(--ink-950) 100%)' }}>
+                <div className={`absolute top-0 left-0 right-0 h-px ${acc.rail} opacity-60`} />
+                <p className="text-[11.5px] font-bold text-[var(--bone)] truncate leading-tight tracking-wide">
+                    {player.player_name.toUpperCase()}
+                </p>
+                <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                    <span className="font-mono text-[8.5px] text-[var(--ink-500)] tabular tracking-wider">#{player.jersey_number}</span>
+                    <span className="font-mono text-[7.5px] text-[var(--ink-600)]">·</span>
+                    <span className={`font-mono text-[7.5px] font-black tracking-[0.22em] ${tier.text}`}>{tier.name}</span>
                 </div>
             </div>
         </div>
     );
 }
 
-/* ── Lineup slot card ── */
+/* ── Lineup slot card (premium FUT trading card) ── */
 function LineupCard({ player, posKey, onDragStart, onClick }: { player: Player; posKey: string; onDragStart: () => void; onClick: () => void }) {
     const acc = posAccent(player.position);
+    const tier = ratingTier(player.overall);
     return (
         <div
             draggable
             onDragStart={onDragStart}
             onClick={onClick}
-            className={`relative rounded-xl border overflow-hidden cursor-grab active:cursor-grabbing hover:scale-[1.02] transition-all duration-200 shadow-lg ${acc.border}`}
-            style={{ background: '#0d1117' }}
+            className={`group relative rounded-md overflow-hidden cursor-grab active:cursor-grabbing hover:-translate-y-1.5 hover:scale-[1.025] transition-all duration-300 ring-1 ${tier.ring} hover:ring-2`}
+            style={{
+                background: `linear-gradient(160deg, ${acc.hex}22 0%, var(--ink-900) 42%, var(--ink-950) 100%)`,
+                boxShadow: `0 1px 0 rgba(255,255,255,0.05) inset, 0 14px 32px -10px ${acc.hex}66, 0 0 0 1px rgba(255,255,255,0.04) inset`,
+            }}
         >
-            {/* Photo zone */}
-            <div className="relative h-[130px]" style={{ background: 'linear-gradient(160deg, #111827 0%, #0d1117 100%)' }}>
-                {/* Overall + position badge top-left */}
-                <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5">
-                    <div className={`text-3xl font-black leading-none ${overallColor(player.overall)}`} style={{ textShadow: '0 0 12px currentColor' }}>{player.overall}</div>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${acc.badge}`}>{posAbbrev(player.position)}</span>
+            {/* Top accent stripe */}
+            <div className={`absolute top-0 inset-x-0 h-[3px] ${acc.rail}`} />
+            {/* Side rail */}
+            <div className={`absolute left-0 top-1 bottom-1 w-[3px] ${acc.rail} opacity-60`} />
+            {/* Tier plate gradient */}
+            <div className={`absolute inset-0 bg-gradient-to-b ${tier.plate} pointer-events-none`} />
+            {/* Diagonal grain */}
+            <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
+                style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 1px, transparent 1px 6px)' }} />
+            {/* Holographic sweep */}
+            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[1100ms] ease-out pointer-events-none"
+                style={{ background: 'linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.13) 50%, transparent 62%)' }} />
+
+            <div className="relative h-[148px]">
+                {/* Rating cluster — large hero number, position chip below */}
+                <div className="absolute top-2.5 left-2.5 z-20 flex flex-col items-start">
+                    <div className={`font-display text-[44px] leading-[0.82] ${tier.text} tabular drop-shadow-[0_3px_6px_rgba(0,0,0,0.7)]`}>
+                        {player.overall}
+                    </div>
+                    <span className={`mt-1 px-1.5 py-[2px] rounded-sm text-[9px] font-mono font-black tracking-[0.22em] ${acc.chip} shadow-[0_2px_4px_rgba(0,0,0,0.4)]`}>
+                        {posAbbrev(player.position)}
+                    </span>
+                    <span className={`mt-1 font-mono text-[8px] font-black tracking-[0.3em] ${tier.text}`}>
+                        {tier.name}
+                    </span>
                 </div>
-                {/* Flag */}
-                <div className="absolute bottom-2 right-2 z-10">
-                    <FlagImg countryCode={player.country} size="sm" />
+                {/* Flag, top-right */}
+                <div className="absolute top-2 right-2 z-20">
+                    <FlagImg countryCode={player.country} size="md" />
                 </div>
-                {/* Photo */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[110px] h-[125px]">
+                {/* Jersey watermark — huge number behind player */}
+                <div className="absolute top-1/2 right-1 -translate-y-1/2 z-0 pointer-events-none select-none"
+                    style={{
+                        color: acc.hex,
+                        opacity: 0.10,
+                        fontSize: '92px',
+                        fontFamily: 'var(--font-display)',
+                        lineHeight: '0.8',
+                        letterSpacing: '-0.04em',
+                    }}>
+                    {String(player.jersey_number).padStart(2, '0')}
+                </div>
+                {/* Color halo behind portrait */}
+                <div className={`absolute left-1/2 bottom-2 -translate-x-1/2 w-28 h-28 rounded-full ${acc.halo} blur-3xl opacity-70 pointer-events-none`} />
+                {/* Portrait — 3:4 aspect (w:h) */}
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[108px] h-[144px] z-10">
                     <PlayerPhoto playerId={player.id} />
                 </div>
-                {/* Fade */}
-                <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(to top, #0d1117, transparent)' }} />
+                {/* Team logo, bottom-left */}
+                <div className="absolute bottom-2 left-2.5 z-20 opacity-85">
+                    <TeamLogoImg teamId={player.team_id} size={9} />
+                </div>
+                {/* Floor fade */}
+                <div className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
+                    style={{ background: 'linear-gradient(to top, var(--ink-950), transparent)' }} />
             </div>
 
-            {/* Identity + quick stats */}
-            <div className="px-3 pt-2 pb-2">
-                <p className="text-[14px] font-bold text-white truncate">{player.player_name}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[9px] text-gray-500">#{player.jersey_number}</span>
+            {/* Name plate + stat strip */}
+            <div className="relative px-3 pt-2 pb-2.5"
+                style={{ background: 'linear-gradient(180deg, var(--ink-900) 0%, var(--ink-950) 100%)' }}>
+                <div className={`absolute top-0 left-0 right-0 h-px ${acc.rail} opacity-70`} />
+                <p className="text-[13px] font-bold text-[var(--bone)] truncate tracking-wide leading-tight">
+                    {player.player_name.toUpperCase()}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-[9.5px] text-[var(--ink-500)] tabular tracking-wider">#{player.jersey_number}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-white/5">
+                <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-white/[0.06]">
                     {[['ATK', player.attack], ['DEF', player.defense], ['OVR', player.overall]].map(([l, v]) => (
                         <div key={l as string} className="text-center">
-                            <div className="text-[8px] text-gray-500 uppercase">{l}</div>
-                            <div className={`text-[11px] font-black ${overallColor(v as number)}`}>{v}</div>
+                            <div className="font-mono text-[8px] text-[var(--ink-500)] uppercase tracking-[0.22em]">{l}</div>
+                            <div className={`font-display text-base ${overallColor(v as number)} tabular leading-none mt-0.5`}>{v}</div>
                         </div>
                     ))}
                 </div>
@@ -218,41 +304,40 @@ function EmptySlot({ posKey, label, isOver, isValid, isDragging }: {
         : `${acc.slotBg}`;
 
     return (
-        <div className={`rounded-xl border transition-all duration-150 flex flex-col cursor-cell overflow-hidden ${borderClass} ${bgClass}`}>
-            {/* Photo zone height matches LineupCard h-[130px] */}
-            <div className="h-[130px] flex flex-col items-center justify-center border-b border-dashed border-white/5 gap-2 px-2">
+        <div className={`relative rounded-md border transition-all duration-200 flex flex-col cursor-cell overflow-hidden ${borderClass} ${bgClass}`}>
+            <div className={`absolute left-0 top-0 bottom-0 w-[2px] ${acc.rail} opacity-30`} />
+            <div className="h-[148px] flex flex-col items-center justify-center border-b border-dashed border-white/[0.05] gap-2 px-2">
                 {isOver && !isValid ? (
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center">
-                            <XIcon size={14} className="text-red-400" />
+                    <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-9 h-9 rounded-full bg-[var(--loss)]/20 border border-[var(--loss)]/40 flex items-center justify-center">
+                            <XIcon size={14} className="text-[var(--loss)]" />
                         </div>
-                        <p className="text-[10px] font-bold text-red-400 text-center">Wrong position</p>
-                        <p className="text-[9px] text-red-400/60 text-center">{label} only</p>
+                        <p className="font-mono text-[10px] uppercase tracking-wider font-bold text-[var(--loss)] text-center">Wrong position</p>
+                        <p className="font-mono text-[9px] text-[var(--loss)]/60 text-center">{label} only</p>
                     </div>
                 ) : isOver && isValid ? (
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
-                            <Check size={14} className="text-emerald-400" />
+                    <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-9 h-9 rounded-full bg-[var(--win)]/20 border border-[var(--win)]/40 flex items-center justify-center">
+                            <Check size={14} className="text-[var(--win)]" />
                         </div>
-                        <p className="text-[10px] font-bold text-emerald-400 text-center">Drop to place</p>
+                        <p className="font-mono text-[10px] uppercase tracking-wider font-bold text-[var(--win)] text-center">Drop to place</p>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-center">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${acc.badge}`}>{posKey}</span>
-                        <p className="text-[10px] font-semibold text-slate-400">{label}</p>
-                        <p className="text-[9px] text-slate-600 leading-tight">{SLOT_DESC[posKey]}</p>
+                        <span className={`px-2.5 py-1 rounded text-[10.5px] font-mono font-bold border ${acc.badge}`}>{posKey}</span>
+                        <p className="font-display text-sm tracking-wide text-[var(--ink-300)]">{label.toUpperCase()}</p>
+                        <p className="font-mono text-[9px] text-[var(--ink-500)] leading-tight">{SLOT_DESC[posKey]}</p>
                     </div>
                 )}
             </div>
-            {/* Identity zone matches LineupCard */}
             <div className="px-3 pt-2 pb-2">
-                <div className="h-[14px] rounded bg-slate-700/20 mb-1.5" />
-                <div className="h-[11px] rounded bg-slate-700/10 mb-2" />
-                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5">
+                <div className="h-[14px] rounded bg-white/[0.04] mb-1.5" />
+                <div className="h-[11px] rounded bg-white/[0.025] mb-2" />
+                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/[0.05]">
                     {['ATK', 'DEF', 'OVR'].map(l => (
                         <div key={l} className="text-center">
-                            <div className="text-[8px] text-slate-600 uppercase">{l}</div>
-                            <div className="text-[11px] font-black text-slate-700">—</div>
+                            <div className="font-mono text-[8.5px] text-[var(--ink-600)] uppercase tracking-wider">{l}</div>
+                            <div className="font-display text-base text-[var(--ink-700)] tabular leading-none mt-0.5">—</div>
                         </div>
                     ))}
                 </div>
@@ -371,17 +456,21 @@ export default function SquadPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6 animate-fade-up">
+            <div className="relative flex flex-col sm:flex-row sm:items-end gap-4 sm:justify-between pb-5 border-b border-white/[0.06]">
+                <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Squad Selection</h1>
-                    <p className="text-sm text-gray-400">{lineupCount}/7 positions filled • Team Strength: {lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : 0} AVG</p>
+                    <p className="eyebrow mb-2">Squad · Starting Seven</p>
+                    <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">SQUAD SELECTION</h1>
+                    <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider tabular">
+                        <span className="text-[var(--volt)] font-bold">{lineupCount}</span>/7 POSITIONS // TEAM STRENGTH <span className="text-[var(--volt)] font-bold">{lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : 0}</span> AVG
+                    </p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={autoFill} className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer">Auto Fill</button>
-                    <button onClick={resetLineup} className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 cursor-pointer"><RotateCcw size={14} />Reset</button>
-                    <button onClick={handleSave} className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-sm font-semibold hover:from-amber-400 hover:to-orange-400 transition-all flex items-center gap-1.5 cursor-pointer">
-                        {saved ? <><Check size={14} />Saved!</> : <><Save size={14} />Save</>}
+                <div className="flex gap-2 flex-wrap">
+                    <button onClick={autoFill} className="btn-ghost">Auto Fill</button>
+                    <button onClick={resetLineup} className="btn-ghost flex items-center gap-2"><RotateCcw size={13} />Reset</button>
+                    <button onClick={handleSave} className="btn-volt flex items-center gap-2">
+                        {saved ? <><Check size={14} />Saved</> : <><Save size={14} />Save Lineup</>}
                     </button>
                 </div>
             </div>
@@ -389,20 +478,22 @@ export default function SquadPage() {
             {/* ── Squad Stats + Lineup grid ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
                 {/* Squad Lineup Grid */}
-                <div className="lg:col-span-2 rounded-xl bg-gradient-to-br from-slate-900/40 via-slate-800/30 to-slate-900/40 border border-slate-500/30 p-6">
-                    <div className="flex items-center justify-between mb-5">
-                        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Squad Lineup</h3>
-                        <div className="flex items-center gap-3 text-[10px] text-gray-500 uppercase tracking-wider">
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500/60 inline-block" />Valid drop</span>
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500/60 inline-block" />Wrong position</span>
+                <div className="lg:col-span-2 surface-raised p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="w-1 h-6 bg-[var(--volt)]" />
+                            <h3 className="font-display text-xl tracking-[0.05em] text-[var(--bone)]">SQUAD LINEUP</h3>
+                        </div>
+                        <div className="flex items-center gap-4 font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.18em]">
+                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[var(--win)] inline-block" />Valid drop</span>
+                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[var(--loss)] inline-block" />Wrong position</span>
                         </div>
                     </div>
 
-                    {/* Row labels */}
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         {/* Row 1: Front row attackers */}
                         <div>
-                            <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest mb-2 pl-1">Front Row</p>
+                            <p className="font-mono text-[9px] font-bold text-[var(--ink-500)] uppercase tracking-[0.3em] mb-2 pl-1">Front Row</p>
                             <div className="grid grid-cols-3 gap-3">
                                 {['OH1', 'MB1', 'OPP'].map(key => {
                                     const pos = POSITIONS.find(p => p.key === key)!;
@@ -430,7 +521,7 @@ export default function SquadPage() {
 
                         {/* Row 2: Back row */}
                         <div>
-                            <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest mb-2 pl-1">Back Row</p>
+                            <p className="font-mono text-[9px] font-bold text-[var(--ink-500)] uppercase tracking-[0.3em] mb-2 pl-1">Back Row</p>
                             <div className="grid grid-cols-3 gap-3">
                                 {['S', 'MB2', 'OH2'].map(key => {
                                     const pos = POSITIONS.find(p => p.key === key)!;
@@ -458,7 +549,7 @@ export default function SquadPage() {
 
                         {/* Row 3: Libero — centered */}
                         <div>
-                            <p className="text-[9px] font-bold text-emerald-600/70 uppercase tracking-widest mb-2 pl-1">Libero</p>
+                            <p className="font-mono text-[9px] font-bold text-[var(--win)]/70 uppercase tracking-[0.3em] mb-2 pl-1">Libero</p>
                             <div className="grid grid-cols-3 gap-3">
                                 <div />
                                 {(() => {
@@ -489,17 +580,22 @@ export default function SquadPage() {
                     </div>
                 </div>
 
-                {/* Team Overall Stats (moved to right side) */}
-                <div className="rounded-xl bg-gradient-to-br from-amber-900/30 via-orange-900/20 to-red-900/30 border border-amber-500/30 p-6 flex flex-col">
-                    <h3 className="text-sm font-semibold text-amber-300 mb-6 uppercase tracking-wider">Team Overall</h3>
-                    <div className="space-y-6 flex-1">
+                {/* Team Overall Stats */}
+                <div className="surface-raised p-6 flex flex-col relative overflow-hidden">
+                    <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-[var(--volt)]/8 blur-3xl pointer-events-none" />
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--volt)]" />
+                    <div className="relative flex items-center gap-3 mb-6">
+                        <div className="w-1 h-6 bg-[var(--volt)]" />
+                        <h3 className="font-display text-xl tracking-[0.05em] text-[var(--bone)]">TEAM OVERALL</h3>
+                    </div>
+                    <div className="relative space-y-6 flex-1">
                         <div className="text-center">
-                            <div className={`text-4xl font-black mb-1 ${lineupCount > 0 ? overallColor(lineupStrength / lineupCount) : 'text-gray-500'}`}>
-                                {lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : '-'}
+                            <div className={`font-display text-6xl mb-2 tabular ${lineupCount > 0 ? overallColor(lineupStrength / lineupCount) : 'text-[var(--ink-600)]'}`}>
+                                {lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : '—'}
                             </div>
-                            <p className="text-xs text-gray-400">Average Rating</p>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--ink-500)]">Average Rating</p>
                         </div>
-                        <div className="border-t border-amber-500/20 pt-6 space-y-4">
+                        <div className="border-t border-white/[0.06] pt-6 space-y-4">
                             {lineupCount > 0 && (() => {
                                 const pp = Object.values(lineup).filter(Boolean) as Player[];
                                 const attackers = [lineup.OH1, lineup.OPP, lineup.MB1, lineup.MB2].filter(Boolean) as Player[];
@@ -521,19 +617,19 @@ export default function SquadPage() {
                                 return Object.entries(stats).map(([stat, value], idx) => (
                                     <div key={`stat-${idx}-${stat}`}>
                                         <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xs font-semibold text-gray-300">{stat}</span>
-                                            <span className="text-sm font-bold text-amber-400">{Math.round(value)}</span>
+                                            <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[var(--ink-300)]">{stat}</span>
+                                            <span className="font-display text-lg text-[var(--volt)] tabular leading-none">{Math.round(value)}</span>
                                         </div>
-                                        <div className="w-full h-1.5 rounded-full bg-black/30 border border-white/5 overflow-hidden">
-                                            <div className={`h-full rounded-full transition-all duration-500 ${value >= 80 ? 'bg-emerald-500' : value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                        <div className="w-full h-1 bg-black/40 overflow-hidden">
+                                            <div className={`h-full transition-all duration-500 ${value >= 80 ? 'bg-[var(--win)]' : value >= 60 ? 'bg-[var(--volt)]' : 'bg-[var(--loss)]'}`}
                                                 style={{ width: `${value}%` }} />
                                         </div>
                                     </div>
                                 ));
                             })()}
-                            <div className="flex items-center justify-between pt-4 border-t border-amber-500/20">
-                                <span className="text-xs text-gray-400">Players Placed</span>
-                                <span className="text-lg font-bold text-amber-400">{lineupCount}/7</span>
+                            <div className="flex items-center justify-between pt-5 border-t border-white/[0.06]">
+                                <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Players Placed</span>
+                                <span className="font-display text-2xl text-[var(--volt)] tabular leading-none">{lineupCount}/7</span>
                             </div>
                         </div>
                     </div>
@@ -541,17 +637,18 @@ export default function SquadPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
-                {/* ── Bench ── (moved first, takes up 2 columns) */}
+                {/* ── Bench ── */}
                 <div
-                    className="lg:col-span-2 rounded-xl bg-white/5 border border-white/10 p-4 flex flex-col"
+                    className="lg:col-span-2 surface-raised p-5 flex flex-col"
                     style={{ height: '540px' }}
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleDropOnBench}
                 >
-                    <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2 shrink-0">
-                        <GripVertical size={14} className="text-gray-500" /> Bench ({bench.length})
+                    <h3 className="font-display text-xl tracking-[0.05em] text-[var(--bone)] mb-4 flex items-center gap-2 shrink-0">
+                        <div className="w-1 h-6 bg-[var(--volt)]" />
+                        <GripVertical size={14} className="text-[var(--ink-500)]" /> BENCH <span className="font-mono text-sm text-[var(--ink-500)] tabular ml-1">[{bench.length}]</span>
                     </h3>
-                    <div className="overflow-y-auto flex-1">
+                    <div className="overflow-y-auto flex-1 pr-1">
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                             {bench.map(player => (
                                 <BenchCard
@@ -565,10 +662,13 @@ export default function SquadPage() {
                     </div>
                 </div>
 
-                {/* ── Formation court ── (moved to right side) */}
+                {/* ── Formation court ── */}
                 <div className="lg:col-span-1 flex flex-col" style={{ height: '540px' }}>
-                    <div className="rounded-xl bg-gradient-to-b from-green-900/30 via-green-800/20 to-green-900/30 border border-green-500/30 p-4 flex flex-col h-full">
-                        <div className="text-xs font-bold text-green-500/50 text-center mb-4 uppercase tracking-wider shrink-0">Net</div>
+                    <div className="surface-raised p-5 flex flex-col h-full relative overflow-hidden" style={{
+                        background: 'linear-gradient(180deg, rgba(34,197,94,0.06) 0%, var(--ink-900) 60%, rgba(34,197,94,0.04) 100%)',
+                    }}>
+                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--win)]/40" />
+                        <div className="font-display text-sm tracking-[0.32em] text-[var(--win)]/60 text-center mb-5 shrink-0">— NET —</div>
                         <div className="flex flex-col justify-around flex-1 gap-2">
                             {Array.from({ length: 3 }).map((_, row) => (
                                 <div key={row} className="grid grid-cols-3 gap-2">
@@ -591,14 +691,14 @@ export default function SquadPage() {
                                                         className="relative cursor-grab active:cursor-grabbing text-center"
                                                         title={player.player_name}
                                                     >
-                                                        <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-amber-400/60 shadow-lg shadow-black/40 hover:scale-110 transition-transform duration-200" style={{ background: '#111827' }}>
+                                                        <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-[var(--volt)]/70 shadow-lg shadow-black/50 hover:scale-110 transition-transform duration-200" style={{ background: 'var(--ink-850)' }}>
                                                             <PlayerPhoto playerId={player.id} />
                                                         </div>
                                                         <div className="mt-2">
-                                                            <p className="text-[13px] font-semibold text-white truncate">{player.player_name}</p>
-                                                            <div className="flex items-center justify-center gap-1 mt-0.5">
-                                                                <p className={`text-[13px] font-black ${overallColor(player.overall)}`}>{player.overall}</p>
-                                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${posAccent(player.position).badge}`}>{posAbbrev(player.position)}</span>
+                                                            <p className="text-[13px] font-semibold text-[var(--bone)] truncate">{player.player_name}</p>
+                                                            <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                                                                <p className={`font-display text-base ${overallColor(player.overall)} tabular leading-none`}>{player.overall}</p>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${posAccent(player.position).badge}`}>{posAbbrev(player.position)}</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -607,16 +707,16 @@ export default function SquadPage() {
                                                         <div className={`w-24 h-24 mx-auto rounded-full border-2 flex items-center justify-center cursor-cell transition-all duration-150 ${
                                                             courtIsOver
                                                                 ? courtIsValid
-                                                                    ? 'border-emerald-400 bg-emerald-500/20 shadow-lg shadow-emerald-500/30'
-                                                                    : 'border-red-500 bg-red-500/20 shadow-lg shadow-red-500/30'
-                                                                : 'border-dashed border-green-500/30 bg-white/5 hover:border-green-500/50'
+                                                                    ? 'border-[var(--win)] bg-[var(--win)]/20 shadow-lg shadow-[var(--win)]/30'
+                                                                    : 'border-[var(--loss)] bg-[var(--loss)]/20 shadow-lg shadow-[var(--loss)]/30'
+                                                                : 'border-dashed border-[var(--win)]/30 bg-white/[0.03] hover:border-[var(--win)]/50'
                                                         }`}>
                                                             {courtIsOver && !courtIsValid
-                                                                ? <XIcon size={16} className="text-red-400" />
-                                                                : <span className={`text-sm font-bold ${courtIsOver && courtIsValid ? 'text-emerald-400' : 'text-green-500/60'}`}>{pos.key}</span>
+                                                                ? <XIcon size={16} className="text-[var(--loss)]" />
+                                                                : <span className={`font-display text-base tabular ${courtIsOver && courtIsValid ? 'text-[var(--win)]' : 'text-[var(--win)]/60'}`}>{pos.key}</span>
                                                             }
                                                         </div>
-                                                        <p className="mt-2 text-[12px] text-green-500/40">{pos.label.split(' ')[0]}</p>
+                                                        <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--win)]/45">{pos.label.split(' ')[0]}</p>
                                                     </div>
                                                 ) : null}
                                             </div>

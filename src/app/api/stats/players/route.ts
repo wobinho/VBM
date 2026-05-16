@@ -5,6 +5,8 @@ export async function GET(req: Request) {
   const db = getDb();
   const { searchParams } = new URL(req.url);
   const teamId = parseInt(searchParams.get('teamId') ?? '0', 10);
+  const leagueId = parseInt(searchParams.get('leagueId') ?? '0', 10);
+  const region = searchParams.get('region'); // 'north' | 'south' (conference)
   const seasonYear = searchParams.get('year');
   const singlePlayerId = parseInt(searchParams.get('playerId') ?? '0', 10);
 
@@ -16,10 +18,108 @@ export async function GET(req: Request) {
       WHERE player_id = ?
       ORDER BY season_year ASC
     `).all(singlePlayerId) as { season_year: number; team_name: string; team_id: number | null }[];
+
+    // Ensure current team always appears as the latest record
+    const player = db.prepare(`
+      SELECT p.team_id, t.team_name
+      FROM players p LEFT JOIN teams t ON t.id = p.team_id
+      WHERE p.id = ?
+    `).get(singlePlayerId) as { team_id: number | null; team_name: string | null } | undefined;
+    if (player?.team_id && player.team_name) {
+      const alreadyInHistory = history.some(h => h.team_id === player.team_id);
+      if (!alreadyInHistory) {
+        const currentYear = db.prepare(`SELECT MAX(season_year) as yr FROM player_team_history WHERE player_id = ?`).get(singlePlayerId) as { yr: number | null } | undefined;
+        const nextYear = (currentYear?.yr ?? new Date().getFullYear() - 1) + 1;
+        history.push({ season_year: nextYear, team_name: player.team_name, team_id: player.team_id });
+      }
+    }
+
     return NextResponse.json({ history });
   }
 
-  if (!teamId) return NextResponse.json({ error: 'teamId required' }, { status: 400 });
+  // ─── LEAGUE / CONFERENCE MODE ────────────────────────────────────────────
+  // Returns aggregated stats across every team in a league (optionally
+  // filtered to a specific conference/region). Used by the Stats page's
+  // league-wide leaderboard view.
+  if (leagueId) {
+    // Resolve every team that has ever existed in this league (currently).
+    const teamRows = db.prepare(
+      region
+        ? `SELECT id, team_name, region FROM teams WHERE league_id = ? AND region = ?`
+        : `SELECT id, team_name, region FROM teams WHERE league_id = ?`
+    ).all(...(region ? [leagueId, region] : [leagueId])) as { id: number; team_name: string; region: string | null }[];
+
+    if (teamRows.length === 0) return NextResponse.json({ players: [] });
+    const teamIdSet = new Set(teamRows.map(t => t.id));
+    const teamIds = teamRows.map(t => t.id);
+    const teamPlaceholders = teamIds.map(() => '?').join(',');
+
+    let statsRows: any[];
+    if (seasonYear) {
+      const yr = parseInt(seasonYear, 10);
+      statsRows = db.prepare(`
+        SELECT player_id, team_id,
+               SUM(points) as points, SUM(spikes) as spikes,
+               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+        FROM player_match_stats
+        WHERE team_id IN (${teamPlaceholders}) AND season_year = ?
+        GROUP BY player_id, team_id
+      `).all(...teamIds, yr) as any[];
+    } else {
+      statsRows = db.prepare(`
+        SELECT player_id, team_id,
+               SUM(points) as points, SUM(spikes) as spikes,
+               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+        FROM player_match_stats
+        WHERE team_id IN (${teamPlaceholders})
+        GROUP BY player_id, team_id
+      `).all(...teamIds) as any[];
+    }
+
+    if (statsRows.length === 0) return NextResponse.json({ players: [] });
+
+    // Aggregate per-player totals (a player may have played for multiple teams
+    // within this league across seasons). The "team" shown is the most-recent
+    // in-league team or, if none, their current team.
+    type Totals = { player_id: number; points: number; spikes: number; blocks: number; aces: number; digs: number };
+    const totals = new Map<number, Totals>();
+    for (const r of statsRows) {
+      const cur = totals.get(r.player_id) ?? { player_id: r.player_id, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 };
+      cur.points += r.points ?? 0;
+      cur.spikes += r.spikes ?? 0;
+      cur.blocks += r.blocks ?? 0;
+      cur.aces += r.aces ?? 0;
+      cur.digs += r.digs ?? 0;
+      totals.set(r.player_id, cur);
+    }
+
+    const playerIdList = Array.from(totals.keys());
+    if (playerIdList.length === 0) return NextResponse.json({ players: [] });
+    const playerPlaceholders = playerIdList.map(() => '?').join(',');
+
+    const players = db.prepare(`
+      SELECT p.id, p.player_name, p.position, p.overall, p.country, p.team_id,
+             t.team_name as current_team_name
+      FROM players p
+      LEFT JOIN teams t ON p.team_id = t.id
+      WHERE p.id IN (${playerPlaceholders})
+    `).all(...playerIdList) as any[];
+
+    const result = players.map(p => {
+      const inLeagueNow = p.team_id != null && teamIdSet.has(p.team_id);
+      return {
+        ...p,
+        stats: totals.get(p.id) ?? { points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 },
+        seasonBreakdown: [],
+        teamHistory: [],
+        in_league_now: inLeagueNow,
+      };
+    });
+
+    return NextResponse.json({ players: result });
+  }
+
+  if (!teamId) return NextResponse.json({ error: 'teamId or leagueId required' }, { status: 400 });
 
   // Get all players who have ever played for this team (via player_team_history)
   // PLUS current roster members

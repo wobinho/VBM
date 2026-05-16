@@ -84,10 +84,10 @@ function SeriesCard({
     const isLive = series.status === 'in_progress';
 
     const statusConfig = isCompleted
-        ? { label: 'Final', cls: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30' }
+        ? { label: 'Final', cls: 'text-[var(--win)] bg-[var(--win)]/15 border border-[var(--win)]/30' }
         : isLive
-        ? { label: 'Live', cls: 'text-amber-400 bg-amber-500/15 border border-amber-500/30 animate-pulse' }
-        : { label: 'Upcoming', cls: 'text-gray-500 bg-white/5 border border-white/10' };
+        ? { label: 'Live', cls: 'text-[var(--volt)] bg-[var(--volt)]/15 border border-[var(--volt)]/30 animate-pulse' }
+        : { label: 'Upcoming', cls: 'text-[var(--ink-400)] bg-white/[0.04] border border-white/[0.08]' };
 
     const sides = [
         { teamId: series.home_team_id, name: series.home_team_name, wins: series.home_wins, won: homeWon, seed: series.seed_high },
@@ -95,46 +95,44 @@ function SeriesCard({
     ];
 
     return (
-        <div className={`relative rounded-2xl border overflow-hidden transition-all duration-300 cursor-default
-            ${isFinal
-                ? 'border-amber-500/40 shadow-xl shadow-amber-500/10'
-                : isUserInvolved
-                ? 'border-amber-400/30 shadow-lg shadow-amber-500/5'
-                : 'border-white/10'
+        <div className={`surface-raised relative overflow-hidden transition-all duration-300 cursor-default
+            ${isFinal ? 'border-[var(--volt)]/45 shadow-2xl shadow-[var(--volt)]/15'
+                : isUserInvolved ? 'border-[var(--volt)]/35 shadow-lg shadow-[var(--volt)]/5'
+                : ''
             }
         `}>
-            {/* glow bg for final */}
             {isFinal && (
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent pointer-events-none" />
+                <>
+                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-[var(--volt)]/8 via-transparent to-transparent pointer-events-none" />
+                </>
             )}
             {isUserInvolved && !isFinal && (
-                <div className="absolute inset-0 bg-amber-500/[0.04] pointer-events-none" />
+                <div className="absolute inset-0 bg-[var(--volt)]/[0.03] pointer-events-none" />
             )}
 
-            {/* Card top bar */}
             <div className={`relative px-4 py-2.5 flex items-center justify-between border-b
-                ${isFinal ? 'border-amber-500/20 bg-amber-500/5' : 'border-white/5 bg-white/[0.02]'}
+                ${isFinal ? 'border-[var(--volt)]/20' : 'border-white/[0.05]'}
             `}>
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--ink-500)]">
                     {series.conference
-                        ? `${series.conference.charAt(0).toUpperCase() + series.conference.slice(1)} · `
+                        ? `${series.conference.charAt(0).toUpperCase() + series.conference.slice(1)} // `
                         : ''}
                     #{series.seed_high} vs #{series.seed_low}
                 </span>
-                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${statusConfig.cls}`}>
+                <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-0.5 rounded ${statusConfig.cls}`}>
                     {statusConfig.label}
                 </span>
             </div>
 
-            {/* Teams */}
             <div className="relative px-4 py-4 space-y-2.5">
                 {sides.map((side) => (
                     <div key={side.teamId}
-                        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200
+                        className={`flex items-center gap-3 rounded px-3 py-2.5 transition-all duration-200
                             ${side.won
                                 ? isFinal
-                                    ? 'bg-amber-500/15 border border-amber-500/25'
-                                    : 'bg-emerald-500/10 border border-emerald-500/20'
+                                    ? 'bg-[var(--volt)]/15 border border-[var(--volt)]/30'
+                                    : 'bg-[var(--win)]/10 border border-[var(--win)]/25'
                                 : isCompleted
                                 ? 'opacity-35'
                                 : 'bg-white/[0.03] border border-transparent'
@@ -143,28 +141,27 @@ function SeriesCard({
                         <TeamLogo teamId={side.teamId} size={32} />
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-gray-600 font-bold tabular-nums">#{side.seed}</span>
-                                <span className={`text-sm font-bold truncate
-                                    ${side.won && isFinal ? 'text-amber-300' :
-                                      side.won ? 'text-emerald-300' :
-                                      side.teamId === userTeamId ? 'text-amber-300' :
-                                      'text-white'}`}>
-                                    {side.name}
+                                <span className="font-mono text-[10px] text-[var(--ink-500)] font-bold tabular">#{side.seed}</span>
+                                <span className={`font-display text-base tracking-wide truncate
+                                    ${side.won && isFinal ? 'text-[var(--volt)]' :
+                                      side.won ? 'text-[var(--win)]' :
+                                      side.teamId === userTeamId ? 'text-[var(--volt)]' :
+                                      'text-[var(--bone)]'}`}>
+                                    {side.name?.toUpperCase()}
                                 </span>
-                                {side.won && isFinal && <Crown size={11} className="text-amber-400 shrink-0" />}
-                                {side.won && !isFinal && <Trophy size={10} className="text-emerald-400 shrink-0" />}
+                                {side.won && isFinal && <Crown size={12} className="text-[var(--volt)] shrink-0" />}
+                                {side.won && !isFinal && <Trophy size={11} className="text-[var(--win)] shrink-0" />}
                             </div>
                         </div>
-                        {/* Win pips */}
                         <div className="flex gap-1.5 items-center">
                             {Array.from({ length: 3 }).map((_, i) => (
                                 <div key={i}
-                                    className={`w-4 h-4 rounded-md flex items-center justify-center text-[9px] font-black transition-all
+                                    className={`w-4 h-4 rounded flex items-center justify-center text-[9px] font-black transition-all
                                         ${i < side.wins
                                             ? side.won && isFinal
-                                                ? 'bg-amber-500 text-gray-900 shadow-sm shadow-amber-500/40'
-                                                : 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                                            : 'bg-white/5 border border-white/[0.08]'
+                                                ? 'bg-[var(--volt)] text-[var(--ink-950)]'
+                                                : 'bg-[var(--win)] text-[var(--ink-950)]'
+                                            : 'bg-white/[0.04] border border-white/[0.08]'
                                         }`}>
                                     {i < side.wins ? '✓' : ''}
                                 </div>
@@ -174,9 +171,8 @@ function SeriesCard({
                 ))}
             </div>
 
-            {/* Game results strip */}
             {series.games.filter(g => g.status === 'completed').length > 0 && (
-                <div className="relative px-4 pb-3 flex gap-1.5 flex-wrap border-t border-white/[0.04] pt-2">
+                <div className="relative px-4 pb-3 flex gap-1.5 flex-wrap border-t border-white/[0.04] pt-2.5">
                     {series.games.filter(g => g.status !== 'cancelled').map(g => {
                         const played = g.status === 'completed';
                         const seriesHomeIsGameHome = g.home_team_id === series.home_team_id;
@@ -184,11 +180,11 @@ function SeriesCard({
                         const seriesAwaySets = played ? (seriesHomeIsGameHome ? g.away_sets : g.home_sets) : null;
                         const seriesHomeWonGame = seriesHomeSets !== null && seriesAwaySets !== null && seriesHomeSets > seriesAwaySets;
                         return (
-                            <div key={g.id} className={`text-center px-2 py-1 rounded-lg text-[9px] font-bold
-                                ${!played ? 'bg-white/5 text-gray-600 border border-white/5' :
-                                  seriesHomeWonGame ? 'bg-blue-500/15 text-blue-300 border border-blue-500/20' : 'bg-orange-500/15 text-orange-300 border border-orange-500/20'}
+                            <div key={g.id} className={`text-center px-2 py-1 rounded font-mono text-[10px] font-bold tabular
+                                ${!played ? 'bg-white/5 text-[var(--ink-500)] border border-white/5' :
+                                  seriesHomeWonGame ? 'bg-[var(--info)]/15 text-[var(--info)] border border-[var(--info)]/25' : 'bg-[#fb923c]/15 text-[#fdba74] border border-[#fb923c]/25'}
                             `}>
-                                <div className="text-[8px] text-gray-600 mb-0.5 uppercase tracking-wider">G{g.game_number}</div>
+                                <div className="text-[8px] text-[var(--ink-500)] mb-0.5 uppercase tracking-wider">G{g.game_number}</div>
                                 {played ? `${seriesHomeSets}-${seriesAwaySets}` : '·'}
                             </div>
                         );
@@ -204,17 +200,14 @@ function SeriesCard({
 function RoundHeader({ label, icon: Icon, accent = false }: { label: string; icon: React.ElementType; accent?: boolean }) {
     return (
         <div className={`flex items-center gap-3 mb-6`}>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                ${accent ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-white/5 border border-white/10'}`}>
-                <Icon size={16} className={accent ? 'text-amber-400' : 'text-gray-400'} />
+            <div className={`w-9 h-9 rounded flex items-center justify-center shrink-0
+                ${accent ? 'bg-[var(--volt)]/15 border border-[var(--volt)]/35' : 'bg-white/[0.04] border border-white/[0.08]'}`}>
+                <Icon size={16} className={accent ? 'text-[var(--volt)]' : 'text-[var(--ink-400)]'} />
             </div>
-            <div>
-                <h2 className={`text-sm font-black uppercase tracking-[0.2em]
-                    ${accent ? 'text-amber-400' : 'text-gray-400'}`}>
-                    {label}
-                </h2>
-            </div>
-            <div className={`flex-1 h-px ${accent ? 'bg-amber-500/20' : 'bg-white/5'}`} />
+            <h2 className={`font-display text-xl uppercase tracking-[0.06em] ${accent ? 'text-[var(--volt)]' : 'text-[var(--bone)]'}`}>
+                {label}
+            </h2>
+            <div className={`flex-1 h-px ${accent ? 'bg-[var(--volt)]/30' : 'bg-white/[0.06]'}`} />
         </div>
     );
 }
@@ -224,15 +217,15 @@ function RoundHeader({ label, icon: Icon, accent = false }: { label: string; ico
 function ConferenceColumn({ title, series, userTeamId }: { title: string; series: PlayoffSeries[]; userTeamId: number | null }) {
     return (
         <div className="space-y-6">
-            <p className="text-[10px] text-gray-600 uppercase tracking-[0.2em] font-bold px-1 flex items-center gap-2">
-                <Shield size={10} className="text-gray-600" />
+            <p className="font-mono text-[10px] text-[var(--ink-500)] uppercase tracking-[0.28em] font-bold px-1 flex items-center gap-2">
+                <Shield size={11} className="text-[var(--ink-500)]" />
                 {title}
             </p>
             {series.length ? series.map(s => (
                 <SeriesCard key={s.id} series={s} userTeamId={userTeamId} />
             )) : (
-                <div className="rounded-xl border border-white/[0.06] bg-white/[0.01] p-8 text-center">
-                    <span className="text-xs text-gray-700">TBD</span>
+                <div className="surface p-8 text-center">
+                    <span className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--ink-600)]">TBD</span>
                 </div>
             )}
         </div>
@@ -258,12 +251,12 @@ export default function PlayoffsPage() {
             <div className="min-h-[60vh] flex items-center justify-center">
                 <div className="text-center space-y-4">
                     <div className="relative mx-auto w-16 h-16">
-                        <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping" />
-                        <div className="relative w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                            <Loader2 size={28} className="text-amber-400 animate-spin" />
+                        <div className="absolute inset-0 rounded-full bg-[var(--volt)]/20 animate-ping" />
+                        <div className="relative w-16 h-16 rounded-full bg-[var(--volt)]/10 border border-[var(--volt)]/30 flex items-center justify-center">
+                            <Loader2 size={26} className="text-[var(--volt)] animate-spin" />
                         </div>
                     </div>
-                    <p className="text-sm text-gray-500 font-medium">Loading bracket...</p>
+                    <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
                 </div>
             </div>
         );
@@ -271,44 +264,39 @@ export default function PlayoffsPage() {
 
     if (!bracket || bracket.status === 'not_started') {
         return (
-            <div className="space-y-6">
-                {/* Page header */}
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <Trophy size={22} className="text-amber-400" />
-                        <h1 className="text-2xl font-black text-white tracking-tight">Playoffs</h1>
-                    </div>
-                    <p className="text-sm text-gray-500">Championship bracket</p>
+            <div className="space-y-6 animate-fade-up">
+                <div className="relative pb-5 border-b border-white/[0.06]">
+                    <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
+                    <p className="eyebrow mb-2">Postseason · Bracket</p>
+                    <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">PLAYOFFS</h1>
                 </div>
 
-                {/* Not started state */}
-                <div className="relative rounded-3xl border border-white/10 overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5" />
-                    <div className="relative py-24 px-8 text-center space-y-6">
-                        <div className="relative mx-auto w-20 h-20">
-                            <div className="absolute inset-0 rounded-full bg-amber-500/10 animate-pulse" />
-                            <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/20 flex items-center justify-center">
-                                <Trophy size={36} className="text-amber-400/60" />
+                <div className="surface-raised relative py-24 px-8 text-center space-y-6 overflow-hidden">
+                    <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-[var(--volt)]/8 blur-3xl" />
+                    <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-[var(--epic)]/5 blur-3xl" />
+                    <div className="relative">
+                        <div className="relative mx-auto w-24 h-24 mb-6">
+                            <div className="absolute inset-0 rounded-full bg-[var(--volt)]/10 animate-pulse-glow" />
+                            <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-[var(--volt)]/20 to-transparent border border-[var(--volt)]/30 flex items-center justify-center">
+                                <Trophy size={42} className="text-[var(--volt)]/70 animate-float" />
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <h2 className="text-2xl font-black text-white">Playoffs Haven&apos;t Started</h2>
-                            <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
-                                The playoffs begin after the regular season ends on April 30.
-                                Top 4 teams from each conference will qualify.
-                            </p>
-                        </div>
-                        <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+                        <p className="eyebrow mb-2">Status</p>
+                        <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-3">PLAYOFFS HAVEN&apos;T STARTED</h2>
+                        <p className="text-sm text-[var(--ink-400)] max-w-md mx-auto leading-relaxed">
+                            The playoffs begin after the regular season ends on April 30. Top 4 teams from each conference qualify.
+                        </p>
+                        <div className="flex items-center justify-center gap-6 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-6">
                             <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500/60" />
-                                <span>8 teams compete</span>
+                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
+                                <span>8 teams</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500/60" />
-                                <span>Best-of-5 series</span>
+                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
+                                <span>Best of 5</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500/60" />
+                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
                                 <span>3 rounds</span>
                             </div>
                         </div>
@@ -326,26 +314,23 @@ export default function PlayoffsPage() {
     const isCompleted = bracket.status === 'completed';
 
     return (
-        <div className="space-y-14">
+        <div className="space-y-14 animate-fade-up">
 
             {/* ── Page Header ── */}
-            <div className="relative pb-24 mb-8">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="relative pb-5 border-b border-white/[0.06]">
+                <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
+                <div className="flex items-end justify-between gap-4 flex-wrap">
                     <div>
-                        <div className="flex items-center gap-2.5 mb-6">
-                            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
-                                <Trophy size={20} className="text-amber-400" />
-                            </div>
-                            <h1 className="text-2xl font-black text-white tracking-tight">
-                                {bracket.year} Playoffs
-                            </h1>
-                        </div>
-                        <p className="text-sm text-gray-500 pl-[52px]">IVL Championship Bracket</p>
+                        <p className="eyebrow mb-2">Postseason · Bracket</p>
+                        <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">
+                            <span className="text-[var(--volt)]">{bracket.year}</span> PLAYOFFS
+                        </h1>
+                        <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider uppercase">IVL Championship Bracket</p>
                     </div>
-                    <div className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest border
+                    <div className={`px-3 py-1.5 rounded font-mono text-[11px] font-bold uppercase tracking-[0.22em] border
                         ${isCompleted
-                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                            : 'text-amber-400 bg-amber-500/10 border-amber-500/20 animate-pulse'
+                            ? 'text-[var(--win)] bg-[var(--win)]/10 border-[var(--win)]/25'
+                            : 'text-[var(--volt)] bg-[var(--volt)]/10 border-[var(--volt)]/25 animate-pulse'
                         }`}>
                         {isCompleted ? 'Season Complete' : 'In Progress'}
                     </div>
@@ -354,31 +339,28 @@ export default function PlayoffsPage() {
 
             {/* ── Champion Banner ── */}
             {bracket.champion && (
-                <div className="relative rounded-2xl overflow-hidden border border-amber-500/30 my-8">
-                    {/* Background layers */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5" />
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(251,191,36,0.12),transparent_60%)]" />
+                <div className="surface-raised relative overflow-hidden border-[var(--volt)]/35">
+                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[var(--volt)]/10 via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(250,204,21,0.15),transparent_60%)]" />
 
-                    <div className="relative flex items-center gap-5 px-6 py-5">
-                        {/* Trophy icon */}
+                    <div className="relative flex items-center gap-5 px-6 py-6">
                         <div className="relative shrink-0">
-                            <div className="absolute inset-0 rounded-2xl bg-amber-500/20 blur-md" />
-                            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400/20 to-orange-500/10 border border-amber-500/30 flex items-center justify-center">
-                                <Crown size={28} className="text-amber-400" />
+                            <div className="absolute inset-0 rounded-full bg-[var(--volt)]/25 blur-xl" />
+                            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-[var(--volt)]/25 to-transparent border-2 border-[var(--volt)]/40 flex items-center justify-center">
+                                <Crown size={30} className="text-[var(--volt)]" />
                             </div>
                         </div>
-                        {/* Champion info */}
                         <div className="flex-1 min-w-0">
-                            <p className="text-[10px] text-amber-500/70 uppercase tracking-[0.2em] font-bold mb-1">
+                            <p className="font-mono text-[10px] text-[var(--volt)]/85 uppercase tracking-[0.3em] font-bold mb-1.5">
                                 {bracket.year} IVL Champion
                             </p>
-                            <p className="text-2xl font-black text-amber-300 truncate">
-                                {bracket.champion.teamName}
+                            <p className="font-display text-3xl tracking-[0.04em] text-[var(--volt)] truncate">
+                                {bracket.champion.teamName.toUpperCase()}
                             </p>
                         </div>
-                        {/* Team logo */}
-                        <div className="shrink-0 opacity-80">
-                            <TeamLogo teamId={bracket.champion.teamId} size={56} />
+                        <div className="shrink-0">
+                            <TeamLogo teamId={bracket.champion.teamId} size={64} />
                         </div>
                     </div>
                 </div>
@@ -462,19 +444,18 @@ export default function PlayoffsPage() {
                 )}
             </div>
 
-            {/* ── Legend ── */}
-            <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 border-t border-white/[0.04] justify-center">
+            <div className="flex flex-wrap gap-x-6 gap-y-2 pt-3 border-t border-white/[0.04] justify-center">
                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded bg-emerald-500/60" />
-                    <span className="text-[11px] text-gray-600">Series winner</span>
+                    <div className="w-2 h-2 rounded-full bg-[var(--win)]/70" />
+                    <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-500)]">Series winner</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded bg-amber-500/60" />
-                    <span className="text-[11px] text-gray-600">Champion</span>
+                    <div className="w-2 h-2 rounded-full bg-[var(--volt)]" />
+                    <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-500)]">Champion</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-amber-400/30 bg-amber-500/[0.04]" />
-                    <span className="text-[11px] text-gray-600">Your team</span>
+                    <div className="w-2 h-2 rounded-full border border-[var(--volt)]/50" />
+                    <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-500)]">Your team</span>
                 </div>
             </div>
         </div>

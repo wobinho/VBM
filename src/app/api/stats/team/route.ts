@@ -109,7 +109,7 @@ export async function GET(req: Request) {
   // ── Accolades (all-time) ──
   const accolades: { type: string; name: string; year: number }[] = [];
 
-  // Cup wins
+  // Cup wins — one row per cup competition (Grand Final may have 2 fixtures in 2-leg format)
   const cupWins = db.prepare(`
     SELECT cc.name, cc.year
     FROM cup_fixtures cf
@@ -117,6 +117,7 @@ export async function GET(req: Request) {
     JOIN cup_competitions cc ON cf.cup_id = cc.id
     WHERE cf.winner_team_id = ? AND cf.status = 'completed'
       AND cr.round_name IN ('Grand Final', 'Final', 'Finals')
+    GROUP BY cc.id
     ORDER BY cc.year DESC
   `).all(teamId) as any[];
 
@@ -125,7 +126,6 @@ export async function GET(req: Request) {
   }
 
   // League titles (position 1 in any completed season)
-  // We approximate by checking current team stats vs snapshot
   const snapshots = db.prepare(`
     SELECT * FROM team_season_snapshots WHERE team_id = ? ORDER BY season_year DESC
   `).all(teamId) as any[];
@@ -135,6 +135,43 @@ export async function GET(req: Request) {
       accolades.push({ type: 'league', name: snap.league_name ?? 'League Champion', year: snap.season_year });
     }
   }
+
+  // ── Full cup history (all cups this team participated in, with deepest round reached) ──
+  const cupHistory = db.prepare(`
+    SELECT cc.name, cc.year,
+           (SELECT cr2.round_name
+            FROM cup_fixtures cf2
+            JOIN cup_rounds cr2 ON cf2.round_id = cr2.id
+            WHERE cf2.cup_id = cc.id
+              AND (cf2.home_team_id = ? OR cf2.away_team_id = ?)
+              AND cf2.status = 'completed'
+            ORDER BY cr2.round_number DESC
+            LIMIT 1) as round_reached,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM cup_fixtures cf3
+             JOIN cup_rounds cr3 ON cf3.round_id = cr3.id
+             WHERE cf3.cup_id = cc.id AND cf3.winner_team_id = ?
+               AND cr3.round_name IN ('Grand Final', 'Final', 'Finals')
+               AND cf3.status = 'completed'
+           ) THEN 1 ELSE 0 END as won
+    FROM cup_fixtures cf
+    JOIN cup_rounds cr ON cf.round_id = cr.id
+    JOIN cup_competitions cc ON cf.cup_id = cc.id
+    WHERE (cf.home_team_id = ? OR cf.away_team_id = ?) AND cf.status = 'completed'
+    GROUP BY cc.id
+    ORDER BY cc.year DESC, cc.name
+  `).all(teamId, teamId, teamId, teamId, teamId) as any[];
+
+  // ── Full league history (all seasons from snapshots) ──
+  const leagueHistory = snapshots.map((s: any) => ({
+    year: s.season_year,
+    league_name: s.league_name ?? 'League',
+    position: s.final_position,
+    played: s.played,
+    won: s.won,
+    lost: s.lost,
+    points: s.points,
+  }));
 
   // ── Available years ──
   const years = db.prepare(`
@@ -149,6 +186,8 @@ export async function GET(req: Request) {
     team,
     seasonStats,
     accolades,
+    cupHistory,
+    leagueHistory,
     availableYears: years.map(r => r.year),
   });
 }

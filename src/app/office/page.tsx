@@ -46,11 +46,11 @@ const MONTHLY_INCOME = 50_000;
 const MAX_PATIENCE = 3; // patience dots, MM3-style
 
 const POSITION_COLORS: Record<string, string> = {
-    'Setter': 'text-violet-400 bg-violet-400/10 border-violet-400/20',
-    'Outside Hitter': 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-    'Middle Blocker': 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
-    'Opposite Hitter': 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-    'Libero': 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+    'Setter': 'text-[#60a5fa] bg-[#3b82f6]/10 border-[#3b82f6]/30',
+    'Outside Hitter': 'text-[#fca5a5] bg-[#ef4444]/10 border-[#ef4444]/30',
+    'Middle Blocker': 'text-[#c4b5fd] bg-[#a78bfa]/10 border-[#a78bfa]/30',
+    'Opposite Hitter': 'text-[#fdba74] bg-[#fb923c]/10 border-[#fb923c]/30',
+    'Libero': 'text-[#86efac] bg-[#22c55e]/10 border-[#22c55e]/30',
 };
 
 const POSITION_SHORT: Record<string, string> = {
@@ -62,11 +62,11 @@ const POSITION_SHORT: Record<string, string> = {
 };
 
 const POSITION_BAR_COLOR: Record<string, string> = {
-    'Setter': 'bg-violet-500',
-    'Outside Hitter': 'bg-amber-500',
-    'Middle Blocker': 'bg-cyan-500',
-    'Opposite Hitter': 'bg-orange-500',
-    'Libero': 'bg-emerald-500',
+    'Setter': 'bg-[#3b82f6]',
+    'Outside Hitter': 'bg-[#ef4444]',
+    'Middle Blocker': 'bg-[#a78bfa]',
+    'Opposite Hitter': 'bg-[#fb923c]',
+    'Libero': 'bg-[#22c55e]',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -158,25 +158,26 @@ function StatCard({
     icon: React.ElementType; color: string; trend?: 'up' | 'down' | 'neutral';
 }) {
     const trendIcon = trend === 'up'
-        ? <TrendingUp size={12} className="text-emerald-400" />
+        ? <TrendingUp size={12} className="text-[var(--win)]" />
         : trend === 'down'
-            ? <TrendingDown size={12} className="text-red-400" />
+            ? <TrendingDown size={12} className="text-[var(--loss)]" />
             : null;
 
     return (
-        <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-5 flex flex-col gap-3 hover:border-white/20 transition-all duration-200">
+        <div className="surface-raised relative p-5 flex flex-col gap-3 card-hover overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--volt)]/60" />
             <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 uppercase tracking-widest font-medium">{label}</span>
-                <div className={`p-2 rounded-xl ${color}`}>
-                    <Icon size={16} />
+                <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-semibold">{label}</span>
+                <div className={`p-2 rounded ${color}`}>
+                    <Icon size={15} />
                 </div>
             </div>
             <div>
-                <p className="text-2xl font-bold text-white leading-none">{value}</p>
+                <p className="font-display text-3xl tracking-wide text-[var(--bone)] leading-none tabular">{value}</p>
                 {sub && (
-                    <div className="flex items-center gap-1 mt-1.5">
+                    <div className="flex items-center gap-1.5 mt-2">
                         {trendIcon}
-                        <p className="text-xs text-gray-500">{sub}</p>
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--ink-500)]">{sub}</p>
                     </div>
                 )}
             </div>
@@ -187,8 +188,8 @@ function StatCard({
 function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
     const pct = Math.min(100, (value / (max || 1)) * 100);
     return (
-        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+        <div className="w-full h-1 bg-white/[0.06] overflow-hidden">
+            <div className={`h-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
         </div>
     );
 }
@@ -203,23 +204,23 @@ function Stepper({
 }) {
     return (
         <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-400)] font-bold">{label}</span>
             <div className="flex items-center gap-3">
                 <button
                     onClick={() => onChange(Math.max(min, value - step))}
                     disabled={value <= min}
-                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                    className="w-9 h-9 rounded bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[var(--ink-300)] hover:bg-white/[0.08] hover:border-[var(--volt)]/40 hover:text-[var(--volt)] disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
                     aria-label={`Decrease ${label}`}
                 >
                     <Minus size={14} />
                 </button>
                 <div className="flex-1 text-center">
-                    <span className="text-lg font-bold text-white">{format(value)}</span>
+                    <span className="font-display text-xl text-[var(--bone)] tabular">{format(value)}</span>
                 </div>
                 <button
                     onClick={() => onChange(Math.min(max, value + step))}
                     disabled={value >= max}
-                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-300 hover:bg-white/10 hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                    className="w-9 h-9 rounded bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[var(--ink-300)] hover:bg-white/[0.08] hover:border-[var(--volt)]/40 hover:text-[var(--volt)] disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
                     aria-label={`Increase ${label}`}
                 >
                     <Plus size={14} />
@@ -229,22 +230,45 @@ function Stepper({
     );
 }
 
-// ─── Patience Dots (MM3-style) ─────────────────────────────────────────────────
-
 function PatienceDots({ patience }: { patience: number }) {
     return (
         <div className="flex items-center gap-1.5">
             {Array.from({ length: MAX_PATIENCE }).map((_, i) => (
                 <div
                     key={i}
-                    className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${i < patience
-                        ? 'bg-emerald-400 border-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
-                        : 'bg-transparent border-gray-600'
+                    className={`w-3.5 h-3.5 rounded-full border transition-all duration-300 ${i < patience
+                        ? 'bg-[var(--win)] border-[var(--win)] shadow-[0_0_8px_rgba(34,197,94,0.55)]'
+                        : 'bg-transparent border-[var(--ink-600)]'
                         }`}
                 />
             ))}
         </div>
     );
+}
+
+// ─── Yearly Cash Flow Row ─────────────────────────────────────────────────────
+
+interface YearlyAggregate {
+    year: string;
+    totalIncome: number;
+    totalExpenses: number;
+    net: number;
+    months: FinancialTransaction[];
+}
+
+function aggregateByYear(transactions: FinancialTransaction[]): YearlyAggregate[] {
+    const map: Record<string, YearlyAggregate> = {};
+    for (const tx of transactions) {
+        const year = tx.month.slice(0, 4);
+        if (!map[year]) map[year] = { year, totalIncome: 0, totalExpenses: 0, net: 0, months: [] };
+        const income = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
+        const expenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+        map[year].totalIncome += income;
+        map[year].totalExpenses += expenses;
+        map[year].net += tx.net;
+        map[year].months.push(tx);
+    }
+    return Object.values(map).sort((a, b) => b.year.localeCompare(a.year));
 }
 
 // ─── Cash Flow Breakdown Modal ────────────────────────────────────────────────
@@ -392,7 +416,7 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         <X size={14} />
                     </button>
 
-                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-3">Contract Negotiation</p>
+                    <p className="font-mono text-[10px] font-bold text-[var(--volt)] uppercase tracking-[0.28em] mb-3">Contract Negotiation</p>
 
                     <div className="flex items-center gap-4">
                         {/* Player portrait */}
@@ -554,21 +578,15 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         <button
                             onClick={handleSign}
                             disabled={signing || !canAffordBonus}
-                            className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-2
-                                ${signing
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
-                                    : !canAffordBonus
-                                        ? 'bg-white/5 text-gray-600 border border-white/5 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
-                                }`}
+                            className={`btn-volt w-full flex items-center justify-center gap-2 ${(!canAffordBonus || signing) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            <FileSignature size={16} />
-                            {signing ? 'Processing...' : 'Sign Contract'}
+                            <FileSignature size={15} />
+                            {signing ? 'Processing…' : 'Sign Contract'}
                         </button>
                     ) : (
-                        <div className="w-full py-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
+                        <div className="w-full py-3.5 rounded bg-[var(--win)]/15 border border-[var(--win)]/30 flex items-center justify-center gap-2 text-[var(--win)] font-display tracking-[0.1em] uppercase">
                             <CheckCircle size={16} />
-                            Contract Signed!
+                            Contract Signed
                         </div>
                     )}
                 </div>
@@ -593,6 +611,7 @@ export default function OfficePage() {
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [cashFlowExpanded, setCashFlowExpanded] = useState(true);
+    const [expandedYear, setExpandedYear] = useState<string | null>(null);
 
     const fetchData = useCallback(() => {
         if (!team) return;
@@ -687,24 +706,26 @@ export default function OfficePage() {
     }, [players]);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-up">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-white">Club Office</h1>
-                <p className="text-sm text-gray-400 mt-0.5">{team?.name || 'Your Club'} — Financial Management</p>
+            <div className="relative pb-5 border-b border-white/[0.06]">
+                <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
+                <p className="eyebrow mb-2">Office · Boardroom</p>
+                <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">CLUB OFFICE</h1>
+                <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider">{(team?.name || 'YOUR CLUB').toUpperCase()} // FINANCIAL MANAGEMENT</p>
             </div>
 
             {/* KPI Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard label="Club Funds" value={teamMoney !== null ? formatMoney(teamMoney) : '—'} sub="Total available budget" icon={DollarSign} color="bg-amber-500/15 text-amber-400" trend="neutral" />
-                <StatCard label="Monthly Income" value={formatMoney(MONTHLY_INCOME)} sub="Matchday + sponsorship" icon={TrendingUp} color="bg-emerald-500/15 text-emerald-400" trend="up" />
-                <StatCard label="Monthly Wages" value={formatMoney(totalWages)} sub={`${players.length} players on payroll`} icon={Users} color="bg-red-500/15 text-red-400" trend="down" />
+                <StatCard label="Club Funds" value={teamMoney !== null ? formatMoney(teamMoney) : '—'} sub="Available budget" icon={DollarSign} color="bg-[var(--volt)]/15 text-[var(--volt)]" trend="neutral" />
+                <StatCard label="Monthly Income" value={formatMoney(MONTHLY_INCOME)} sub="Matchday + sponsorship" icon={TrendingUp} color="bg-[var(--win)]/15 text-[var(--win)]" trend="up" />
+                <StatCard label="Monthly Wages" value={formatMoney(totalWages)} sub={`${players.length} players on payroll`} icon={Users} color="bg-[var(--loss)]/15 text-[var(--loss)]" trend="down" />
                 <StatCard
                     label="Net Cash Flow"
                     value={formatMoney(Math.abs(netCashflow))}
                     sub={netCashflow >= 0 ? 'Monthly surplus' : 'Monthly deficit'}
                     icon={netCashflow >= 0 ? TrendingUp : TrendingDown}
-                    color={netCashflow >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}
+                    color={netCashflow >= 0 ? 'bg-[var(--win)]/15 text-[var(--win)]' : 'bg-[var(--loss)]/15 text-[var(--loss)]'}
                     trend={netCashflow >= 0 ? 'up' : 'down'}
                 />
             </div>
@@ -712,10 +733,10 @@ export default function OfficePage() {
             {/* Middle Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Wage by Position */}
-                <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-5">
+                <div className="surface-raised p-5">
                     <div className="flex items-center gap-2 mb-4">
                         <BarChart3 size={16} className="text-amber-400" />
-                        <h2 className="text-sm font-semibold text-white">Wage by Position</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">WAGE BY POSITION</h2>
                     </div>
                     <div className="space-y-3">
                         {wageByPosition.length === 0
@@ -735,10 +756,10 @@ export default function OfficePage() {
                 </div>
 
                 {/* Contract Expiry Risk */}
-                <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-5">
+                <div className="surface-raised p-5">
                     <div className="flex items-center gap-2 mb-4">
                         <Calendar size={16} className="text-cyan-400" />
-                        <h2 className="text-sm font-semibold text-white">Contract Expiry Risk</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">CONTRACT EXPIRY RISK</h2>
                     </div>
                     <div className="space-y-3">
                         {[
@@ -763,10 +784,10 @@ export default function OfficePage() {
                 </div>
 
                 {/* Revenue Streams */}
-                <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-5">
+                <div className="surface-raised p-5">
                     <div className="flex items-center gap-2 mb-4">
                         <Zap size={16} className="text-violet-400" />
-                        <h2 className="text-sm font-semibold text-white">Revenue Streams</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">REVENUE STREAMS</h2>
                     </div>
                     <div className="space-y-2.5">
                         {[
@@ -795,7 +816,7 @@ export default function OfficePage() {
                     { label: 'Fan Rating', val: '72 / 100', sub: '+4 this season', icon: Star, color: 'text-violet-400 bg-violet-400/10' },
                     { label: 'Staff Costs', val: formatMoney(8_000), sub: 'Per month', icon: Users, color: 'text-red-400 bg-red-400/10' },
                 ].map(({ label, val, sub, icon: Icon, color }) => (
-                    <div key={label} className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 p-4 hover:border-white/20 transition-all duration-200 cursor-default">
+                    <div key={label} className="surface-raised p-4 hover:border-white/20 transition-all duration-200 cursor-default">
                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${color}`}>
                             <Icon size={16} />
                         </div>
@@ -807,14 +828,14 @@ export default function OfficePage() {
             </div>
 
             {/* Cash Flow History */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 overflow-hidden">
+            <div className="surface-raised overflow-hidden">
                 <div 
                     className="px-5 py-4 border-b border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors group"
                     onClick={() => setCashFlowExpanded(!cashFlowExpanded)}
                 >
                     <div className="flex items-center gap-2">
                         <Receipt size={16} className="text-amber-400" />
-                        <h2 className="text-sm font-semibold text-white">Monthly Cash Flow</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">MONTHLY CASH FLOW</h2>
                     </div>
                     <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
                         {cashFlowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -836,23 +857,51 @@ export default function OfficePage() {
                                     <span className="text-right">Expenses</span>
                                     <span className="text-right">Net</span>
                                 </div>
-                                {transactions.map(tx => {
-                                    const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
-                                    const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
-                                    const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+                                {aggregateByYear(transactions).map(yearRow => {
+                                    const isOpen = expandedYear === yearRow.year;
                                     return (
-                                        <div key={tx.id}
-                                            onClick={() => setSelectedTx(tx)}
-                                            className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3.5 items-center cursor-pointer hover:bg-white/[0.03] transition-colors">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                                                <span className="text-sm font-medium text-white">{monthLabel}</span>
+                                        <div key={yearRow.year}>
+                                            {/* Year summary row */}
+                                            <div
+                                                onClick={() => setExpandedYear(isOpen ? null : yearRow.year)}
+                                                className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-4 items-center cursor-pointer hover:bg-white/[0.03] transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <ChevronDown size={14} className={`text-amber-400 transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+                                                    <span className="font-display text-base tracking-wide text-white">{yearRow.year}</span>
+                                                    <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider">{yearRow.months.length} month{yearRow.months.length !== 1 ? 's' : ''}</span>
+                                                </div>
+                                                <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(yearRow.totalIncome)}</span>
+                                                <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(yearRow.totalExpenses)}</span>
+                                                <span className={`text-sm font-black text-right ${yearRow.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    {yearRow.net >= 0 ? '+' : ''}{formatMoney(yearRow.net)}
+                                                </span>
                                             </div>
-                                            <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(totalIncome)}</span>
-                                            <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
-                                            <span className={`text-sm font-black text-right ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
-                                            </span>
+                                            {/* Monthly breakdown */}
+                                            {isOpen && (
+                                                <div className="border-t border-white/5 bg-white/[0.015]">
+                                                    {yearRow.months.sort((a, b) => b.month.localeCompare(a.month)).map(tx => {
+                                                        const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long' });
+                                                        const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
+                                                        const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
+                                                        return (
+                                                            <div key={tx.id}
+                                                                onClick={() => setSelectedTx(tx)}
+                                                                className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3 items-center cursor-pointer hover:bg-white/[0.04] transition-colors border-b border-white/[0.03] last:border-0">
+                                                                <div className="flex items-center gap-3 pl-5">
+                                                                    <div className={`w-1 h-1 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                                                    <span className="text-sm text-gray-400">{monthLabel}</span>
+                                                                </div>
+                                                                <span className="text-xs text-emerald-400/80 font-semibold text-right">{formatMoney(totalIncome)}</span>
+                                                                <span className="text-xs text-red-400/80 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
+                                                                <span className={`text-xs font-bold text-right ${tx.net >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>
+                                                                    {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -863,10 +912,10 @@ export default function OfficePage() {
             </div>
 
             {/* Player Contracts Table */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800/80 border border-white/10 overflow-hidden">
+            <div className="surface-raised overflow-hidden">
                 <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
                     <div>
-                        <h2 className="text-sm font-semibold text-white">Player Contracts & Wages</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">PLAYER CONTRACTS & WAGES</h2>
                         <p className="text-[11px] text-gray-500 mt-0.5">{players.length} players — Click columns to sort</p>
                     </div>
                     <div className="text-right">

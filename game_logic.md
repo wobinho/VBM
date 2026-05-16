@@ -7,9 +7,10 @@
 - **Libero cannot score aces** — does not serve in official rules
 - **Setter rarely attacks** — 95% chance to NOT attack (primary role is setting)
 
-### Defensive Priorities
+### Priorities
 - **Libero priority on digs** — when opposing team attacks, libero receives higher weight for dig/defense selection
-- **Position-specific receive weight** — only L, OH1, OH2 are candidates for serve receive
+- **Position-specific receive weight** — only L, OH1, OH2, OPP are candidates for serve receive
+- **Middle blockers are high priority blockers** — MB1 and MB2 should have highest block weights
 
 ---
 
