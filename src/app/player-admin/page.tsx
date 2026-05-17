@@ -180,6 +180,7 @@ export default function PlayerAdminPage() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchResults, setBatchResults] = useState<{ name: string; success: boolean; error?: string }[] | null>(null);
   const [batchPresetOpen, setBatchPresetOpen] = useState<string | null>(null);
+  const [addFromPresetOpen, setAddFromPresetOpen] = useState(false);
 
   // Stat Presets
   const [presets, setPresets] = useState<StatPreset[]>([]);
@@ -280,6 +281,7 @@ export default function PlayerAdminPage() {
     setEditorSearch('');
     setDeleteConfirm(false);
     setEditorInfo({
+      player_id:      player.id ?? '',
       player_name:    player.player_name ?? '',
       team_id:        player.team_id ?? '',
       position:       player.position ?? '',
@@ -316,7 +318,9 @@ export default function PlayerAdminPage() {
     setEditorSaving(true);
     const position = editorInfo.position || editorPlayer.position;
     const overall = calculateOverall(editorStats, position);
-    const payload = {
+    const newId = editorInfo.player_id !== '' && Number(editorInfo.player_id) !== editorPlayer.id
+      ? Number(editorInfo.player_id) : undefined;
+    const payload: Record<string, unknown> = {
       ...editorStats,
       overall,
       player_name:    editorInfo.player_name,
@@ -330,6 +334,7 @@ export default function PlayerAdminPage() {
       contract_years: Number(editorInfo.contract_years),
       monthly_wage:   Number(editorInfo.monthly_wage),
       player_value:   Number(editorInfo.player_value),
+      ...(newId !== undefined ? { new_id: newId } : {}),
     };
     try {
       const res = await fetch(`/api/players/${editorPlayer.id}`, {
@@ -338,9 +343,10 @@ export default function PlayerAdminPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        const updated = { ...editorPlayer, ...payload };
+        const finalId = newId ?? editorPlayer.id;
+        const updated = { ...editorPlayer, ...payload, id: finalId };
         setEditorPlayer(updated);
-        setAllPlayers(prev => prev.map(p => p.id === editorPlayer.id ? { ...p, ...payload } : p));
+        setAllPlayers(prev => prev.map(p => p.id === editorPlayer.id ? { ...p, ...payload, id: finalId } : p));
         setEditorSuccess(true);
         setTimeout(() => setEditorSuccess(false), 3000);
       } else {
@@ -408,6 +414,17 @@ export default function PlayerAdminPage() {
       r.rowId === rowId ? { ...r, info: { ...r.info, position: preset.position }, stats: { ...preset.stats } } : r
     ));
     setBatchPresetOpen(null);
+  };
+
+  const addRowFromPreset = (preset: StatPreset) => {
+    const row: BatchRow = {
+      rowId: crypto.randomUUID(),
+      info: { ...DEFAULT_QUICK_ADD, position: preset.position },
+      stats: { ...preset.stats },
+      expanded: false,
+    };
+    setBatchRows(prev => [...prev, row]);
+    setAddFromPresetOpen(false);
   };
 
   // ── Batch Add Queue ─────────────────────────────────────────────────────────
@@ -719,6 +736,10 @@ export default function PlayerAdminPage() {
             <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Player Info</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <label className={LABEL_CLS}>Player ID</label>
+                  <input type="number" min={1} value={editorInfo.player_id ?? ''} onChange={e => setEditorInfo((p: RowData) => ({ ...p, player_id: e.target.value }))} className={INPUT_CLS} />
+                </div>
                 <div className="space-y-1">
                   <label className={LABEL_CLS}>Name</label>
                   <input type="text" value={editorInfo.player_name ?? ''} onChange={e => setEditorInfo((p: RowData) => ({ ...p, player_name: e.target.value }))} className={INPUT_CLS} />
@@ -1071,12 +1092,47 @@ export default function PlayerAdminPage() {
               <p className="text-sm text-gray-400">Queue multiple players, expand any row to fine-tune stats, then submit all at once</p>
             </div>
           </div>
-          <button
-            onClick={() => setBatchRows(prev => [...prev, newBatchRow()])}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 text-green-400 rounded-lg text-sm font-semibold transition-all cursor-pointer active:scale-95 shrink-0"
-          >
-            <Plus size={16} /> Add Row
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {presets.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setAddFromPresetOpen(o => !o)}
+                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-semibold transition-all cursor-pointer active:scale-95 ${addFromPresetOpen ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-violet-500/10 border-violet-500/30 hover:bg-violet-500/20 text-violet-400'}`}
+                >
+                  <BookmarkPlus size={16} /> From Preset
+                </button>
+                {addFromPresetOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-[#13131f] border border-violet-500/20 rounded-xl shadow-2xl z-30 overflow-hidden">
+                    <p className="px-3 py-2 text-[10px] font-bold text-violet-400 uppercase tracking-wider border-b border-white/10">Add Row from Preset</p>
+                    {presets.map(preset => {
+                      const pc = POSITION_COLORS[preset.position];
+                      const ovr = preset.position ? calculateOverall(preset.stats, preset.position) : 0;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => addRowFromPreset(preset)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0"
+                        >
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${pc?.text.replace('text-', 'bg-') ?? 'bg-gray-400'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">{preset.name}</p>
+                            <p className="text-[10px] text-gray-500">{preset.position}</p>
+                          </div>
+                          <span className={`text-xs font-black tabular-nums shrink-0 ${ovr >= 80 ? 'text-emerald-400' : ovr >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{ovr}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setBatchRows(prev => [...prev, newBatchRow()])}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 text-green-400 rounded-lg text-sm font-semibold transition-all cursor-pointer active:scale-95"
+            >
+              <Plus size={16} /> Add Row
+            </button>
+          </div>
         </div>
 
         {batchRows.length === 0 ? (
@@ -1102,6 +1158,15 @@ export default function PlayerAdminPage() {
                   {/* Compact info row */}
                   <div className="flex items-center gap-2 p-3 bg-white/[0.03]">
                     <span className="text-xs text-gray-600 w-5 text-center shrink-0 tabular-nums">{idx + 1}</span>
+
+                    <input
+                      type="number"
+                      min={1}
+                      value={row.info.player_id}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'player_id', e.target.value)}
+                      placeholder="ID"
+                      className="w-14 px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:border-green-500/50 focus:outline-none transition-all shrink-0"
+                    />
 
                     <input
                       type="text"

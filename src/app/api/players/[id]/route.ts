@@ -21,9 +21,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             data.overall = calculateOverall(merged, merged.position ?? '');
         }
 
+        const newId = data.new_id !== undefined ? Number(data.new_id) : Number(id);
         updatePlayer(Number(id), data);
-        const player = getPlayerById(Number(id));
-        return NextResponse.json(player);
+        const player = getPlayerById(newId);
+        return NextResponse.json({ ...player, id: newId });
     } catch (error) {
         console.error('PATCH /api/players/[id] error:', error);
         return NextResponse.json({ error: String(error) }, { status: 500 });

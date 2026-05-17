@@ -202,7 +202,7 @@ export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_a
     }
 }
 
-export function updatePlayer(id: number, data: Partial<Player>) {
+export function updatePlayer(originalId: number, data: Partial<Player> & { new_id?: number }) {
     const allowedFields = [
         'player_name', 'team_id', 'position', 'age', 'country', 'jersey_number', 'overall',
         'height', 'potential',
@@ -215,6 +215,11 @@ export function updatePlayer(id: number, data: Partial<Player>) {
     const updates: Record<string, unknown> = {};
     for (const key of allowedFields) {
         if (key in data) updates[key] = (data as Record<string, unknown>)[key];
+    }
+    let id = originalId;
+    if (data.new_id !== undefined && data.new_id !== originalId) {
+        getDb().prepare(`UPDATE players SET id = @new_id WHERE id = @id`).run({ new_id: data.new_id, id: originalId });
+        id = data.new_id;
     }
     if (Object.keys(updates).length === 0) return;
     const fields = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');

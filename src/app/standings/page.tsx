@@ -152,19 +152,13 @@ export default function StandingsPage() {
         );
     }
 
-    function StandingsTable({ conferenceTeams, title, accentColor = "amber" }: { conferenceTeams: Team[]; title: string; accentColor?: string }) {
+    function StandingsTable({ conferenceTeams, title, accentColor = "amber", relegatedTeamIds }: { conferenceTeams: Team[]; title: string; accentColor?: string; relegatedTeamIds?: Set<number> }) {
         const total = conferenceTeams.length;
         const accent = accentColor === 'sky' ? 'var(--info)' : accentColor === 'violet' ? 'var(--epic)' : 'var(--volt)';
         const accentHex = accentColor === 'sky' ? '#22d3ee' : accentColor === 'violet' ? '#a78bfa' : '#facc15';
         const leader = conferenceTeams[0];
         const totalPoints = conferenceTeams.reduce((s, t) => s + t.points, 0);
 
-        // Medal config for top 3
-        const MEDAL = [
-            { tier: 'GOLD',   text: 'text-yellow-300',  ring: 'ring-yellow-300/45', bg: 'from-yellow-300/15 via-yellow-300/[0.04]', rail: 'bg-yellow-300', name: 'CHAMPION' },
-            { tier: 'SILVER', text: 'text-zinc-200',    ring: 'ring-zinc-200/35',   bg: 'from-zinc-200/12 via-zinc-200/[0.04]',     rail: 'bg-zinc-300',   name: 'RUNNER-UP' },
-            { tier: 'BRONZE', text: 'text-orange-300',  ring: 'ring-orange-300/35', bg: 'from-orange-400/14 via-orange-400/[0.04]', rail: 'bg-orange-400', name: 'THIRD' },
-        ] as const;
 
         return (
             <div>
@@ -210,33 +204,28 @@ export default function StandingsPage() {
                         </div>
 
                         {conferenceTeams.map((team, idx) => {
-                            const isTop3 = idx < 3;
                             const isTop4 = idx < 4;
-                            const isBottom = idx === total - 1;
+                            const isBottom = relegatedTeamIds !== undefined
+                                ? relegatedTeamIds.has(team.id)
+                                : idx === total - 1;
                             const isUserTeam = userTeam?.id === team.id;
                             const pd = team.score_diff;
-                            const medal = isTop3 ? MEDAL[idx] : null;
                             const pointsPct = totalPoints > 0 ? Math.max(4, Math.round((team.points / Math.max(...conferenceTeams.map(t => t.points), 1)) * 100)) : 0;
 
-                            // Row background gradient
+                            // Row background
                             let bgClass = 'hover:bg-white/[0.045]';
                             if (isUserTeam) bgClass = 'bg-[var(--volt)]/[0.09] hover:bg-[var(--volt)]/[0.14]';
                             else if (isBottom) bgClass = 'hover:bg-[var(--loss)]/[0.06]';
 
-                            // Left rail color (3px)
+                            // Left rail color
                             let railColor = 'transparent';
                             if (isUserTeam) railColor = 'var(--volt)';
-                            else if (medal) railColor = medal === MEDAL[0] ? '#facc15' : medal === MEDAL[1] ? '#e4e4e7' : '#fb923c';
+                            else if (isTop4) railColor = 'rgba(250,204,21,0.50)';
                             else if (isBottom) railColor = 'rgba(239,68,68,0.65)';
-                            else if (isTop4) railColor = 'rgba(250,204,21,0.30)';
 
                             return (
                                 <div key={team.id}
                                     className={`group relative ${idx < total - 1 ? 'border-b border-white/[0.04]' : ''}`}>
-                                    {/* Medal-tier wash for top 3 */}
-                                    {medal && !isUserTeam && (
-                                        <div className={`absolute inset-0 bg-gradient-to-r ${medal.bg} to-transparent pointer-events-none`} />
-                                    )}
                                     {/* Relegation hazard stripe */}
                                     {isBottom && !isUserTeam && (
                                         <div className="absolute inset-0 opacity-[0.08] pointer-events-none"
@@ -253,53 +242,32 @@ export default function StandingsPage() {
                                         style={{ borderLeftColor: railColor }}
                                         onClick={() => setSelectedTeam({ ...team, rank: idx + 1 })}
                                     >
-                                        {/* Rank pill */}
+                                        {/* Rank */}
                                         <div className="w-6 md:w-8 flex items-center justify-center">
-                                            {medal ? (
-                                                <div className={`relative w-7 h-7 md:w-8 md:h-8 rounded-sm flex items-center justify-center ring-1 ${medal.ring} bg-black/40`}>
-                                                    <span className={`font-display text-sm md:text-base ${medal.text} tabular leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]`}>{idx + 1}</span>
-                                                    {idx === 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-300 shadow-[0_0_8px_rgba(250,204,21,0.7)]" />}
-                                                </div>
-                                            ) : (
-                                                <span className={`font-display text-sm md:text-base tabular leading-none ${
-                                                    isUserTeam ? 'text-[var(--volt)]' :
-                                                    isTop4 ? 'text-[var(--volt)]/65' :
-                                                    isBottom ? 'text-[var(--loss)]/70' :
-                                                    'text-[var(--ink-500)]'
-                                                }`}>{idx + 1}</span>
-                                            )}
+                                            <span className={`font-display text-sm md:text-base tabular leading-none ${
+                                                isUserTeam ? 'text-[var(--volt)]' :
+                                                isTop4 ? 'text-[var(--volt)]/65' :
+                                                isBottom ? 'text-[var(--loss)]/70' :
+                                                'text-[var(--ink-500)]'
+                                            }`}>{idx + 1}</span>
                                         </div>
 
                                         {/* Team */}
                                         <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
-                                            <div className={`relative ${medal ? `rounded-sm p-0.5 ring-1 ${medal.ring}` : ''}`}>
-                                                <TeamLogo teamId={team.id} size={medal ? 30 : 28} />
-                                            </div>
+                                            <TeamLogo teamId={team.id} size={28} />
                                             <div className="flex flex-col min-w-0">
                                                 <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
                                                     <span className={`font-semibold text-xs md:text-sm truncate ${
                                                         isUserTeam ? 'text-[var(--volt)] font-bold tracking-wide' :
-                                                        idx === 0 ? 'text-yellow-100' :
-                                                        idx === 1 ? 'text-zinc-100' :
-                                                        idx === 2 ? 'text-orange-200' :
                                                         isBottom ? 'text-[var(--loss)]/80' :
                                                         'text-[var(--bone)]'
                                                     }`}>{team.team_name}</span>
                                                     <CountryFlag country={team.country} />
                                                 </div>
-                                                {(medal || isUserTeam) && (
-                                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                                        {isUserTeam && (
-                                                            <span className="font-mono text-[8px] font-black uppercase tracking-[0.28em] px-1 py-[1px] rounded-[2px] bg-[var(--volt)] text-[var(--ink-950)]">
-                                                                My Club
-                                                            </span>
-                                                        )}
-                                                        {medal && !isUserTeam && (
-                                                            <span className={`font-mono text-[8px] font-black uppercase tracking-[0.28em] ${medal.text}`}>
-                                                                {medal.name}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                {isUserTeam && (
+                                                    <span className="font-mono text-[8px] font-black uppercase tracking-[0.28em] px-1 py-[1px] rounded-[2px] bg-[var(--volt)] text-[var(--ink-950)] mt-0.5 self-start">
+                                                        My Club
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
@@ -316,11 +284,10 @@ export default function StandingsPage() {
                                             <div className="hidden md:block w-10 h-[3px] bg-white/[0.05] rounded-full overflow-hidden">
                                                 <div className="h-full rounded-full" style={{
                                                     width: `${pointsPct}%`,
-                                                    background: medal ? (idx === 0 ? '#facc15' : idx === 1 ? '#e4e4e7' : '#fb923c') : isUserTeam ? 'var(--volt)' : isBottom ? 'var(--loss)' : accent,
+                                                    background: isUserTeam ? 'var(--volt)' : isBottom ? 'var(--loss)' : accent,
                                                 }} />
                                             </div>
                                             <span className={`font-display text-lg md:text-2xl tabular leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)] ${
-                                                medal ? medal.text :
                                                 isUserTeam ? 'text-[var(--volt)]' :
                                                 team.points > 0 ? 'text-[var(--bone)]' :
                                                 'text-[var(--ink-500)]'
@@ -334,17 +301,15 @@ export default function StandingsPage() {
                         {/* Legend */}
                         <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 md:px-6 py-3 border-t border-white/[0.04] bg-[var(--ink-950)]/30">
                             <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-[2px] bg-yellow-300" />
-                                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Podium 1–3</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]/65" />
                                 <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Top 4 · Playoff</span>
                             </div>
+                            {(relegatedTeamIds === undefined || relegatedTeamIds.size > 0) && (
                             <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-[2px] bg-[var(--loss)]/65" />
                                 <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Relegation</span>
                             </div>
+                            )}
                             {userTeam && conferenceTeams.some(t => t.id === userTeam.id) && (
                                 <div className="flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]" />
@@ -589,10 +554,22 @@ export default function StandingsPage() {
                                                 <StandingsTable conferenceTeams={northTeams} title="North Conference" accentColor="sky" />
                                                 <StandingsTable conferenceTeams={southTeams} title="South Conference" accentColor="violet" />
                                             </div>
-                                        ) : (
+                                        ) : hasTwoConf ? (
+                                            // Overall view for multi-conference league: relegate last of each conference
                                             <StandingsTable
                                                 conferenceTeams={leagueTeams}
                                                 title={selectedLeague?.league_name ?? 'Standings'}
+                                                relegatedTeamIds={new Set([
+                                                    ...(northTeams.length > 0 ? [northTeams[northTeams.length - 1].id] : []),
+                                                    ...(southTeams.length > 0 ? [southTeams[southTeams.length - 1].id] : []),
+                                                ])}
+                                            />
+                                        ) : (
+                                            // Single-conference league: no relegation
+                                            <StandingsTable
+                                                conferenceTeams={leagueTeams}
+                                                title={selectedLeague?.league_name ?? 'Standings'}
+                                                relegatedTeamIds={new Set()}
                                             />
                                         )}
                                     </div>

@@ -2,13 +2,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield, BarChart2, Dumbbell } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false, group: 'PLAY' },
     { href: '/squad', label: 'Squad', icon: Users, adminOnly: false, group: 'PLAY' },
     { href: '/team', label: 'Team', icon: UserCircle, adminOnly: false, group: 'PLAY' },
+    { href: '/training', label: 'Training', icon: Dumbbell, adminOnly: false, group: 'PLAY' },
     { href: '/office', label: 'Office', icon: Briefcase, adminOnly: false, group: 'PLAY' },
     { href: '/standings', label: 'Standings', icon: ListOrdered, adminOnly: false, group: 'COMPETE' },
     { href: '/playoffs', label: 'Playoffs', icon: Trophy, adminOnly: false, group: 'COMPETE' },

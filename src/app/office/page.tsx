@@ -422,7 +422,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         {/* Player portrait */}
                         <div className="relative shrink-0">
                             <PlayerAvatar playerId={player.id} size={64} />
-                            {/* Overall badge */}
                             <div className={`absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-lg border border-black/40 flex items-center justify-center text-[11px] font-black ${overallColor} bg-gray-900`}>
                                 {player.overall}
                             </div>
@@ -503,8 +502,8 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                                 </button>
                                 <div className="relative flex-1 group">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={wage.toLocaleString()}
                                         onChange={(e) => {
                                             const raw = e.target.value.replace(/[^0-9]/g, '');
@@ -536,8 +535,8 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                                 </button>
                                 <div className="relative flex-1 group">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-500 group-focus-within:text-amber-400">$</span>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={bonus.toLocaleString()}
                                         onChange={(e) => {
                                             const raw = e.target.value.replace(/[^0-9]/g, '');
@@ -609,9 +608,7 @@ export default function OfficePage() {
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [negotiating, setNegotiating] = useState<Player | null>(null);
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-    const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [cashFlowExpanded, setCashFlowExpanded] = useState(true);
-    const [expandedYear, setExpandedYear] = useState<string | null>(null);
 
     const fetchData = useCallback(() => {
         if (!team) return;
@@ -829,13 +826,13 @@ export default function OfficePage() {
 
             {/* Cash Flow History */}
             <div className="surface-raised overflow-hidden">
-                <div 
+                <div
                     className="px-5 py-4 border-b border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors group"
                     onClick={() => setCashFlowExpanded(!cashFlowExpanded)}
                 >
                     <div className="flex items-center gap-2">
                         <Receipt size={16} className="text-amber-400" />
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">MONTHLY CASH FLOW</h2>
+                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">YEARLY CASH FLOW</h2>
                     </div>
                     <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
                         {cashFlowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -852,59 +849,27 @@ export default function OfficePage() {
                             <div className="divide-y divide-white/5">
                                 {/* Column headers */}
                                 <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
-                                    <span>Period</span>
+                                    <span>Year</span>
                                     <span className="text-right">Income</span>
                                     <span className="text-right">Expenses</span>
                                     <span className="text-right">Net</span>
                                 </div>
-                                {aggregateByYear(transactions).map(yearRow => {
-                                    const isOpen = expandedYear === yearRow.year;
-                                    return (
-                                        <div key={yearRow.year}>
-                                            {/* Year summary row */}
-                                            <div
-                                                onClick={() => setExpandedYear(isOpen ? null : yearRow.year)}
-                                                className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-4 items-center cursor-pointer hover:bg-white/[0.03] transition-colors group"
-                                            >
-                                                <div className="flex items-center gap-2.5">
-                                                    <ChevronDown size={14} className={`text-amber-400 transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
-                                                    <span className="font-display text-base tracking-wide text-white">{yearRow.year}</span>
-                                                    <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider">{yearRow.months.length} month{yearRow.months.length !== 1 ? 's' : ''}</span>
-                                                </div>
-                                                <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(yearRow.totalIncome)}</span>
-                                                <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(yearRow.totalExpenses)}</span>
-                                                <span className={`text-sm font-black text-right ${yearRow.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                    {yearRow.net >= 0 ? '+' : ''}{formatMoney(yearRow.net)}
-                                                </span>
-                                            </div>
-                                            {/* Monthly breakdown */}
-                                            {isOpen && (
-                                                <div className="border-t border-white/5 bg-white/[0.015]">
-                                                    {yearRow.months.sort((a, b) => b.month.localeCompare(a.month)).map(tx => {
-                                                        const monthLabel = new Date(tx.month + '-02').toLocaleString('default', { month: 'long' });
-                                                        const totalIncome = tx.income_matchday + tx.income_sponsorship + tx.income_merchandise + tx.income_broadcast + tx.income_other;
-                                                        const totalExpenses = tx.expense_wages + tx.expense_staff + tx.expense_other;
-                                                        return (
-                                                            <div key={tx.id}
-                                                                onClick={() => setSelectedTx(tx)}
-                                                                className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-3 items-center cursor-pointer hover:bg-white/[0.04] transition-colors border-b border-white/[0.03] last:border-0">
-                                                                <div className="flex items-center gap-3 pl-5">
-                                                                    <div className={`w-1 h-1 rounded-full shrink-0 ${tx.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                                                                    <span className="text-sm text-gray-400">{monthLabel}</span>
-                                                                </div>
-                                                                <span className="text-xs text-emerald-400/80 font-semibold text-right">{formatMoney(totalIncome)}</span>
-                                                                <span className="text-xs text-red-400/80 font-semibold text-right">-{formatMoney(totalExpenses)}</span>
-                                                                <span className={`text-xs font-bold text-right ${tx.net >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>
-                                                                    {tx.net >= 0 ? '+' : ''}{formatMoney(tx.net)}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
+                                {aggregateByYear(transactions).map(yearRow => (
+                                    <div
+                                        key={yearRow.year}
+                                        className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-4 items-center hover:bg-white/[0.03] transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="font-display text-base tracking-wide text-white">{yearRow.year}</span>
+                                            <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider">{yearRow.months.length} mo</span>
                                         </div>
-                                    );
-                                })}
+                                        <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(yearRow.totalIncome)}</span>
+                                        <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(yearRow.totalExpenses)}</span>
+                                        <span className={`text-sm font-black text-right ${yearRow.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {yearRow.net >= 0 ? '+' : ''}{formatMoney(yearRow.net)}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </>
@@ -1057,10 +1022,6 @@ export default function OfficePage() {
                 />
             )}
 
-            {/* Cash Flow Breakdown Modal */}
-            {selectedTx && (
-                <CashFlowModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
-            )}
         </div>
     );
 }
