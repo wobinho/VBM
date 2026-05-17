@@ -85,6 +85,15 @@ function generatePlayer(teamId: number | null, jerseyNumber: number, overallTarg
     const monthlyWage = Math.round(overall * rand(50, 200));
     const playerValue = calculatePlayerValue(overall, age);
 
+    // Potential: younger players get more headroom; veterans cluster near current OVR.
+    let headroom: number;
+    if (age <= 20)      headroom = rand(8, 20);
+    else if (age <= 23) headroom = rand(5, 14);
+    else if (age <= 26) headroom = rand(2, 9);
+    else if (age <= 30) headroom = rand(0, 5);
+    else                headroom = rand(0, 2);
+    const potential = clamp(overall + headroom, overall, 99);
+
     return {
         player_name: `${firstName} ${lastName}`,
         team_id: teamId,
@@ -93,6 +102,7 @@ function generatePlayer(teamId: number | null, jerseyNumber: number, overallTarg
         country,
         jersey_number: jerseyNumber,
         overall,
+        potential,
         attack, defense, serve, block, receive, setting,
         precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
         speed, agility, strength, endurance, vertical, flexibility, torque, balance,
@@ -134,14 +144,14 @@ export function seedDatabase(db: Database.Database) {
     // Insert players for each team (10-12 players per team)
     const insertPlayer = db.prepare(`
     INSERT INTO players (
-      player_name, team_id, position, age, country, jersey_number, overall,
+      player_name, team_id, position, age, country, jersey_number, overall, potential,
       attack, defense, serve, block, receive, setting,
       precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
       speed, agility, strength, endurance, vertical, flexibility, torque, balance,
       leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
       contract_years, monthly_wage, player_value
     ) VALUES (
-      @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
+      @player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @potential,
       @attack, @defense, @serve, @block, @receive, @setting,
       @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
       @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,

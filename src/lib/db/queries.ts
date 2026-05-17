@@ -1,7 +1,7 @@
 import { getDb } from './index';
 import { generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
 import { generateScheduleForLeague, generatePostSeason, shouldGeneratePostSeason, processPromotionRelegationByConfig } from '../league-engine';
-import { calculateOverall as calcOvr, ALL_STAT_KEYS } from '../overall';
+import { calculateOverall as calcOvr, calculateOverallCapped, ALL_STAT_KEYS } from '../overall';
 import { computeEconomyMultipliers, type OfficeFacilityKey } from '../office/facilities';
 
 // ==================== TYPES ====================
@@ -68,7 +68,7 @@ function recomputeOverall(player: Player): Player {
     for (const k of ALL_STAT_KEYS) {
         stats[k] = (player as unknown as Record<string, number>)[k] ?? 50;
     }
-    const overall = calcOvr(stats, player.position ?? '');
+    const overall = calculateOverallCapped(stats, player.position ?? '', player.potential);
     return { ...player, overall };
 }
 
@@ -181,24 +181,25 @@ export function searchPlayers(term: string): Player[] {
 
 export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_at' | 'team_name'> & { id?: number }): number {
     const hasCustomId = data.id !== undefined;
-    const cols = `player_name, team_id, position, age, country, jersey_number, overall,
+    const cols = `player_name, team_id, position, age, country, jersey_number, overall, height, potential,
           attack, defense, serve, block, receive, setting,
           precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
           speed, agility, strength, endurance, vertical, flexibility, torque, balance,
           leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
           contract_years, monthly_wage, player_value`;
-    const vals = `@player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
+    const vals = `@player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @height, @potential,
           @attack, @defense, @serve, @block, @receive, @setting,
           @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
           @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
           @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
           @contract_years, @monthly_wage, @player_value`;
+    const row = { height: null, potential: null, ...data } as Record<string, unknown>;
 
     if (hasCustomId) {
-        getDb().prepare(`INSERT INTO players (id, ${cols}) VALUES (@id, ${vals})`).run(data);
+        getDb().prepare(`INSERT INTO players (id, ${cols}) VALUES (@id, ${vals})`).run(row);
         return data.id!;
     } else {
-        const result = getDb().prepare(`INSERT INTO players (${cols}) VALUES (${vals})`).run(data);
+        const result = getDb().prepare(`INSERT INTO players (${cols}) VALUES (${vals})`).run(row);
         return Number(result.lastInsertRowid);
     }
 }

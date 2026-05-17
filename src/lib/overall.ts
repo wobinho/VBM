@@ -81,3 +81,18 @@ export function calculateOverall(stats: Record<string, number>, position: string
   const raw = main1 * 0.40 + main2 * 0.35 + secAvg * 0.20 + otherAvg * 0.05;
   return Math.max(1, Math.min(99, Math.round(raw)));
 }
+
+/**
+ * Overall with a hard cap at the player's potential. Used everywhere the
+ * displayed/stored overall is derived — a player's overall can never exceed
+ * their potential, regardless of how high individual stats climb.
+ */
+export function calculateOverallCapped(
+  stats: Record<string, number>,
+  position: string,
+  potential: number | null | undefined,
+): number {
+  const ovr = calculateOverall(stats, position);
+  if (potential == null) return ovr;
+  return Math.min(ovr, potential);
+}

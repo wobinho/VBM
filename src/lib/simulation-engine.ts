@@ -147,8 +147,11 @@ function weightedPick(players: SimPlayer[], weightFn: (p: SimPlayer) => number):
 
 function pickServer(lu: SimLineup): SimPlayer | null {
   const all = Object.values(lu).filter(Boolean) as SimPlayer[];
-  return all.length
-    ? weightedPick(all, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15)
+  // Liberos do not serve in standard indoor volleyball
+  const eligible = all.filter(p => p.position !== 'Libero');
+  const pool = eligible.length ? eligible : all;
+  return pool.length
+    ? weightedPick(pool, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15)
     : null;
 }
 
@@ -159,10 +162,21 @@ function pickReceiver(lu: SimLineup): SimPlayer | null {
     : null;
 }
 
+// Real-volleyball set distribution: Outside Hitters are the primary attacking option,
+// Opposite gets right-side sets, Middles run quicks (lower volume), Setters rarely attack (dumps only).
+function attackerPositionMultiplier(pos: string): number {
+  if (pos === 'Outside Hitter')  return 1.55;
+  if (pos === 'Opposite Hitter') return 1.10;
+  if (pos === 'Middle Blocker')  return 0.70;
+  if (pos === 'Setter')          return 0.15;
+  if (pos === 'Libero')          return 0.05;
+  return 1.0;
+}
+
 function pickAttacker(lu: SimLineup): SimPlayer | null {
   const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
   return cands.length
-    ? weightedPick(cands, p => p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10)
+    ? weightedPick(cands, p => (p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10) * attackerPositionMultiplier(p.position))
     : null;
 }
 

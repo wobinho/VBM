@@ -1047,10 +1047,15 @@ export default function OfficePage() {
             .then(r => r.json())
             .then((data: FinancialTransaction[]) => { if (Array.isArray(data)) setTransactions(data); });
         fetch('/api/office/facility')
-            .then(r => r.json())
+            .then(async r => {
+                const text = await r.text();
+                if (!text) return null;
+                try { return JSON.parse(text); } catch { return null; }
+            })
             .then((data) => {
-                if (data?.facilities) setOfficeFacilities(data.facilities);
-                if (data?.teamMoney !== undefined) setTeamMoney(data.teamMoney);
+                if (!data) return;
+                if (data.facilities) setOfficeFacilities(data.facilities);
+                if (data.teamMoney !== undefined) setTeamMoney(data.teamMoney);
             });
     }, [team]);
 

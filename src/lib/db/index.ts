@@ -67,6 +67,20 @@ export function getDb(): Database.Database {
     if (!playerColNames.includes('potential')) {
       db.exec(`ALTER TABLE players ADD COLUMN potential INTEGER`);
     }
+    // Backfill potential for any player missing one. Younger players get more
+    // headroom over current OVR; veterans land near their current rating.
+    db.exec(`
+      UPDATE players SET potential = MIN(99, MAX(overall,
+        overall + CAST(
+          CASE
+            WHEN age <= 20 THEN 8 + ABS(RANDOM() % 13)
+            WHEN age <= 23 THEN 5 + ABS(RANDOM() % 10)
+            WHEN age <= 26 THEN 2 + ABS(RANDOM() % 8)
+            WHEN age <= 30 THEN ABS(RANDOM() % 6)
+            ELSE ABS(RANDOM() % 3)
+          END AS INTEGER)
+      )) WHERE potential IS NULL
+    `);
     if (!playerColNames.includes('created_at')) {
       db.exec(`ALTER TABLE players ADD COLUMN created_at TEXT`);
     }
@@ -525,6 +539,63 @@ export function getDb(): Database.Database {
         .run(JSON.stringify(div2Config), 'Division 2 Standard');
       db.prepare("UPDATE league_presets SET config = ? WHERE preset_name = ?")
         .run(JSON.stringify(superligaPolskaConfig), 'Superliga Polska Standard');
+    }
+
+    // Migration: training tables (facilities, coaches, assignments, stat gains)
+    const trainingFacilitiesCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='training_facilities'"
+    ).get();
+    if (!trainingFacilitiesCheck) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS training_facilities (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          team_id       INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          facility_type TEXT    NOT NULL,
+          level         INTEGER NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 5),
+          upgraded_at   TEXT    DEFAULT (datetime('now')),
+          created_at    TEXT    DEFAULT (datetime('now')),
+          UNIQUE(team_id, facility_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tf_team_id ON training_facilities(team_id);
+
+        CREATE TABLE IF NOT EXISTS training_coaches (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          team_id      INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          coach_name   TEXT    NOT NULL,
+          specialty    TEXT    NOT NULL,
+          quality      INTEGER NOT NULL CHECK (quality BETWEEN 1 AND 100),
+          monthly_wage REAL    NOT NULL DEFAULT 3000.0,
+          hire_date    TEXT    NOT NULL DEFAULT (datetime('now')),
+          created_at   TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tc_team_id ON training_coaches(team_id);
+
+        CREATE TABLE IF NOT EXISTS training_assignments (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          player_id     INTEGER NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+          plan_key      TEXT    NOT NULL,
+          started_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+          stat_progress TEXT    NOT NULL DEFAULT '{}',
+          last_tick     TEXT    NOT NULL DEFAULT (datetime('now')),
+          created_at    TEXT    DEFAULT (datetime('now')),
+          updated_at    TEXT    DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ta_player_id ON training_assignments(player_id);
+
+        CREATE TABLE IF NOT EXISTS training_stat_gains (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+          stat_key   TEXT    NOT NULL,
+          old_value  INTEGER NOT NULL,
+          new_value  INTEGER NOT NULL,
+          plan_key   TEXT    NOT NULL,
+          gained_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tsg_player_id ON training_stat_gains(player_id);
+        CREATE INDEX IF NOT EXISTS idx_tsg_team_id   ON training_stat_gains(team_id);
+        CREATE INDEX IF NOT EXISTS idx_tsg_gained_at ON training_stat_gains(gained_at);
+      `);
     }
 
     migrateTrainingFacilitiesLevel(db);

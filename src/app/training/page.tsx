@@ -325,11 +325,12 @@ export default function TrainingPage() {
 
     (async () => {
       try {
-        const [assRes, facRes, coachRes, playersRes] = await Promise.all([
+        const [assRes, facRes, coachRes, playersRes, teamRes] = await Promise.all([
           fetch(`/api/training/assignments?teamId=${teamId}`),
           fetch(`/api/training/facility`),
           fetch(`/api/training/coaches`),
           fetch(`/api/players?teamId=${teamId}`),
+          fetch(`/api/teams/${teamId}?t=${Date.now()}`),
         ]);
 
         if (assRes.ok) {
@@ -340,13 +341,15 @@ export default function TrainingPage() {
         if (facRes.ok) {
           const fac = await facRes.json();
           setFacilities(fac.facilities);
-          setTeamMoney(fac.teamMoney);
         }
         if (coachRes.ok) {
           const coach = await coachRes.json();
           setHiredCoaches(coach.hired);
           setCoachPool(coach.pool);
-          setTeamMoney(coach.teamMoney);
+        }
+        if (teamRes.ok) {
+          const t = await teamRes.json();
+          if (t?.team_money !== undefined) setTeamMoney(t.team_money);
         }
         if (playersRes.ok) {
           const playersData = await playersRes.json();
@@ -395,12 +398,18 @@ export default function TrainingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ facilityType }),
       });
-      if (res.ok) {
-        const facRes = await fetch(`/api/training/facility`);
+      if (res.ok && team) {
+        const [facRes, teamRes] = await Promise.all([
+          fetch(`/api/training/facility`),
+          fetch(`/api/teams/${team.id}?t=${Date.now()}`),
+        ]);
         if (facRes.ok) {
           const fac = await facRes.json();
           setFacilities(fac.facilities);
-          setTeamMoney(fac.teamMoney);
+        }
+        if (teamRes.ok) {
+          const t = await teamRes.json();
+          if (t?.team_money !== undefined) setTeamMoney(t.team_money);
         }
       }
     } catch (e) {
@@ -417,10 +426,14 @@ export default function TrainingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: coach.name, specialty: coach.specialty, quality: coach.quality }),
       });
-      if (res.ok) {
+      if (res.ok && team) {
         const data = await res.json();
         setHiredCoaches([...hiredCoaches, data.coach]);
-        setTeamMoney(data.newTeamMoney);
+        const teamRes = await fetch(`/api/teams/${team.id}?t=${Date.now()}`);
+        if (teamRes.ok) {
+          const t = await teamRes.json();
+          if (t?.team_money !== undefined) setTeamMoney(t.team_money);
+        }
       }
     } catch (e) {
       console.error('Error hiring coach:', e);
@@ -518,7 +531,7 @@ export default function TrainingPage() {
         {/* Budget strip */}
         <div className="relative mt-6 flex items-center justify-between gap-3 pt-4 border-t border-white/8">
           <div className="flex items-center gap-3">
-            <span className="eyebrow">Treasury</span>
+            <span className="eyebrow">Club Funds</span>
             <span className="font-mono tabular text-2xl text-[var(--money)] font-semibold tracking-tight">
               ${teamMoney.toLocaleString()}
             </span>
@@ -1226,7 +1239,7 @@ function FacilityDetailModal({
           {/* CTA */}
           <section className="flex items-center gap-3 pt-1 border-t border-white/8 pt-4">
             <div className="flex-1">
-              <div className="font-mono text-[9px] tracking-[0.24em] uppercase text-[var(--ink-500)]">Treasury</div>
+              <div className="font-mono text-[9px] tracking-[0.24em] uppercase text-[var(--ink-500)]">Club Funds</div>
               <div className="font-mono text-base tabular text-[var(--money)]">${teamMoney.toLocaleString()}</div>
             </div>
             {isMax ? (

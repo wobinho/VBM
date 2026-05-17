@@ -142,7 +142,10 @@ export function weightedPick(players: SimPlayer[], weightFn: (p: SimPlayer) => n
 export function pickServer(lu: SimLineup): SimPlayer | null {
     const all = Object.values(lu).filter(Boolean) as SimPlayer[];
     if (!all.length) return null;
-    return weightedPick(all, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15);
+    // Liberos do not serve in standard indoor volleyball
+    const eligible = all.filter(p => p.position !== 'Libero');
+    const pool = eligible.length ? eligible : all;
+    return weightedPick(pool, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15);
 }
 
 export function pickReceiver(lu: SimLineup): SimPlayer | null {
@@ -151,10 +154,21 @@ export function pickReceiver(lu: SimLineup): SimPlayer | null {
     return weightedPick(cands, p => p.receive * 0.35 + p.digging * 0.25 + p.ball_control * 0.20 + p.flexibility * 0.10 + p.balance * 0.10);
 }
 
+// Real-volleyball set distribution: Outside Hitters are the primary attacking option,
+// Opposite gets right-side sets, Middles run quicks (lower volume), Setters rarely attack (dumps only).
+export function attackerPositionMultiplier(pos: string): number {
+    if (pos === 'Outside Hitter')  return 1.55;
+    if (pos === 'Opposite Hitter') return 1.10;
+    if (pos === 'Middle Blocker')  return 0.70;
+    if (pos === 'Setter')          return 0.15;
+    if (pos === 'Libero')          return 0.05;
+    return 1.0;
+}
+
 export function pickAttacker(lu: SimLineup): SimPlayer | null {
     const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
     if (!cands.length) return null;
-    return weightedPick(cands, p => p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10);
+    return weightedPick(cands, p => (p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10) * attackerPositionMultiplier(p.position));
 }
 
 export function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer | null {
