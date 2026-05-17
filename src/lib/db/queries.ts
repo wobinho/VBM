@@ -2,6 +2,7 @@ import { getDb } from './index';
 import { generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
 import { generateScheduleForLeague, generatePostSeason, shouldGeneratePostSeason, processPromotionRelegationByConfig } from '../league-engine';
 import { calculateOverall as calcOvr, ALL_STAT_KEYS } from '../overall';
+import { computeEconomyMultipliers, type OfficeFacilityKey } from '../office/facilities';
 
 // ==================== TYPES ====================
 export interface League { id: number; league_name: string; country?: string; tier?: number; created_at: string; updated_at: string; }
@@ -915,12 +916,16 @@ export function getFinancialTransactions(teamId: number): FinancialTransaction[]
 export function runMonthlyEconomy(teamId: number, month: string): FinancialTransaction {
   const db = getDb();
 
-  // Fixed income streams (matching office page constants)
-  const income_matchday    = 18_000;
-  const income_sponsorship = 15_000;
-  const income_merchandise = 10_000;
-  const income_broadcast   =  7_000;
-  const income_other       =      0;
+  // Pull office facility levels so upgrades actually move the lines.
+  const officeLevels = getOfficeFacilityLevels(teamId);
+  const mult = computeEconomyMultipliers(officeLevels as Partial<Record<OfficeFacilityKey, number>>);
+
+  // Base income streams — office facilities scale these per level.
+  const income_matchday    = Math.round(18_000 * mult.income_matchday);
+  const income_sponsorship = Math.round(15_000 * mult.income_sponsorship);
+  const income_merchandise = Math.round(10_000 * mult.income_merchandise);
+  const income_broadcast   = Math.round( 7_000 * mult.income_broadcast);
+  const income_other       = 0;
   const totalIncome = income_matchday + income_sponsorship + income_merchandise + income_broadcast + income_other;
 
   // Wages: sum all players on this team
@@ -935,8 +940,10 @@ export function runMonthlyEconomy(teamId: number, month: string): FinancialTrans
   `).get(teamId) as { total: number };
   const expense_coaches = coachWageRow.total;
 
-  const expense_staff = 8_000 + expense_coaches; // fixed staff costs + coach wages
-  const expense_other = 0;
+  // Office HQ trims back-office overhead; coach wages are not discounted.
+  const fixedStaff = 8_000 * mult.expense_staff;
+  const expense_staff = Math.round(fixedStaff + expense_coaches);
+  const expense_other = Math.round(0 * mult.expense_other);
   const totalExpenses = expense_wages + expense_staff + expense_other;
 
   const net = totalIncome - totalExpenses;
@@ -1707,6 +1714,68 @@ export function upgradeTrainingFacility(teamId: number, facilityType: string): T
     SELECT * FROM training_facilities
     WHERE team_id = ? AND facility_type = ?
   `).get(teamId, facilityType) as TrainingFacility;
+}
+
+// ========== Office Facilities ==========
+// Office-side upgradeables share the training_facilities table (free-form
+// facility_type). Keys are namespaced "office_*" / "training_ground" / etc.
+// to keep them distinct from training-facility rows.
+
+const OFFICE_FACILITY_TYPES = [
+  'office_hq',
+  'training_ground',
+  'stadium_main',
+  'stadium_seating',
+  'stadium_screens',
+  'merchandise_shop',
+  'marketing_dept',
+  'hospitality_lounge',
+  'parking_complex',
+  'analytics_lab',
+  'medical_bay',
+  'broadcast_studio',
+] as const;
+
+export function getOfficeFacilities(teamId: number): TrainingFacility[] {
+  const db = getDb();
+  const now = new Date().toISOString().slice(0, 10);
+
+  for (const type of OFFICE_FACILITY_TYPES) {
+    const exists = db.prepare(`
+      SELECT id FROM training_facilities
+      WHERE team_id = ? AND facility_type = ?
+    `).get(teamId, type);
+
+    if (!exists) {
+      db.prepare(`
+        INSERT INTO training_facilities (team_id, facility_type, level, upgraded_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(teamId, type, 0, now, now);
+    }
+  }
+
+  return db.prepare(`
+    SELECT * FROM training_facilities
+    WHERE team_id = ? AND facility_type IN (${OFFICE_FACILITY_TYPES.map(() => '?').join(',')})
+    ORDER BY facility_type ASC
+  `).all(teamId, ...OFFICE_FACILITY_TYPES) as TrainingFacility[];
+}
+
+export function upgradeOfficeFacility(teamId: number, facilityType: string): TrainingFacility | null {
+  // Same shape as training upgrade — kept as a separate name so callers state intent.
+  return upgradeTrainingFacility(teamId, facilityType);
+}
+
+/** Read just the level for each office facility — used by runMonthlyEconomy. */
+export function getOfficeFacilityLevels(teamId: number): Record<string, number> {
+  const rows = getDb().prepare(`
+    SELECT facility_type, level FROM training_facilities
+    WHERE team_id = ? AND facility_type IN (${OFFICE_FACILITY_TYPES.map(() => '?').join(',')})
+  `).all(teamId, ...OFFICE_FACILITY_TYPES) as { facility_type: string; level: number }[];
+
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.facility_type] = r.level;
+  return out;
 }
 
 // ========== Training Coaches ==========

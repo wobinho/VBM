@@ -1,14 +1,26 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/contexts/auth-context';
 import { getCountryCode } from '@/lib/country-codes';
 import Image from 'next/image';
 import {
     TrendingUp, TrendingDown, DollarSign, Users, Calendar,
-    Building2, Star, ShieldCheck, BarChart3, ChevronUp, ChevronDown,
+    Building2, Star, BarChart3, ChevronUp, ChevronDown,
     Wifi, Trophy, Zap, ArrowUpDown, FileSignature, X, Plus, Minus,
-    CheckCircle, Receipt,
+    CheckCircle, Receipt, ArrowRight, Lock, Wrench,
 } from 'lucide-react';
+import {
+    OFFICE_FACILITY_DEFS,
+    OFFICE_FACILITY_ORDER,
+    OFFICE_LEVEL_MULTIPLIER,
+    OFFICE_UPGRADE_COST_TO_LEVEL,
+    OFFICE_MAX_LEVEL,
+    computeEconomyMultipliers,
+    type OfficeFacilityKey,
+    type OfficeFacilityDef,
+    type EconomyLine,
+} from '@/lib/office/facilities';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,10 +52,37 @@ interface FinancialTransaction {
     created_at: string;
 }
 
+interface OfficeFacility {
+    id: number;
+    facility_type: string;
+    level: number;
+    upgradeCost: number | null;
+}
+
+type TabType = 'office' | 'financial' | 'staff';
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MONTHLY_INCOME = 50_000;
-const MAX_PATIENCE = 3; // patience dots, MM3-style
+const MAX_PATIENCE = 3;
+
+// Base economy lines — must match runMonthlyEconomy()
+const BASE_LINES: Record<EconomyLine, number> = {
+    income_matchday: 18_000,
+    income_sponsorship: 15_000,
+    income_merchandise: 10_000,
+    income_broadcast: 7_000,
+    expense_staff: 8_000,
+    expense_other: 0,
+};
+
+const LINE_LABEL: Record<EconomyLine, string> = {
+    income_matchday: 'Matchday',
+    income_sponsorship: 'Sponsorship',
+    income_merchandise: 'Merchandise',
+    income_broadcast: 'Broadcast',
+    expense_staff: 'Staff Costs',
+    expense_other: 'Other Expenses',
+};
 
 const POSITION_COLORS: Record<string, string> = {
     'Setter': 'text-[#60a5fa] bg-[#3b82f6]/10 border-[#3b82f6]/30',
@@ -271,6 +310,402 @@ function aggregateByYear(transactions: FinancialTransaction[]): YearlyAggregate[
     return Object.values(map).sort((a, b) => b.year.localeCompare(a.year));
 }
 
+// ─── Office Facility Card & Modal ─────────────────────────────────────────────
+
+// Stylized background — SVG pattern + half-bled icon + diagonal ribbon + vignette.
+// Patterns mirror the training-page blueprint so the two pages feel like one game.
+function OfficeBlueprint({ def, level }: { def: OfficeFacilityDef; level: number }) {
+    const c = def.accent;
+    const Icon = def.icon;
+    const patternId = `office-pat-${def.key}`;
+
+    return (
+        <div
+            className="relative w-full h-full overflow-hidden"
+            style={{
+                background: `linear-gradient(160deg, ${c}1a 0%, ${c}05 35%, var(--ink-900) 80%)`,
+            }}
+        >
+            {/* SVG pattern overlay */}
+            <svg className="absolute inset-0 w-full h-full opacity-[0.18]" preserveAspectRatio="none">
+                <defs>
+                    {def.pattern === 'grid' && (
+                        <pattern id={patternId} x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+                            <path d="M 22 0 L 0 0 0 22" fill="none" stroke={c} strokeWidth="0.6" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'lines' && (
+                        <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="14" stroke={c} strokeWidth="1.4" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'dots' && (
+                        <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                            <circle cx="7" cy="7" r="1.4" fill={c} />
+                        </pattern>
+                    )}
+                    {def.pattern === 'wave' && (
+                        <pattern id={patternId} x="0" y="0" width="40" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 0 10 Q 10 0 20 10 T 40 10" fill="none" stroke={c} strokeWidth="0.9" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'hex' && (
+                        <pattern id={patternId} x="0" y="0" width="28" height="32" patternUnits="userSpaceOnUse">
+                            <path d="M14 2 L26 9 L26 23 L14 30 L2 23 L2 9 Z" fill="none" stroke={c} strokeWidth="0.7" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'cross' && (
+                        <pattern id={patternId} x="0" y="0" width="18" height="18" patternUnits="userSpaceOnUse">
+                            <path d="M 9 4 L 9 14 M 4 9 L 14 9" stroke={c} strokeWidth="0.8" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'arc' && (
+                        <pattern id={patternId} x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 0 40 A 40 40 0 0 1 40 0" fill="none" stroke={c} strokeWidth="0.7" />
+                        </pattern>
+                    )}
+                    {def.pattern === 'noise' && (
+                        <pattern id={patternId} x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+                            <circle cx="10" cy="14" r="0.9" fill={c} />
+                            <circle cx="38" cy="22" r="0.6" fill={c} />
+                            <circle cx="22" cy="40" r="0.7" fill={c} />
+                            <circle cx="50" cy="48" r="0.5" fill={c} />
+                            <circle cx="6" cy="52" r="0.8" fill={c} />
+                        </pattern>
+                    )}
+                </defs>
+                <rect width="100%" height="100%" fill={`url(#${patternId})`} />
+            </svg>
+
+            {/* Half-bled tonal icon — bottom-right corner */}
+            <div className="absolute -right-6 -bottom-6 opacity-25" style={{ color: c }}>
+                <Icon size={140} strokeWidth={1.1} />
+            </div>
+
+            {/* Diagonal blueprint ribbon */}
+            <div
+                className="absolute top-3 -left-12 px-12 py-0.5 font-mono text-[8px] tracking-[0.32em] uppercase rotate-[-30deg]"
+                style={{ background: `${c}30`, color: c, border: `1px solid ${c}55` }}
+            >
+                FACILITY · {def.short}
+            </div>
+
+            {/* Level pip column */}
+            <div className="absolute bottom-3 left-3 flex flex-col items-center gap-1">
+                {[5, 4, 3, 2, 1].map(i => (
+                    <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-sm"
+                        style={{ background: i <= level ? c : `${c}22`, boxShadow: i <= level ? `0 0 6px ${c}` : 'none' }}
+                    />
+                ))}
+            </div>
+
+            {/* Bottom vignette */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: 'radial-gradient(120% 80% at 50% 110%, var(--ink-950) 0%, transparent 55%)' }}
+            />
+        </div>
+    );
+}
+
+function OfficeFacilityCard({
+    facilityKey, level, idx, onClick,
+}: {
+    facilityKey: OfficeFacilityKey;
+    level: number;
+    idx: number;
+    onClick: () => void;
+}) {
+    const def = OFFICE_FACILITY_DEFS[facilityKey];
+    const Icon = def.icon;
+    const c = def.accent;
+    const isMax = level >= OFFICE_MAX_LEVEL;
+
+    // Headline effect: pick the strongest income line this facility touches.
+    const headline = useMemo(() => {
+        const incomeEffects = def.effects.filter(e => e.line.startsWith('income_'));
+        const pick = incomeEffects.length > 0 ? incomeEffects[0] : def.effects[0];
+        return pick;
+    }, [def]);
+
+    const headlinePct = headline ? Math.round(headline.perLevel * level * 100) : 0;
+    const headlineSign = headlinePct >= 0 ? '+' : '';
+
+    return (
+        <button
+            onClick={onClick}
+            className="group relative overflow-hidden rounded-[14px] surface card-hover animate-fade-up text-left cursor-pointer"
+            style={{ animationDelay: `${idx * 50}ms`, borderColor: `${c}25` }}
+        >
+            <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: c }} />
+
+            {/* Hero — stylized blueprint background */}
+            <div className="relative h-[128px] border-b border-white/8">
+                <OfficeBlueprint def={def} level={level} />
+
+                {/* Level badge */}
+                <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-sm bg-[var(--ink-950)]/85 backdrop-blur-sm border" style={{ borderColor: `${c}55` }}>
+                    <span className="font-mono text-[8.5px] tracking-[0.22em] uppercase" style={{ color: c }}>Lv</span>
+                    <span className="font-display text-lg leading-none tabular" style={{ color: c }}>{level}</span>
+                    <span className="font-mono text-[8.5px] text-[var(--ink-500)]">/{OFFICE_MAX_LEVEL}</span>
+                </div>
+
+                {/* Icon chip */}
+                <div className="absolute top-2 left-2 w-9 h-9 rounded-md flex items-center justify-center border backdrop-blur-sm" style={{ background: `${c}14`, borderColor: `${c}40` }}>
+                    <Icon size={18} style={{ color: c }} />
+                </div>
+
+                {/* Headline percent — bottom-right, layered over the blueprint */}
+                {level > 0 && (
+                    <div className="absolute bottom-2 right-2 flex items-baseline gap-1 px-2 py-0.5 rounded-sm bg-[var(--ink-950)]/80 backdrop-blur-sm border" style={{ borderColor: `${c}40` }}>
+                        <span className="font-display text-lg leading-none tabular" style={{ color: c }}>
+                            {headlineSign}{headlinePct}%
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 flex flex-col gap-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-display text-base leading-tight tracking-wide uppercase text-[var(--bone)] truncate">
+                        {def.name}
+                    </h3>
+                    <span className="font-mono text-[10px] tabular px-1.5 py-0.5 rounded-sm bg-white/5 text-[var(--ink-300)]">
+                        {OFFICE_LEVEL_MULTIPLIER[level].toFixed(2)}×
+                    </span>
+                </div>
+
+                {/* Effect chips */}
+                <div className="flex flex-wrap gap-1">
+                    {def.effects.slice(0, 3).map(eff => {
+                        const isIncome = eff.line.startsWith('income_');
+                        const sign = eff.perLevel >= 0 ? '+' : '';
+                        const cls = isIncome
+                            ? eff.perLevel >= 0 ? 'text-[var(--win)] bg-[var(--win)]/10 border-[var(--win)]/25'
+                                                : 'text-[var(--loss)] bg-[var(--loss)]/10 border-[var(--loss)]/25'
+                            : eff.perLevel <= 0 ? 'text-[var(--win)] bg-[var(--win)]/10 border-[var(--win)]/25'
+                                                : 'text-[var(--loss)] bg-[var(--loss)]/10 border-[var(--loss)]/25';
+                        return (
+                            <span key={eff.line} className={`font-mono text-[8.5px] tracking-[0.18em] uppercase px-1.5 py-0.5 rounded-sm border ${cls}`}>
+                                {LINE_LABEL[eff.line].slice(0, 8)} {sign}{Math.round(eff.perLevel * 100)}%
+                            </span>
+                        );
+                    })}
+                </div>
+
+                {/* Level ladder */}
+                <div className="flex items-center gap-1 pt-0.5">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div
+                            key={i}
+                            className="h-1 flex-1 rounded-sm transition-all"
+                            style={{ background: i <= level ? c : 'rgba(255,255,255,0.08)' }}
+                        />
+                    ))}
+                </div>
+
+                {/* CTA strip */}
+                <div className="mt-1 flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm border border-white/8 bg-white/[0.02] group-hover:bg-white/[0.04] transition">
+                    <span className="font-mono text-[9px] tracking-[0.22em] uppercase text-[var(--ink-400)]">
+                        {isMax ? 'Maxed' : 'View / Upgrade'}
+                    </span>
+                    <ArrowRight size={11} className="text-[var(--ink-500)] group-hover:text-[var(--bone)] transition-colors" />
+                </div>
+            </div>
+        </button>
+    );
+}
+
+function OfficeFacilityDetailModal({
+    facilityKey, level, teamMoney, isUpgrading, onUpgrade, onClose,
+}: {
+    facilityKey: OfficeFacilityKey;
+    level: number;
+    teamMoney: number;
+    isUpgrading: boolean;
+    onUpgrade: () => void;
+    onClose: () => void;
+}) {
+    const def = OFFICE_FACILITY_DEFS[facilityKey];
+    const Icon = def.icon;
+    const c = def.accent;
+    const isMax = level >= OFFICE_MAX_LEVEL;
+    const nextLevel = isMax ? null : level + 1;
+    const nextCost = nextLevel ? (OFFICE_UPGRADE_COST_TO_LEVEL[nextLevel] ?? null) : null;
+    const canAfford = nextCost !== null && teamMoney >= nextCost;
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+    if (!mounted) return null;
+
+    return createPortal((
+        <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+            onClick={onClose}
+        >
+            <div
+                onClick={e => e.stopPropagation()}
+                className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-[18px] surface-raised animate-fade-up"
+                style={{
+                    border: `1px solid ${c}40`,
+                    boxShadow: `0 24px 80px -20px ${c}55, 0 1px 0 rgba(255,255,255,0.06) inset`,
+                }}
+            >
+                <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: c }} />
+
+                {/* Hero strip — stylized blueprint background */}
+                <div className="relative h-[160px] border-b border-white/8 overflow-hidden">
+                    <OfficeBlueprint def={def} level={level} />
+                    <button
+                        onClick={onClose}
+                        className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--ink-950)]/85 backdrop-blur-sm border border-white/10 text-[var(--ink-300)] hover:text-[var(--bone)] hover:border-white/30 transition z-10"
+                        aria-label="Close"
+                    >
+                        <X size={15} />
+                    </button>
+                    <div className="absolute top-3 left-3 flex items-center gap-3 z-10">
+                        <div className="w-12 h-12 rounded-md flex items-center justify-center border backdrop-blur-sm" style={{ background: `${c}18`, borderColor: `${c}55` }}>
+                            <Icon size={24} style={{ color: c }} />
+                        </div>
+                        <div>
+                            <div className="font-mono text-[8.5px] tracking-[0.32em] uppercase" style={{ color: c }}>Office · {def.short}</div>
+                            <h2 className="font-display text-3xl leading-none tracking-wide uppercase text-[var(--bone)] mt-1">{def.name}</h2>
+                        </div>
+                    </div>
+                    <div className="absolute bottom-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded-sm bg-[var(--ink-950)]/90 border z-10" style={{ borderColor: `${c}55` }}>
+                        <span className="font-mono text-[10px] tracking-[0.22em] uppercase" style={{ color: c }}>Lv</span>
+                        <span className="font-display text-2xl tabular leading-none" style={{ color: c }}>{level}</span>
+                        <span className="font-mono text-[10px] text-[var(--ink-500)]">/{OFFICE_MAX_LEVEL}</span>
+                        <span className="w-1 h-1 rounded-full mx-1" style={{ background: c }} />
+                        <span className="font-mono text-[11px] tabular text-[var(--bone)]">{OFFICE_LEVEL_MULTIPLIER[level].toFixed(2)}×</span>
+                    </div>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 space-y-6">
+                    <p className="text-sm text-[var(--ink-300)] leading-relaxed">{def.description}</p>
+
+                    {/* Effects breakdown — current vs next-level */}
+                    <section>
+                        <div className="eyebrow mb-2">Monthly Impact</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {def.effects.map(eff => {
+                                const base = BASE_LINES[eff.line];
+                                const isIncome = eff.line.startsWith('income_');
+                                const curMult = 1 + eff.perLevel * level;
+                                const nextMult = 1 + eff.perLevel * (level + 1);
+                                const curDelta = Math.round(base * (curMult - 1));
+                                const nextDelta = Math.round(base * (nextMult - 1));
+                                const isBenefit = isIncome ? eff.perLevel > 0 : eff.perLevel < 0;
+                                const toneCls = isBenefit ? 'text-[var(--win)]' : 'text-[var(--loss)]';
+                                return (
+                                    <div
+                                        key={eff.line}
+                                        className="rounded-sm border bg-white/[0.02] px-3 py-2.5"
+                                        style={{ borderColor: `${c}25` }}
+                                    >
+                                        <div className="flex items-baseline justify-between mb-1.5">
+                                            <span className="font-mono text-[10px] tracking-[0.2em] uppercase" style={{ color: c }}>
+                                                {LINE_LABEL[eff.line]}
+                                            </span>
+                                            <span className="font-mono text-[10px] tabular text-[var(--ink-500)]">
+                                                {eff.perLevel >= 0 ? '+' : ''}{Math.round(eff.perLevel * 100)}% / lv
+                                            </span>
+                                        </div>
+                                        <div className="flex items-baseline justify-between">
+                                            <span className="font-mono text-[10px] uppercase text-[var(--ink-400)]">Current</span>
+                                            <span className={`font-mono text-sm tabular ${level === 0 ? 'text-[var(--ink-500)]' : toneCls}`}>
+                                                {curDelta === 0 ? '—' : `${curDelta > 0 ? '+' : ''}${formatMoney(Math.abs(curDelta)).replace('$', '')}${curDelta > 0 ? '' : ''}`}
+                                            </span>
+                                        </div>
+                                        {!isMax && (
+                                            <div className="flex items-baseline justify-between mt-0.5">
+                                                <span className="font-mono text-[10px] uppercase text-[var(--ink-500)]">Next L{level + 1}</span>
+                                                <span className={`font-mono text-sm tabular ${toneCls}`}>
+                                                    {nextDelta > 0 ? '+' : ''}{formatMoney(Math.abs(nextDelta)).replace('$', '')}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="mt-2 text-[10px] font-mono uppercase tracking-[0.22em] text-[var(--ink-500)]">
+                            Deltas shown vs base monthly figures. Effects stack additively across office facilities.
+                        </p>
+                    </section>
+
+                    {/* Upgrade ladder */}
+                    <section>
+                        <div className="eyebrow mb-2">Upgrade Ladder</div>
+                        <div className="grid grid-cols-6 gap-2">
+                            {OFFICE_LEVEL_MULTIPLIER.map((m, i) => {
+                                const isCurrent = i === level;
+                                const isNext = i === level + 1;
+                                const isPast = i < level;
+                                return (
+                                    <div
+                                        key={i}
+                                        className="rounded-sm border px-2 py-2 text-center transition-colors"
+                                        style={{
+                                            borderColor: isCurrent ? c : isNext ? `${c}80` : 'rgba(255,255,255,0.08)',
+                                            background: isPast ? `${c}18` : isCurrent ? `${c}28` : isNext ? `${c}10` : 'transparent',
+                                        }}
+                                    >
+                                        <div className="font-mono text-[8.5px] tracking-[0.22em] uppercase" style={{ color: isCurrent ? c : 'var(--ink-500)' }}>L{i}</div>
+                                        <div className="font-display text-[15px] tabular mt-0.5" style={{ color: isPast || isCurrent ? c : 'var(--bone)' }}>
+                                            {m.toFixed(2)}×
+                                        </div>
+                                        <div className="font-mono text-[9px] tabular mt-0.5 text-[var(--ink-500)]">
+                                            {i === 0 ? '—' : `$${(OFFICE_UPGRADE_COST_TO_LEVEL[i] / 1_000_000).toFixed(i >= 4 ? 0 : 1)}M`}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    {/* CTA */}
+                    <section className="flex items-center gap-3 pt-4 border-t border-white/8">
+                        <div className="flex-1">
+                            <div className="font-mono text-[9px] tracking-[0.24em] uppercase text-[var(--ink-500)]">Treasury</div>
+                            <div className="font-mono text-base tabular text-[var(--money)]">${teamMoney.toLocaleString()}</div>
+                        </div>
+                        {isMax ? (
+                            <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-sm border" style={{ borderColor: `${c}55`, background: `${c}10` }}>
+                                <Lock size={14} style={{ color: c }} />
+                                <span className="font-display text-sm tracking-[0.22em] uppercase" style={{ color: c }}>Max Tier</span>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={onUpgrade}
+                                disabled={!canAfford || isUpgrading}
+                                className={`px-5 py-3 rounded-sm font-display text-sm tracking-[0.18em] uppercase flex items-center gap-3 transition-all
+                                    ${canAfford && !isUpgrading
+                                        ? 'bg-[var(--volt)] text-[var(--ink-950)] hover:bg-[var(--volt-bright)] shadow-[0_3px_0_0_var(--volt-deep)] hover:translate-y-[-1px]'
+                                        : 'bg-white/5 text-[var(--ink-500)] cursor-not-allowed border border-white/8'}`}
+                            >
+                                <span>{isUpgrading ? 'Building…' : `Upgrade → L${nextLevel} · ${OFFICE_LEVEL_MULTIPLIER[nextLevel ?? level].toFixed(2)}×`}</span>
+                                <span className="font-mono tabular text-[12px] px-2 py-0.5 rounded bg-black/15">${(nextCost ?? 0).toLocaleString()}</span>
+                            </button>
+                        )}
+                    </section>
+                </div>
+            </div>
+        </div>
+    ), document.body);
+}
+
 // ─── Cash Flow Breakdown Modal ────────────────────────────────────────────────
 
 function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () => void }) {
@@ -300,7 +735,6 @@ function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () 
                 style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
                 onClick={e => e.stopPropagation()}>
 
-                {/* Header */}
                 <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
                     style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
                     <button onClick={onClose}
@@ -312,7 +746,6 @@ function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () 
                 </div>
 
                 <div className="px-6 py-5 space-y-5">
-                    {/* Income */}
                     <div>
                         <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest mb-2">Income</p>
                         <div className="rounded-xl bg-white/[0.03] border border-white/8 overflow-hidden">
@@ -329,7 +762,6 @@ function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () 
                         </div>
                     </div>
 
-                    {/* Expenses */}
                     <div>
                         <p className="text-[10px] font-semibold text-red-400 uppercase tracking-widest mb-2">Expenses</p>
                         <div className="rounded-xl bg-white/[0.03] border border-white/8 overflow-hidden">
@@ -346,7 +778,6 @@ function CashFlowModal({ tx, onClose }: { tx: FinancialTransaction; onClose: () 
                         </div>
                     </div>
 
-                    {/* Net */}
                     <div className={`rounded-xl px-4 py-3 border flex items-center justify-between ${tx.net >= 0 ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-red-500/10 border-red-500/25'}`}>
                         <span className="text-sm font-bold text-white">Net Cash Flow</span>
                         <span className={`text-lg font-black ${tx.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -372,7 +803,7 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
     const [years, setYears] = useState(player.contract_years || 1);
     const [wage, setWage] = useState(player.monthly_wage);
     const [bonus, setBonus] = useState(0);
-    const [patience] = useState(MAX_PATIENCE); // always full — logic added later
+    const [patience] = useState(MAX_PATIENCE);
     const [signed, setSigned] = useState(false);
     const [signing, setSigning] = useState(false);
 
@@ -404,7 +835,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                 style={{ background: 'linear-gradient(160deg, #0f1623 0%, #0a0f1a 100%)' }}
                 onClick={e => e.stopPropagation()}
             >
-                {/* ── Header band ── */}
                 <div className="relative px-6 pt-6 pb-5 border-b border-white/10"
                     style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(249,115,22,0.04) 100%)' }}>
 
@@ -419,7 +849,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                     <p className="font-mono text-[10px] font-bold text-[var(--volt)] uppercase tracking-[0.28em] mb-3">Contract Negotiation</p>
 
                     <div className="flex items-center gap-4">
-                        {/* Player portrait */}
                         <div className="relative shrink-0">
                             <PlayerAvatar playerId={player.id} size={64} />
                             <div className={`absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-lg border border-black/40 flex items-center justify-center text-[11px] font-black ${overallColor} bg-gray-900`}>
@@ -427,7 +856,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                             </div>
                         </div>
 
-                        {/* Name + meta */}
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                                 <h2 className="text-lg font-bold text-white leading-none truncate">{player.player_name}</h2>
@@ -443,7 +871,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                             </div>
                         </div>
 
-                        {/* Patience */}
                         <div className="shrink-0 text-right">
                             <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Patience</p>
                             <PatienceDots patience={patience} />
@@ -451,9 +878,7 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                     </div>
                 </div>
 
-                {/* ── Negotiation Controls ── */}
                 <div className="px-6 py-5 space-y-5">
-                    {/* Current vs Offer banner */}
                     <div className="grid grid-cols-2 gap-3 text-center">
                         <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
                             <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Current Wage</p>
@@ -465,9 +890,7 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         </div>
                     </div>
 
-                    {/* Steppers */}
                     <div className="grid grid-cols-1 gap-4">
-                        {/* Years to extend */}
                         <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4">
                             <div className="flex items-start justify-between mb-3">
                                 <div>
@@ -486,7 +909,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                             />
                         </div>
 
-                        {/* New wage */}
                         <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
                             <div className="flex items-start justify-between mb-4">
                                 <div>
@@ -519,7 +941,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                             </div>
                         </div>
 
-                        {/* Signing bonus */}
                         <div className="rounded-xl bg-white/[0.03] border border-white/8 p-4 focus-within:border-amber-500/30 transition-all">
                             <div className="flex items-start justify-between mb-4">
                                 <div>
@@ -556,7 +977,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         </div>
                     </div>
 
-                    {/* Cost summary */}
                     <div className="rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3 space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-500">Wage over contract ({years} yr{years !== 1 ? 's' : ''})</span>
@@ -572,7 +992,6 @@ function ContractNegotiationModal({ player, teamMoney, onClose, onSigned }: Nego
                         </div>
                     </div>
 
-                    {/* Sign button */}
                     {!signed ? (
                         <button
                             onClick={handleSign}
@@ -602,6 +1021,7 @@ type SortKey = 'player_name' | 'contract_years' | 'monthly_wage' | 'player_value
 
 export default function OfficePage() {
     const { team } = useAuth();
+    const [activeTab, setActiveTab] = useState<TabType>('office');
     const [players, setPlayers] = useState<Player[]>([]);
     const [teamMoney, setTeamMoney] = useState<number | null>(null);
     const [sortBy, setSortBy] = useState<SortKey>('monthly_wage');
@@ -609,6 +1029,9 @@ export default function OfficePage() {
     const [negotiating, setNegotiating] = useState<Player | null>(null);
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
     const [cashFlowExpanded, setCashFlowExpanded] = useState(true);
+    const [officeFacilities, setOfficeFacilities] = useState<OfficeFacility[]>([]);
+    const [selectedFacilityKey, setSelectedFacilityKey] = useState<OfficeFacilityKey | null>(null);
+    const [upgradingType, setUpgradingType] = useState<string | null>(null);
 
     const fetchData = useCallback(() => {
         if (!team) return;
@@ -623,15 +1046,19 @@ export default function OfficePage() {
         fetch('/api/finances')
             .then(r => r.json())
             .then((data: FinancialTransaction[]) => { if (Array.isArray(data)) setTransactions(data); });
+        fetch('/api/office/facility')
+            .then(r => r.json())
+            .then((data) => {
+                if (data?.facilities) setOfficeFacilities(data.facilities);
+                if (data?.teamMoney !== undefined) setTeamMoney(data.teamMoney);
+            });
     }, [team]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    // Handle contract signed: PATCH player + PATCH team funds
     async function handleSigned(playerId: number, years: number, wage: number, bonus: number) {
         setNegotiating(null);
 
-        // Fetch current team money to ensure we have the latest value (no-cache)
         const currentTeam = await fetch(`/api/teams/${team!.id}?t=${Date.now()}`).then(r => r.json());
         const currentMoney = currentTeam?.team_money ?? teamMoney ?? 0;
         const nextMoney = currentMoney - bonus;
@@ -647,22 +1074,63 @@ export default function OfficePage() {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ team_money: nextMoney }),
-                }).then(() => {
-                    // Update state manually for immediate feedback
-                    setTeamMoney(nextMoney);
-                })
+                }).then(() => setTeamMoney(nextMoney))
                 : Promise.resolve(),
         ]);
 
         fetchData();
     }
 
+    async function handleUpgradeFacility(facilityType: OfficeFacilityKey) {
+        setUpgradingType(facilityType);
+        try {
+            const res = await fetch('/api/office/facility', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ facilityType }),
+            });
+            if (res.ok) {
+                const facRes = await fetch('/api/office/facility');
+                if (facRes.ok) {
+                    const fac = await facRes.json();
+                    setOfficeFacilities(fac.facilities);
+                    setTeamMoney(fac.teamMoney);
+                }
+            }
+        } finally {
+            setUpgradingType(null);
+        }
+    }
+
+    // Facility level lookup map
+    const facilityLevelsByType = useMemo(() => {
+        const m: Record<string, number> = {};
+        for (const f of officeFacilities) m[f.facility_type] = f.level;
+        return m;
+    }, [officeFacilities]);
+
+    // Live multipliers — used to preview totals in the Financial tab.
+    const economyMultipliers = useMemo(
+        () => computeEconomyMultipliers(facilityLevelsByType as Partial<Record<OfficeFacilityKey, number>>),
+        [facilityLevelsByType],
+    );
+
+    const projectedIncome = useMemo(() => ({
+        matchday: Math.round(BASE_LINES.income_matchday * economyMultipliers.income_matchday),
+        sponsorship: Math.round(BASE_LINES.income_sponsorship * economyMultipliers.income_sponsorship),
+        merchandise: Math.round(BASE_LINES.income_merchandise * economyMultipliers.income_merchandise),
+        broadcast: Math.round(BASE_LINES.income_broadcast * economyMultipliers.income_broadcast),
+    }), [economyMultipliers]);
+
+    const totalProjectedIncome = projectedIncome.matchday + projectedIncome.sponsorship + projectedIncome.merchandise + projectedIncome.broadcast;
+
     const totalWages = useMemo(
         () => players.reduce((sum, p) => sum + (p.monthly_wage ?? 0), 0),
         [players]
     );
-
-    const netCashflow = MONTHLY_INCOME - totalWages;
+    const projectedStaff = Math.round(BASE_LINES.expense_staff * economyMultipliers.expense_staff);
+    const projectedExpenses = totalWages + projectedStaff;
+    const netCashflow = totalProjectedIncome - projectedExpenses;
 
     const sorted = useMemo(() => {
         return [...players].sort((a, b) => {
@@ -702,315 +1170,452 @@ export default function OfficePage() {
         return b;
     }, [players]);
 
+    const avgFacilityLevel = useMemo(() => {
+        if (officeFacilities.length === 0) return '0.0';
+        const avg = officeFacilities.reduce((s, f) => s + f.level, 0) / officeFacilities.length;
+        return avg.toFixed(1);
+    }, [officeFacilities]);
+
     return (
         <div className="space-y-6 animate-fade-up">
             {/* Header */}
-            <div className="relative pb-5 border-b border-white/[0.06]">
+            <header className="relative pb-5 border-b border-white/[0.06]">
                 <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
-                <p className="eyebrow mb-2">Office · Boardroom</p>
-                <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">CLUB OFFICE</h1>
-                <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider">{(team?.name || 'YOUR CLUB').toUpperCase()} // FINANCIAL MANAGEMENT</p>
-            </div>
-
-            {/* KPI Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard label="Club Funds" value={teamMoney !== null ? formatMoney(teamMoney) : '—'} sub="Available budget" icon={DollarSign} color="bg-[var(--volt)]/15 text-[var(--volt)]" trend="neutral" />
-                <StatCard label="Monthly Income" value={formatMoney(MONTHLY_INCOME)} sub="Matchday + sponsorship" icon={TrendingUp} color="bg-[var(--win)]/15 text-[var(--win)]" trend="up" />
-                <StatCard label="Monthly Wages" value={formatMoney(totalWages)} sub={`${players.length} players on payroll`} icon={Users} color="bg-[var(--loss)]/15 text-[var(--loss)]" trend="down" />
-                <StatCard
-                    label="Net Cash Flow"
-                    value={formatMoney(Math.abs(netCashflow))}
-                    sub={netCashflow >= 0 ? 'Monthly surplus' : 'Monthly deficit'}
-                    icon={netCashflow >= 0 ? TrendingUp : TrendingDown}
-                    color={netCashflow >= 0 ? 'bg-[var(--win)]/15 text-[var(--win)]' : 'bg-[var(--loss)]/15 text-[var(--loss)]'}
-                    trend={netCashflow >= 0 ? 'up' : 'down'}
-                />
-            </div>
-
-            {/* Middle Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Wage by Position */}
-                <div className="surface-raised p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <BarChart3 size={16} className="text-amber-400" />
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">WAGE BY POSITION</h2>
+                <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+                    <div className="flex-1">
+                        <p className="eyebrow mb-2">Office · Boardroom</p>
+                        <h1 className="font-display text-5xl md:text-7xl tracking-[0.02em] text-[var(--bone)] leading-[0.85] uppercase">
+                            Club <span className="text-[var(--volt)]">/</span> Office
+                        </h1>
+                        <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider">
+                            {(team?.name || 'YOUR CLUB').toUpperCase()} {'//'} FINANCIAL & FACILITIES MANAGEMENT
+                        </p>
                     </div>
-                    <div className="space-y-3">
-                        {wageByPosition.length === 0
-                            ? <p className="text-xs text-gray-600">No data</p>
-                            : wageByPosition.map(([pos, total]) => (
-                                <div key={pos}>
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${POSITION_COLORS[pos] ?? 'text-gray-400 bg-white/5 border-white/10'}`}>
-                                            {POSITION_SHORT[pos] ?? pos}
-                                        </span>
-                                        <span className="text-xs text-gray-400">{formatMoney(total)}</span>
-                                    </div>
-                                    <MiniBar value={total} max={totalWages} color={POSITION_BAR_COLOR[pos] ?? 'bg-gray-500'} />
-                                </div>
-                            ))}
-                    </div>
-                </div>
 
-                {/* Contract Expiry Risk */}
-                <div className="surface-raised p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Calendar size={16} className="text-cyan-400" />
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">CONTRACT EXPIRY RISK</h2>
-                    </div>
-                    <div className="space-y-3">
-                        {[
-                            { label: 'Expiring (≤ 1 yr)', count: expiryBuckets.soon, color: 'bg-red-500', text: 'text-red-400' },
-                            { label: 'Mid-term (2 yrs)', count: expiryBuckets.mid, color: 'bg-amber-500', text: 'text-amber-400' },
-                            { label: 'Long-term (3+ yrs)', count: expiryBuckets.long, color: 'bg-emerald-500', text: 'text-emerald-400' },
-                        ].map(({ label, count, color, text }) => (
-                            <div key={label}>
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-gray-400">{label}</span>
-                                    <span className={`text-xs font-bold ${text}`}>{count}</span>
-                                </div>
-                                <MiniBar value={count} max={players.length} color={color} />
+                    {/* Treasury / projected income tiles */}
+                    <div className="grid grid-cols-3 gap-2 md:gap-3 shrink-0">
+                        <div className="surface-raised px-3 py-2 text-center min-w-[88px]">
+                            <div className="font-mono text-[8.5px] tracking-[0.22em] uppercase text-[var(--ink-500)]">Treasury</div>
+                            <div className="font-display text-xl tabular text-[var(--money)] leading-tight">
+                                {teamMoney !== null ? formatMoney(teamMoney) : '—'}
                             </div>
-                        ))}
-                        {players.length > 0 && (
-                            <p className="text-[10px] text-gray-600 pt-1 border-t border-white/5">
-                                {expiryBuckets.soon} player{expiryBuckets.soon !== 1 ? 's' : ''} need{expiryBuckets.soon === 1 ? 's' : ''} renewal soon
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Revenue Streams */}
-                <div className="surface-raised p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Zap size={16} className="text-violet-400" />
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">REVENUE STREAMS</h2>
-                    </div>
-                    <div className="space-y-2.5">
-                        {[
-                            { label: 'Matchday Revenue', amount: 18_000, icon: Trophy, color: 'text-amber-400' },
-                            { label: 'Shirt Sponsorship', amount: 15_000, icon: Star, color: 'text-violet-400' },
-                            { label: 'Merchandise Sales', amount: 10_000, icon: WifiIcon, color: 'text-cyan-400' },
-                            { label: 'Broadcast Rights', amount: 7_000, icon: Wifi, color: 'text-emerald-400' },
-                        ].map(({ label, amount, icon: Icon, color }) => (
-                            <div key={label} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                                <div className="flex items-center gap-2">
-                                    <Icon size={13} className={color} />
-                                    <span className="text-xs text-gray-400">{label}</span>
-                                </div>
-                                <span className="text-xs font-semibold text-white">{formatMoney(amount)}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Facility widgets */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                    { label: 'Stadium', val: 'Home Arena', sub: 'Capacity: 5,000', icon: Building2, color: 'text-amber-400 bg-amber-400/10' },
-                    { label: 'Facility Grade', val: 'B+', sub: 'Upgrade available', icon: ShieldCheck, color: 'text-cyan-400 bg-cyan-400/10' },
-                    { label: 'Fan Rating', val: '72 / 100', sub: '+4 this season', icon: Star, color: 'text-violet-400 bg-violet-400/10' },
-                    { label: 'Staff Costs', val: formatMoney(8_000), sub: 'Per month', icon: Users, color: 'text-red-400 bg-red-400/10' },
-                ].map(({ label, val, sub, icon: Icon, color }) => (
-                    <div key={label} className="surface-raised p-4 hover:border-white/20 transition-all duration-200 cursor-default">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${color}`}>
-                            <Icon size={16} />
                         </div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">{label}</p>
-                        <p className="text-sm font-bold text-white">{val}</p>
-                        <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>
-                    </div>
-                ))}
-            </div>
-
-            {/* Cash Flow History */}
-            <div className="surface-raised overflow-hidden">
-                <div
-                    className="px-5 py-4 border-b border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors group"
-                    onClick={() => setCashFlowExpanded(!cashFlowExpanded)}
-                >
-                    <div className="flex items-center gap-2">
-                        <Receipt size={16} className="text-amber-400" />
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">YEARLY CASH FLOW</h2>
-                    </div>
-                    <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
-                        {cashFlowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        <div className="surface-raised px-3 py-2 text-center min-w-[88px]">
+                            <div className="font-mono text-[8.5px] tracking-[0.22em] uppercase text-[var(--ink-500)]">Income / mo</div>
+                            <div className="font-display text-xl tabular text-[var(--win)] leading-tight">
+                                {formatMoney(totalProjectedIncome)}
+                            </div>
+                        </div>
+                        <div className="surface-raised px-3 py-2 text-center min-w-[88px]">
+                            <div className="font-mono text-[8.5px] tracking-[0.22em] uppercase text-[var(--ink-500)]">Avg. Lv.</div>
+                            <div className="font-display text-xl tabular text-[var(--volt)] leading-tight">
+                                {avgFacilityLevel}
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </header>
 
-                {cashFlowExpanded && (
-                    <>
-                        {transactions.length === 0 ? (
-                            <div className="px-5 py-10 text-center">
-                                <p className="text-sm text-gray-600">No transactions yet — cash flow updates on the 1st of each month.</p>
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-white/5">
-                                {/* Column headers */}
-                                <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
-                                    <span>Year</span>
-                                    <span className="text-right">Income</span>
-                                    <span className="text-right">Expenses</span>
-                                    <span className="text-right">Net</span>
-                                </div>
-                                {aggregateByYear(transactions).map(yearRow => (
-                                    <div
-                                        key={yearRow.year}
-                                        className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-4 items-center hover:bg-white/[0.03] transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2.5">
-                                            <span className="font-display text-base tracking-wide text-white">{yearRow.year}</span>
-                                            <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider">{yearRow.months.length} mo</span>
-                                        </div>
-                                        <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(yearRow.totalIncome)}</span>
-                                        <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(yearRow.totalExpenses)}</span>
-                                        <span className={`text-sm font-black text-right ${yearRow.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {yearRow.net >= 0 ? '+' : ''}{formatMoney(yearRow.net)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+            {/* Tabs */}
+            <nav className="flex flex-wrap gap-1 border-b border-white/8">
+                {([
+                    { id: 'office', label: 'Office', count: officeFacilities.length, Icon: Building2 },
+                    { id: 'financial', label: 'Financial', count: transactions.length, Icon: DollarSign },
+                    { id: 'staff', label: 'Staff', count: 0, Icon: Users },
+                ] as const).map(({ id, label, count, Icon }) => {
+                    const active = activeTab === id;
+                    return (
+                        <button
+                            key={id}
+                            onClick={() => setActiveTab(id)}
+                            className={`group relative flex items-center gap-2 px-4 py-3 font-display text-base tracking-[0.12em] uppercase transition-colors
+                                ${active ? 'text-[var(--bone)]' : 'text-[var(--ink-400)] hover:text-[var(--ink-200)]'}`}
+                        >
+                            <Icon size={16} className={active ? 'text-[var(--volt)]' : 'text-[var(--ink-500)]'} />
+                            <span>{label}</span>
+                            <span className={`font-mono text-[10px] tabular px-1.5 py-0.5 rounded ${active ? 'bg-[var(--volt)] text-[var(--ink-950)]' : 'bg-white/5 text-[var(--ink-400)]'}`}>
+                                {count}
+                            </span>
+                            {active && (
+                                <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-[var(--volt)]" />
+                            )}
+                        </button>
+                    );
+                })}
+            </nav>
 
-            {/* Player Contracts Table */}
-            <div className="surface-raised overflow-hidden">
-                <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-                    <div>
-                        <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">PLAYER CONTRACTS & WAGES</h2>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{players.length} players — Click columns to sort</p>
+            {/* ───── OFFICE TAB ──────────────────────────────────────── */}
+            {activeTab === 'office' && (
+                <section className="space-y-5">
+                    <div className="flex items-baseline justify-between">
+                        <div>
+                            <div className="eyebrow mb-1">Compound</div>
+                            <h2 className="font-display text-3xl tracking-wide uppercase text-[var(--bone)]">
+                                {OFFICE_FACILITY_ORDER.length} Buildings
+                            </h2>
+                        </div>
+                        <div className="text-right font-mono text-[10px] tracking-[0.24em] uppercase text-[var(--ink-500)]">
+                            Click a card to upgrade · Each level shifts a monthly line
+                        </div>
                     </div>
-                    <div className="text-right">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">Total Payroll</p>
-                        <p className="text-sm font-bold text-red-400">{formatMoney(totalWages)}/mo</p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {OFFICE_FACILITY_ORDER.map((key, idx) => {
+                            const fac = officeFacilities.find(f => f.facility_type === key);
+                            const level = fac?.level ?? 0;
+                            return (
+                                <OfficeFacilityCard
+                                    key={key}
+                                    facilityKey={key}
+                                    level={level}
+                                    idx={idx}
+                                    onClick={() => setSelectedFacilityKey(key)}
+                                />
+                            );
+                        })}
                     </div>
-                </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="border-b border-white/5">
-                                {([
-                                    { key: 'player_name', label: 'Player' },
-                                    { key: 'contract_years', label: 'Contract' },
-                                    { key: 'monthly_wage', label: 'Wages / mo' },
-                                    { key: 'player_value', label: 'Market Value' },
-                                ] as { key: SortKey; label: string }[]).map(col => (
-                                    <th
-                                        key={col.key}
-                                        onClick={() => toggleSort(col.key)}
-                                        className="px-4 py-3 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-300 transition-colors select-none"
-                                    >
-                                        <div className="flex items-center gap-1.5">
-                                            {col.label}
-                                            <SortIcon col={col.key} />
-                                        </div>
-                                    </th>
-                                ))}
-                                <th className="px-4 py-3 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Wage Share</th>
-                                <th className="px-4 py-3 text-right text-[11px] font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {sorted.map((player) => {
-                                const wagePct = totalWages > 0 ? (player.monthly_wage / totalWages) * 100 : 0;
-                                const contractColor = player.contract_years <= 1 ? 'text-red-400' : player.contract_years <= 2 ? 'text-amber-400' : 'text-emerald-400';
-                                const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
+                    {/* Live revenue preview from current facility levels */}
+                    <div className="surface-raised p-5">
+                        <div className="flex items-baseline justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Receipt size={16} className="text-amber-400" />
+                                <h3 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">PROJECTED MONTHLY LINES</h3>
+                            </div>
+                            <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-[var(--ink-500)]">
+                                Applied next 1st of the month
+                            </span>
+                        </div>
 
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {([
+                                { line: 'income_matchday' as const, label: 'Matchday', base: BASE_LINES.income_matchday, color: 'text-amber-400' },
+                                { line: 'income_sponsorship' as const, label: 'Sponsorship', base: BASE_LINES.income_sponsorship, color: 'text-violet-400' },
+                                { line: 'income_merchandise' as const, label: 'Merchandise', base: BASE_LINES.income_merchandise, color: 'text-emerald-400' },
+                                { line: 'income_broadcast' as const, label: 'Broadcast', base: BASE_LINES.income_broadcast, color: 'text-cyan-400' },
+                            ]).map(({ line, label, base, color }) => {
+                                const mult = economyMultipliers[line];
+                                const projected = Math.round(base * mult);
+                                const delta = projected - base;
                                 return (
-                                    <tr key={player.id} className="hover:bg-white/[0.02] transition-colors group">
-                                        {/* Player cell — photo + name + country + position + OVR */}
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-3">
-                                                {/* Photo */}
-                                                <PlayerAvatar playerId={player.id} size={40} />
-
-                                                {/* Name + meta */}
-                                                <div className="min-w-0">
-                                                    <div className="flex items-center gap-1.5 mb-0.5">
-                                                        <p className="text-white font-semibold text-sm leading-none truncate">{player.player_name}</p>
-                                                        <CountryFlag country={player.country} small />
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 mt-1">
-                                                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${POSITION_COLORS[player.position] ?? 'text-gray-400 bg-white/5 border-white/10'}`}>
-                                                            {POSITION_SHORT[player.position] ?? player.position}
-                                                        </span>
-                                                        <span className={`text-[11px] font-bold ${overallColor}`}>{player.overall} OVR</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        {/* Contract */}
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5">
-                                                <Calendar size={12} className={contractColor} />
-                                                <span className={`text-sm font-semibold ${contractColor}`}>
-                                                    {player.contract_years} yr{player.contract_years !== 1 ? 's' : ''}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* Wage */}
-                                        <td className="px-4 py-3">
-                                            <span className="text-white font-semibold">{formatMoney(player.monthly_wage)}</span>
-                                        </td>
-
-                                        {/* Value */}
-                                        <td className="px-4 py-3">
-                                            <span className="text-amber-400 font-semibold">{formatMoney(player.player_value)}</span>
-                                        </td>
-
-                                        {/* Wage Share bar */}
-                                        <td className="px-4 py-3 min-w-[120px]">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
-                                                        style={{ width: `${wagePct}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-[11px] text-gray-500 w-8 text-right shrink-0">{wagePct.toFixed(0)}%</span>
-                                            </div>
-                                        </td>
-
-                                        {/* Negotiate button */}
-                                        <td className="px-4 py-3 text-right">
-                                            <button
-                                                onClick={() => setNegotiating(player)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 transition-all duration-150 cursor-pointer whitespace-nowrap"
-                                            >
-                                                <FileSignature size={12} />
-                                                Negotiate
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <div key={line} className="surface p-3 border border-white/5">
+                                        <div className={`font-mono text-[10px] tracking-[0.22em] uppercase ${color}`}>{label}</div>
+                                        <div className="font-display text-xl tabular text-[var(--bone)] mt-1">{formatMoney(projected)}</div>
+                                        <div className="flex items-center justify-between mt-1">
+                                            <span className="font-mono text-[9px] text-[var(--ink-500)] uppercase">Base {formatMoney(base)}</span>
+                                            <span className={`font-mono text-[10px] tabular ${delta > 0 ? 'text-[var(--win)]' : delta < 0 ? 'text-[var(--loss)]' : 'text-[var(--ink-500)]'}`}>
+                                                {delta === 0 ? '—' : `${delta > 0 ? '+' : ''}${formatMoney(Math.abs(delta)).replace('$', '$')}`}
+                                            </span>
+                                        </div>
+                                    </div>
                                 );
                             })}
-                            {players.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-gray-600 text-sm">
-                                        No players found. Sign players via the Transfer Market.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {players.length > 0 && (
-                    <div className="px-5 py-3 border-t border-white/10 bg-white/[0.02] flex items-center justify-between text-xs text-gray-500">
-                        <span>{players.length} players</span>
-                        <div className="flex items-center gap-6">
-                            <span>Total wages: <span className="text-red-400 font-semibold">{formatMoney(totalWages)}/mo</span></span>
-                            <span>Total value: <span className="text-amber-400 font-semibold">{formatMoney(players.reduce((s, p) => s + p.player_value, 0))}</span></span>
                         </div>
                     </div>
-                )}
-            </div>
+                </section>
+            )}
+
+            {/* ───── FACILITY MODAL ──────────────────────────────────── */}
+            {selectedFacilityKey && (
+                <OfficeFacilityDetailModal
+                    facilityKey={selectedFacilityKey}
+                    level={facilityLevelsByType[selectedFacilityKey] ?? 0}
+                    teamMoney={teamMoney ?? 0}
+                    isUpgrading={upgradingType === selectedFacilityKey}
+                    onUpgrade={() => handleUpgradeFacility(selectedFacilityKey)}
+                    onClose={() => setSelectedFacilityKey(null)}
+                />
+            )}
+
+            {/* ───── FINANCIAL TAB ───────────────────────────────────── */}
+            {activeTab === 'financial' && (
+                <section className="space-y-6">
+                    {/* KPI Row */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                        <StatCard label="Club Funds" value={teamMoney !== null ? formatMoney(teamMoney) : '—'} sub="Available budget" icon={DollarSign} color="bg-[var(--volt)]/15 text-[var(--volt)]" trend="neutral" />
+                        <StatCard label="Monthly Income" value={formatMoney(totalProjectedIncome)} sub="Matchday + sponsorship + more" icon={TrendingUp} color="bg-[var(--win)]/15 text-[var(--win)]" trend="up" />
+                        <StatCard label="Monthly Wages" value={formatMoney(totalWages)} sub={`${players.length} players on payroll`} icon={Users} color="bg-[var(--loss)]/15 text-[var(--loss)]" trend="down" />
+                        <StatCard
+                            label="Net Cash Flow"
+                            value={formatMoney(Math.abs(netCashflow))}
+                            sub={netCashflow >= 0 ? 'Monthly surplus' : 'Monthly deficit'}
+                            icon={netCashflow >= 0 ? TrendingUp : TrendingDown}
+                            color={netCashflow >= 0 ? 'bg-[var(--win)]/15 text-[var(--win)]' : 'bg-[var(--loss)]/15 text-[var(--loss)]'}
+                            trend={netCashflow >= 0 ? 'up' : 'down'}
+                        />
+                    </div>
+
+                    {/* Middle Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="surface-raised p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <BarChart3 size={16} className="text-amber-400" />
+                                <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">WAGE BY POSITION</h2>
+                            </div>
+                            <div className="space-y-3">
+                                {wageByPosition.length === 0
+                                    ? <p className="text-xs text-gray-600">No data</p>
+                                    : wageByPosition.map(([pos, total]) => (
+                                        <div key={pos}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${POSITION_COLORS[pos] ?? 'text-gray-400 bg-white/5 border-white/10'}`}>
+                                                    {POSITION_SHORT[pos] ?? pos}
+                                                </span>
+                                                <span className="text-xs text-gray-400">{formatMoney(total)}</span>
+                                            </div>
+                                            <MiniBar value={total} max={totalWages} color={POSITION_BAR_COLOR[pos] ?? 'bg-gray-500'} />
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+
+                        <div className="surface-raised p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Calendar size={16} className="text-cyan-400" />
+                                <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">CONTRACT EXPIRY RISK</h2>
+                            </div>
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Expiring (≤ 1 yr)', count: expiryBuckets.soon, color: 'bg-red-500', text: 'text-red-400' },
+                                    { label: 'Mid-term (2 yrs)', count: expiryBuckets.mid, color: 'bg-amber-500', text: 'text-amber-400' },
+                                    { label: 'Long-term (3+ yrs)', count: expiryBuckets.long, color: 'bg-emerald-500', text: 'text-emerald-400' },
+                                ].map(({ label, count, color, text }) => (
+                                    <div key={label}>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs text-gray-400">{label}</span>
+                                            <span className={`text-xs font-bold ${text}`}>{count}</span>
+                                        </div>
+                                        <MiniBar value={count} max={players.length} color={color} />
+                                    </div>
+                                ))}
+                                {players.length > 0 && (
+                                    <p className="text-[10px] text-gray-600 pt-1 border-t border-white/5">
+                                        {expiryBuckets.soon} player{expiryBuckets.soon !== 1 ? 's' : ''} need{expiryBuckets.soon === 1 ? 's' : ''} renewal soon
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="surface-raised p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Zap size={16} className="text-violet-400" />
+                                <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">REVENUE STREAMS</h2>
+                            </div>
+                            <div className="space-y-2.5">
+                                {[
+                                    { label: 'Matchday Revenue', amount: projectedIncome.matchday, icon: Trophy, color: 'text-amber-400' },
+                                    { label: 'Shirt Sponsorship', amount: projectedIncome.sponsorship, icon: Star, color: 'text-violet-400' },
+                                    { label: 'Merchandise Sales', amount: projectedIncome.merchandise, icon: ShoppingIcon, color: 'text-cyan-400' },
+                                    { label: 'Broadcast Rights', amount: projectedIncome.broadcast, icon: Wifi, color: 'text-emerald-400' },
+                                ].map(({ label, amount, icon: Icon, color }) => (
+                                    <div key={label} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                                        <div className="flex items-center gap-2">
+                                            <Icon size={13} className={color} />
+                                            <span className="text-xs text-gray-400">{label}</span>
+                                        </div>
+                                        <span className="text-xs font-semibold text-white">{formatMoney(amount)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Cash Flow History */}
+                    <div className="surface-raised overflow-hidden">
+                        <div
+                            className="px-5 py-4 border-b border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors group"
+                            onClick={() => setCashFlowExpanded(!cashFlowExpanded)}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Receipt size={16} className="text-amber-400" />
+                                <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">YEARLY CASH FLOW</h2>
+                            </div>
+                            <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
+                                {cashFlowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
+                        </div>
+
+                        {cashFlowExpanded && (
+                            <>
+                                {transactions.length === 0 ? (
+                                    <div className="px-5 py-10 text-center">
+                                        <p className="text-sm text-gray-600">No transactions yet — cash flow updates on the 1st of each month.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-white/5">
+                                        <div className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-2.5 text-[10px] text-gray-600 uppercase tracking-widest font-semibold bg-white/[0.02]">
+                                            <span>Year</span>
+                                            <span className="text-right">Income</span>
+                                            <span className="text-right">Expenses</span>
+                                            <span className="text-right">Net</span>
+                                        </div>
+                                        {aggregateByYear(transactions).map(yearRow => (
+                                            <div
+                                                key={yearRow.year}
+                                                className="grid grid-cols-[1fr_100px_100px_100px] gap-4 px-5 py-4 items-center hover:bg-white/[0.03] transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="font-display text-base tracking-wide text-white">{yearRow.year}</span>
+                                                    <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider">{yearRow.months.length} mo</span>
+                                                </div>
+                                                <span className="text-sm text-emerald-400 font-semibold text-right">{formatMoney(yearRow.totalIncome)}</span>
+                                                <span className="text-sm text-red-400 font-semibold text-right">-{formatMoney(yearRow.totalExpenses)}</span>
+                                                <span className={`text-sm font-black text-right ${yearRow.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    {yearRow.net >= 0 ? '+' : ''}{formatMoney(yearRow.net)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Player Contracts Table */}
+                    <div className="surface-raised overflow-hidden">
+                        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h2 className="font-display text-lg tracking-[0.05em] text-[var(--bone)]">PLAYER CONTRACTS & WAGES</h2>
+                                <p className="text-[11px] text-gray-500 mt-0.5">{players.length} players — Click columns to sort</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Total Payroll</p>
+                                <p className="text-sm font-bold text-red-400">{formatMoney(totalWages)}/mo</p>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-white/5">
+                                        {([
+                                            { key: 'player_name', label: 'Player' },
+                                            { key: 'contract_years', label: 'Contract' },
+                                            { key: 'monthly_wage', label: 'Wages / mo' },
+                                            { key: 'player_value', label: 'Market Value' },
+                                        ] as { key: SortKey; label: string }[]).map(col => (
+                                            <th
+                                                key={col.key}
+                                                onClick={() => toggleSort(col.key)}
+                                                className="px-4 py-3 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-300 transition-colors select-none"
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    {col.label}
+                                                    <SortIcon col={col.key} />
+                                                </div>
+                                            </th>
+                                        ))}
+                                        <th className="px-4 py-3 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Wage Share</th>
+                                        <th className="px-4 py-3 text-right text-[11px] font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {sorted.map((player) => {
+                                        const wagePct = totalWages > 0 ? (player.monthly_wage / totalWages) * 100 : 0;
+                                        const contractColor = player.contract_years <= 1 ? 'text-red-400' : player.contract_years <= 2 ? 'text-amber-400' : 'text-emerald-400';
+                                        const overallColor = player.overall >= 80 ? 'text-emerald-400' : player.overall >= 60 ? 'text-amber-400' : 'text-red-400';
+
+                                        return (
+                                            <tr key={player.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <PlayerAvatar playerId={player.id} size={40} />
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                                <p className="text-white font-semibold text-sm leading-none truncate">{player.player_name}</p>
+                                                                <CountryFlag country={player.country} small />
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 mt-1">
+                                                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${POSITION_COLORS[player.position] ?? 'text-gray-400 bg-white/5 border-white/10'}`}>
+                                                                    {POSITION_SHORT[player.position] ?? player.position}
+                                                                </span>
+                                                                <span className={`text-[11px] font-bold ${overallColor}`}>{player.overall} OVR</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Calendar size={12} className={contractColor} />
+                                                        <span className={`text-sm font-semibold ${contractColor}`}>
+                                                            {player.contract_years} yr{player.contract_years !== 1 ? 's' : ''}
+                                                        </span>
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-4 py-3">
+                                                    <span className="text-white font-semibold">{formatMoney(player.monthly_wage)}</span>
+                                                </td>
+
+                                                <td className="px-4 py-3">
+                                                    <span className="text-amber-400 font-semibold">{formatMoney(player.player_value)}</span>
+                                                </td>
+
+                                                <td className="px-4 py-3 min-w-[120px]">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
+                                                                style={{ width: `${wagePct}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-[11px] text-gray-500 w-8 text-right shrink-0">{wagePct.toFixed(0)}%</span>
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-4 py-3 text-right">
+                                                    <button
+                                                        onClick={() => setNegotiating(player)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 transition-all duration-150 cursor-pointer whitespace-nowrap"
+                                                    >
+                                                        <FileSignature size={12} />
+                                                        Negotiate
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {players.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="px-4 py-12 text-center text-gray-600 text-sm">
+                                                No players found. Sign players via the Transfer Market.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {players.length > 0 && (
+                            <div className="px-5 py-3 border-t border-white/10 bg-white/[0.02] flex items-center justify-between text-xs text-gray-500">
+                                <span>{players.length} players</span>
+                                <div className="flex items-center gap-6">
+                                    <span>Total wages: <span className="text-red-400 font-semibold">{formatMoney(totalWages)}/mo</span></span>
+                                    <span>Total value: <span className="text-amber-400 font-semibold">{formatMoney(players.reduce((s, p) => s + p.player_value, 0))}</span></span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+            )}
+
+            {/* ───── STAFF TAB (placeholder) ─────────────────────────── */}
+            {activeTab === 'staff' && (
+                <section className="space-y-5">
+                    <div className="surface flex flex-col items-center text-center py-20 px-6 gap-4">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center border border-[var(--volt)]/30 bg-[var(--volt)]/8">
+                            <Wrench size={22} className="text-[var(--volt)]" />
+                        </div>
+                        <div className="eyebrow">Coming Soon</div>
+                        <h2 className="font-display text-3xl tracking-wide uppercase text-[var(--bone)]">Staff Management</h2>
+                        <p className="text-sm text-[var(--ink-400)] max-w-md">
+                            Hire scouts, physios, analysts and assistant coaches. Manage non-coaching backroom staff
+                            whose performance feeds into recruitment, recovery and tactical prep.
+                        </p>
+                    </div>
+                </section>
+            )}
 
             {/* Contract Negotiation Modal */}
             {negotiating && teamMoney !== null && (
@@ -1021,13 +1626,12 @@ export default function OfficePage() {
                     onSigned={handleSigned}
                 />
             )}
-
         </div>
     );
 }
 
-// Inline SVG for merchandise icon (avoids lucide ShoppingCart import conflict)
-function WifiIcon({ size = 13, className = '' }: { size?: number; className?: string }) {
+// Inline SVG for merchandise icon — matches the legacy revenue-streams card style
+function ShoppingIcon({ size = 13, className = '' }: { size?: number; className?: string }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
             <circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" />
