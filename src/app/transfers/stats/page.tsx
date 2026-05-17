@@ -487,8 +487,11 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                       <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border font-bold tracking-wider ${POSITION_COLORS[p.position] ?? 'bg-white/10 text-[var(--ink-300)] border-white/15'}`}>
                         {p.position.split(' ').map(w => w[0]).join('')}
                       </span>
-                      {p.current_team_name && p.team_id !== teamId && (
-                        <span className="font-mono text-[10px] text-[var(--ink-500)] truncate hidden sm:inline uppercase tracking-wider">{p.current_team_name}</span>
+                      {p.team_id && p.current_team_name && (
+                        <div className="flex items-center gap-1">
+                          <TeamLogo teamId={p.team_id} size={16} />
+                          <span className="font-mono text-[10px] text-[var(--ink-500)] truncate hidden sm:inline uppercase tracking-wider">{p.current_team_name}</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -748,8 +751,11 @@ function LeagueStatsTab({
                             <span className={`font-mono text-[9px] px-1 py-[1px] rounded border font-bold tracking-wider ${POSITION_COLORS[p.position] ?? 'bg-white/10 text-[var(--ink-300)] border-white/15'}`}>
                               {p.position.split(' ').map(w => w[0]).join('')}
                             </span>
-                            {p.current_team_name && (
-                              <span className="font-mono text-[9px] text-[var(--ink-500)] truncate uppercase tracking-wider hidden sm:inline">{p.current_team_name}</span>
+                            {p.team_id && p.current_team_name && (
+                              <div className="flex items-center gap-1">
+                                <TeamLogo teamId={p.team_id} size={14} />
+                                <span className="font-mono text-[9px] text-[var(--ink-500)] truncate uppercase tracking-wider hidden sm:inline">{p.current_team_name}</span>
+                              </div>
                             )}
                             {!p.in_league_now && (
                               <span className="font-mono text-[8.5px] text-[var(--ink-600)] uppercase tracking-wider italic">moved</span>

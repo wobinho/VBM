@@ -526,8 +526,43 @@ export function getDb(): Database.Database {
       db.prepare("UPDATE league_presets SET config = ? WHERE preset_name = ?")
         .run(JSON.stringify(superligaPolskaConfig), 'Superliga Polska Standard');
     }
+
+    migrateTrainingFacilitiesLevel(db);
   }
   return db;
+}
+
+/**
+ * Allow level 0 in training_facilities (was BETWEEN 1 AND 5). SQLite cannot
+ * alter a CHECK constraint in place, so rebuild the table when the legacy
+ * constraint is still present.
+ */
+function migrateTrainingFacilitiesLevel(db: Database.Database) {
+  const tfTableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='training_facilities'"
+  ).get() as { sql: string } | undefined;
+  if (!tfTableSql) return;
+  if (!/BETWEEN\s+1\s+AND\s+5/i.test(tfTableSql.sql)) return;
+
+  const stmt = `
+    BEGIN;
+    ALTER TABLE training_facilities RENAME TO training_facilities_old;
+    CREATE TABLE training_facilities (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id       INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      facility_type TEXT    NOT NULL,
+      level         INTEGER NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 5),
+      upgraded_at   TEXT    DEFAULT (datetime('now')),
+      created_at    TEXT    DEFAULT (datetime('now')),
+      UNIQUE(team_id, facility_type)
+    );
+    INSERT INTO training_facilities (id, team_id, facility_type, level, upgraded_at, created_at)
+      SELECT id, team_id, facility_type, level, upgraded_at, created_at FROM training_facilities_old;
+    DROP TABLE training_facilities_old;
+    CREATE INDEX IF NOT EXISTS idx_tf_team_id ON training_facilities(team_id);
+    COMMIT;
+  `;
+  db.exec(stmt);
 }
 
 function seedMissingLeagueSeasons(db: Database.Database) {

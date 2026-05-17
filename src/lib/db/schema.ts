@@ -343,5 +343,58 @@ export function runSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_pth_player_id   ON player_team_history(player_id);
     CREATE INDEX IF NOT EXISTS idx_pth_team_id     ON player_team_history(team_id);
     CREATE INDEX IF NOT EXISTS idx_pth_season_year ON player_team_history(season_year);
+
+    -- Training: Facilities — one row per facility type per team, starts at level 0
+    CREATE TABLE IF NOT EXISTS training_facilities (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id       INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      facility_type TEXT    NOT NULL,
+      level         INTEGER NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 5),
+      upgraded_at   TEXT    DEFAULT (datetime('now')),
+      created_at    TEXT    DEFAULT (datetime('now')),
+      UNIQUE(team_id, facility_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tf_team_id ON training_facilities(team_id);
+
+    -- Training: Coaches — hired coaches per team (max 3 per team)
+    CREATE TABLE IF NOT EXISTS training_coaches (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id      INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      coach_name   TEXT    NOT NULL,
+      specialty    TEXT    NOT NULL,
+      quality      INTEGER NOT NULL CHECK (quality BETWEEN 1 AND 100),
+      monthly_wage REAL    NOT NULL DEFAULT 3000.0,
+      hire_date    TEXT    NOT NULL DEFAULT (datetime('now')),
+      created_at   TEXT    DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tc_team_id ON training_coaches(team_id);
+
+    -- Training: Plan Assignments — active training plan per player (one per player)
+    CREATE TABLE IF NOT EXISTS training_assignments (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id     INTEGER NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+      plan_key      TEXT    NOT NULL,
+      started_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+      stat_progress TEXT    NOT NULL DEFAULT '{}',
+      last_tick     TEXT    NOT NULL DEFAULT (datetime('now')),
+      created_at    TEXT    DEFAULT (datetime('now')),
+      updated_at    TEXT    DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_ta_player_id ON training_assignments(player_id);
+
+    -- Training: Stat Gains Log — feed of stat increases
+    CREATE TABLE IF NOT EXISTS training_stat_gains (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      stat_key   TEXT    NOT NULL,
+      old_value  INTEGER NOT NULL,
+      new_value  INTEGER NOT NULL,
+      plan_key   TEXT    NOT NULL,
+      gained_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tsg_player_id ON training_stat_gains(player_id);
+    CREATE INDEX IF NOT EXISTS idx_tsg_team_id   ON training_stat_gains(team_id);
+    CREATE INDEX IF NOT EXISTS idx_tsg_gained_at ON training_stat_gains(gained_at);
   `);
 }

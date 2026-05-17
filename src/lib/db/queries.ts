@@ -928,7 +928,14 @@ export function runMonthlyEconomy(teamId: number, month: string): FinancialTrans
     SELECT COALESCE(SUM(monthly_wage), 0) as total FROM players WHERE team_id = ?
   `).get(teamId) as { total: number };
   const expense_wages = wageRow.total;
-  const expense_staff = 8_000; // fixed staff costs
+
+  // Coaching staff wages
+  const coachWageRow = db.prepare(`
+    SELECT COALESCE(SUM(monthly_wage), 0) as total FROM training_coaches WHERE team_id = ?
+  `).get(teamId) as { total: number };
+  const expense_coaches = coachWageRow.total;
+
+  const expense_staff = 8_000 + expense_coaches; // fixed staff costs + coach wages
   const expense_other = 0;
   const totalExpenses = expense_wages + expense_staff + expense_other;
 
@@ -1558,4 +1565,194 @@ export function getCupFixtureById(fixtureId: number): CupGame | undefined {
     ${CUP_FIXTURE_JOIN_INNER}
     WHERE cf.id = ?
   `).get(fixtureId) as CupGame | undefined;
+}
+
+// ==================== TRAINING SYSTEM ====================
+
+export interface TrainingAssignment {
+  id: number;
+  player_id: number;
+  plan_key: string;
+  started_at: string;
+  stat_progress: string; // JSON
+  last_tick: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainingFacility {
+  id: number;
+  team_id: number;
+  facility_type: string;
+  level: number;
+  upgraded_at: string;
+  created_at: string;
+}
+
+export interface TrainingCoach {
+  id: number;
+  team_id: number;
+  coach_name: string;
+  specialty: string;
+  quality: number;
+  monthly_wage: number;
+  hire_date: string;
+  created_at: string;
+}
+
+export interface TrainingStatGain {
+  id: number;
+  player_id: number;
+  team_id: number;
+  stat_key: string;
+  old_value: number;
+  new_value: number;
+  plan_key: string;
+  gained_at: string;
+}
+
+// ========== Training Assignments ==========
+
+export function getTrainingAssignments(teamId: number): (TrainingAssignment & Player)[] {
+  return getDb().prepare(`
+    SELECT ta.*, p.*
+    FROM training_assignments ta
+    JOIN players p ON ta.player_id = p.id
+    WHERE p.team_id = ?
+  `).all(teamId) as (TrainingAssignment & Player)[];
+}
+
+export function getTrainingAssignment(playerId: number): TrainingAssignment | undefined {
+  return getDb().prepare(`
+    SELECT * FROM training_assignments
+    WHERE player_id = ?
+  `).get(playerId) as TrainingAssignment | undefined;
+}
+
+export function upsertTrainingAssignment(playerId: number, planKey: string): void {
+  const db = getDb();
+  const now = new Date().toISOString().slice(0, 10);
+  db.prepare(`
+    INSERT INTO training_assignments (player_id, plan_key, started_at, stat_progress, last_tick, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(player_id) DO UPDATE SET
+      plan_key = ?,
+      started_at = ?,
+      stat_progress = '{}',
+      updated_at = ?
+  `).run(playerId, planKey, now, '{}', now, now, planKey, now, now);
+}
+
+export function deleteTrainingAssignment(playerId: number): void {
+  getDb().prepare(`
+    DELETE FROM training_assignments
+    WHERE player_id = ?
+  `).run(playerId);
+}
+
+// ========== Training Facilities ==========
+
+export function getTrainingFacilities(teamId: number): TrainingFacility[] {
+  const db = getDb();
+  const now = new Date().toISOString().slice(0, 10);
+
+  // 16 facility types — each new team starts every facility at level 0
+  const facilityTypes = [
+    'cardio_center', 'weight_room', 'plyometrics_lab', 'agility_grid',
+    'recovery_suite', 'technique_lab', 'attack_court', 'defense_court',
+    'serve_tunnel', 'reception_court', 'setter_studio', 'power_court',
+    'tactical_room', 'sports_psychology', 'film_room', 'mental_lab',
+  ];
+
+  for (const type of facilityTypes) {
+    const exists = db.prepare(`
+      SELECT id FROM training_facilities
+      WHERE team_id = ? AND facility_type = ?
+    `).get(teamId, type);
+
+    if (!exists) {
+      db.prepare(`
+        INSERT INTO training_facilities (team_id, facility_type, level, upgraded_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(teamId, type, 0, now, now);
+    }
+  }
+
+  return db.prepare(`
+    SELECT * FROM training_facilities
+    WHERE team_id = ?
+    ORDER BY facility_type ASC
+  `).all(teamId) as TrainingFacility[];
+}
+
+export function upgradeTrainingFacility(teamId: number, facilityType: string): TrainingFacility | null {
+  const db = getDb();
+  const now = new Date().toISOString().slice(0, 10);
+
+  const current = db.prepare(`
+    SELECT * FROM training_facilities
+    WHERE team_id = ? AND facility_type = ?
+  `).get(teamId, facilityType) as TrainingFacility | undefined;
+
+  if (!current || current.level >= 5) return null;
+
+  const newLevel = current.level + 1;
+  db.prepare(`
+    UPDATE training_facilities
+    SET level = ?, upgraded_at = ?
+    WHERE team_id = ? AND facility_type = ?
+  `).run(newLevel, now, teamId, facilityType);
+
+  return db.prepare(`
+    SELECT * FROM training_facilities
+    WHERE team_id = ? AND facility_type = ?
+  `).get(teamId, facilityType) as TrainingFacility;
+}
+
+// ========== Training Coaches ==========
+
+export function getTrainingCoaches(teamId: number): TrainingCoach[] {
+  return getDb().prepare(`
+    SELECT * FROM training_coaches
+    WHERE team_id = ?
+    ORDER BY hire_date DESC
+  `).all(teamId) as TrainingCoach[];
+}
+
+export function insertTrainingCoach(
+  teamId: number,
+  coachName: string,
+  specialty: string,
+  quality: number,
+  monthlyWage: number,
+): TrainingCoach {
+  const db = getDb();
+  const now = new Date().toISOString().slice(0, 10);
+
+  const info = db.prepare(`
+    INSERT INTO training_coaches (team_id, coach_name, specialty, quality, monthly_wage, hire_date, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(teamId, coachName, specialty, quality, monthlyWage, now, now);
+
+  return getDb().prepare(`
+    SELECT * FROM training_coaches WHERE id = ?
+  `).get((info as any).lastInsertRowid) as TrainingCoach;
+}
+
+export function deleteTrainingCoach(coachId: number, teamId: number): void {
+  getDb().prepare(`
+    DELETE FROM training_coaches
+    WHERE id = ? AND team_id = ?
+  `).run(coachId, teamId);
+}
+
+// ========== Training Stat Gains Log ==========
+
+export function getTrainingGains(teamId: number, limit: number = 20): TrainingStatGain[] {
+  return getDb().prepare(`
+    SELECT * FROM training_stat_gains
+    WHERE team_id = ?
+    ORDER BY gained_at DESC
+    LIMIT ?
+  `).all(teamId, limit) as TrainingStatGain[];
 }

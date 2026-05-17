@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
+import { tickTraining } from '@/lib/training/engine';
 
 /**
  * POST /api/advance-day — advance the game calendar by exactly 1 day.
@@ -151,6 +152,18 @@ export async function POST() {
 
   advanceGameDate(newDate);
 
+  // Training tick: run for all AI and user teams
+  let trainingGainCount = 0;
+  {
+    const { getDb } = await import('@/lib/db');
+    const db = getDb();
+    const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
+    for (const t of allTeams) {
+      const gains = tickTraining(t.id, newDate);
+      trainingGainCount += gains.length;
+    }
+  }
+
   // Monthly economy: fire on the 1st of each month
   let monthlyEconomyRan = false;
   if (newDate.endsWith('-01')) {
@@ -193,6 +206,7 @@ export async function POST() {
     hasMatchDay,
     fixtureCount: dayFixtures.length + dayPlayoffGames.length + dayCupFixtures.length,
     autoSimulated: remaining.length,
+    trainingGainCount,
     monthlyEconomyRan,
     playoffsGenerated,
   });
