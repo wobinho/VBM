@@ -1,12 +1,33 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, SlidersHorizontal, UserPlus, RotateCcw, CheckCircle2, Loader2, Shuffle, Save, X, Trash2, Upload, AlertCircle, Download } from 'lucide-react';
+import { Search, SlidersHorizontal, UserPlus, RotateCcw, CheckCircle2, Loader2, Shuffle, Save, X, Trash2, AlertCircle, Users, Plus, Copy, ChevronDown, ChevronUp, Bookmark, Pencil, BookmarkPlus } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { calculateOverall, POSITION_GROUPINGS, getOtherStats, ALL_STAT_KEYS, type StatKey } from '@/lib/overall';
 import { Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface RowData { [key: string]: any; }
+
+interface BatchRow {
+  rowId: string;
+  info: { player_id: string; player_name: string; team_id: string; position: string; age: string; country: string; jersey_number: string };
+  stats: Record<string, number>;
+  expanded: boolean;
+}
+
+interface StatPreset {
+  id: string;
+  name: string;
+  position: string;
+  stats: Record<string, number>;
+}
+
+interface PresetEditor {
+  id: string | null;
+  name: string;
+  position: string;
+  stats: Record<string, number>;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const POSITIONS = ['Setter', 'Outside Hitter', 'Middle Blocker', 'Opposite Hitter', 'Libero'];
@@ -78,6 +99,25 @@ const INPUT_CLS = 'w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
 const SELECT_CLS = 'w-full px-3 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-sm text-white focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-all';
 const LABEL_CLS = 'text-xs font-semibold text-gray-400 uppercase tracking-wider';
 
+const POSITION_COLORS: Record<string, { text: string; badge: string; border: string; accent: string }> = {
+  'Setter':          { text: 'text-purple-400', badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30', border: 'border-l-purple-500',  accent: 'rgb(168 85 247)' },
+  'Outside Hitter':  { text: 'text-amber-400',  badge: 'bg-amber-500/15  text-amber-300  border-amber-500/30',  border: 'border-l-amber-500',   accent: 'rgb(245 158 11)' },
+  'Middle Blocker':  { text: 'text-blue-400',   badge: 'bg-blue-500/15   text-blue-300   border-blue-500/30',   border: 'border-l-blue-500',    accent: 'rgb(59 130 246)' },
+  'Opposite Hitter': { text: 'text-red-400',    badge: 'bg-red-500/15    text-red-300    border-red-500/30',    border: 'border-l-red-500',     accent: 'rgb(239 68 68)' },
+  'Libero':          { text: 'text-teal-400',   badge: 'bg-teal-500/15   text-teal-300   border-teal-500/30',   border: 'border-l-teal-500',    accent: 'rgb(20 184 166)' },
+};
+
+const CORE_STAT_KEYS = ['attack', 'defense', 'serve', 'block', 'receive', 'setting'] as const;
+
+const PRESETS_STORAGE_KEY = 'vbm_stat_presets';
+function loadPresetsFromStorage(): StatPreset[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) ?? '[]'); } catch { return []; }
+}
+function persistPresets(p: StatPreset[]) {
+  localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(p));
+}
+
 const DEFAULT_QUICK_ADD = { player_id: '', player_name: '', team_id: '', position: '', age: '', country: '', jersey_number: '' };
 
 function defaultStats(value = 75): Record<string, number> {
@@ -135,10 +175,15 @@ export default function PlayerAdminPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Bulk Import
-  const [bulkImporting, setBulkImporting] = useState(false);
-  const [bulkResults, setBulkResults] = useState<any>(null);
-  const [bulkError, setBulkError] = useState<string | null>(null);
+  // Batch Add Queue
+  const [batchRows, setBatchRows] = useState<BatchRow[]>([]);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchResults, setBatchResults] = useState<{ name: string; success: boolean; error?: string }[] | null>(null);
+  const [batchPresetOpen, setBatchPresetOpen] = useState<string | null>(null);
+
+  // Stat Presets
+  const [presets, setPresets] = useState<StatPreset[]>([]);
+  const [presetEditor, setPresetEditor] = useState<PresetEditor | null>(null);
 
   if (!isAdmin) {
     return (
@@ -153,6 +198,7 @@ export default function PlayerAdminPage() {
   // ── Data fetching ───────────────────────────────────────────────────────────
   useEffect(() => {
     loadReferenceData();
+    setPresets(loadPresetsFromStorage());
   }, []);
 
   const loadReferenceData = async () => {
@@ -328,40 +374,117 @@ export default function PlayerAdminPage() {
     ? calculateOverall(editorStats, editorInfo.position || editorPlayer.position)
     : null;
 
-  // ── Bulk Import ─────────────────────────────────────────────────────────────
-  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ── Stat Presets ────────────────────────────────────────────────────────────
+  const openNewPreset = () => setPresetEditor({ id: null, name: '', position: '', stats: defaultStats() });
 
-    setBulkImporting(true);
-    setBulkError(null);
-    setBulkResults(null);
+  const openEditPreset = (preset: StatPreset) =>
+    setPresetEditor({ id: preset.id, name: preset.name, position: preset.position, stats: { ...preset.stats } });
 
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-
-      const res = await fetch('/api/players/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        setBulkError(result.error || 'Import failed');
-      } else {
-        setBulkResults(result);
-        await refreshPlayers();
-      }
-    } catch (error) {
-      setBulkError(error instanceof Error ? error.message : 'Failed to parse JSON file');
-    } finally {
-      setBulkImporting(false);
-      // Reset the input
-      if (e.target) e.target.value = '';
+  const handleSavePreset = () => {
+    if (!presetEditor) return;
+    if (!presetEditor.name.trim() || !presetEditor.position) { alert('Preset name and position are required'); return; }
+    let updated: StatPreset[];
+    if (presetEditor.id) {
+      updated = presets.map(p => p.id === presetEditor.id
+        ? { ...p, name: presetEditor.name.trim(), position: presetEditor.position, stats: presetEditor.stats }
+        : p);
+    } else {
+      updated = [...presets, { id: crypto.randomUUID(), name: presetEditor.name.trim(), position: presetEditor.position, stats: { ...presetEditor.stats } }];
     }
+    setPresets(updated);
+    persistPresets(updated);
+    setPresetEditor(null);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const updated = presets.filter(p => p.id !== id);
+    setPresets(updated);
+    persistPresets(updated);
+    if (presetEditor?.id === id) setPresetEditor(null);
+  };
+
+  const applyPresetToBatchRow = (rowId: string, preset: StatPreset) => {
+    setBatchRows(prev => prev.map(r =>
+      r.rowId === rowId ? { ...r, info: { ...r.info, position: preset.position }, stats: { ...preset.stats } } : r
+    ));
+    setBatchPresetOpen(null);
+  };
+
+  // ── Batch Add Queue ─────────────────────────────────────────────────────────
+  const newBatchRow = (): BatchRow => ({
+    rowId: crypto.randomUUID(),
+    info: { ...DEFAULT_QUICK_ADD },
+    stats: defaultStats(),
+    expanded: false,
+  });
+
+  const updateBatchRowInfo = (rowId: string, key: string, value: string) =>
+    setBatchRows(prev => prev.map(r => r.rowId === rowId ? { ...r, info: { ...r.info, [key]: value } } : r));
+
+  const updateBatchRowStat = (rowId: string, key: string, value: number) =>
+    setBatchRows(prev => prev.map(r => r.rowId === rowId ? { ...r, stats: { ...r.stats, [key]: clampStat(value) } } : r));
+
+  const toggleBatchRow = (rowId: string) =>
+    setBatchRows(prev => prev.map(r => r.rowId === rowId ? { ...r, expanded: !r.expanded } : r));
+
+  const removeBatchRow = (rowId: string) =>
+    setBatchRows(prev => prev.filter(r => r.rowId !== rowId));
+
+  const duplicateBatchRow = (rowId: string) =>
+    setBatchRows(prev => {
+      const idx = prev.findIndex(r => r.rowId === rowId);
+      if (idx === -1) return prev;
+      const copy: BatchRow = { ...prev[idx], rowId: crypto.randomUUID(), expanded: false };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+
+  const randomizeBatchGroup = (rowId: string, keys: string[]) =>
+    setBatchRows(prev => prev.map(r => {
+      if (r.rowId !== rowId) return r;
+      const next = { ...r.stats };
+      for (const k of keys) next[k] = nudgeStat(r.stats[k] ?? 75);
+      return { ...r, stats: next };
+    }));
+
+  const handleBatchSubmit = async () => {
+    if (batchRows.length === 0) return;
+    const invalid = batchRows.filter(r => !r.info.player_name || !r.info.position || !r.info.age || !r.info.country || !r.info.jersey_number);
+    if (invalid.length > 0) { alert(`${invalid.length} row(s) are missing required fields (name, position, age, country, jersey #)`); return; }
+
+    setBatchSubmitting(true);
+    setBatchResults(null);
+    const results: { name: string; success: boolean; error?: string }[] = [];
+
+    for (const row of batchRows) {
+      const overall = calculateOverall(row.stats, row.info.position);
+      const payload = {
+        ...(row.info.player_id ? { id: parseInt(row.info.player_id) } : {}),
+        player_name: row.info.player_name,
+        position: row.info.position,
+        age: parseInt(row.info.age),
+        country: row.info.country,
+        jersey_number: parseInt(row.info.jersey_number),
+        team_id: row.info.team_id ? parseInt(row.info.team_id) : null,
+        overall,
+        ...row.stats,
+        contract_years: 1,
+        monthly_wage: 5000,
+        player_value: 250000,
+      };
+      try {
+        const res = await fetch('/api/players', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (res.ok) results.push({ name: row.info.player_name, success: true });
+        else { const err = await res.json().catch(() => ({})); results.push({ name: row.info.player_name, success: false, error: err.error ?? 'Failed' }); }
+      } catch { results.push({ name: row.info.player_name, success: false, error: 'Network error' }); }
+    }
+
+    const failedNames = new Set(results.filter(r => !r.success).map(r => r.name));
+    setBatchRows(prev => prev.filter(r => failedNames.has(r.info.player_name)));
+    setBatchResults(results);
+    await refreshPlayers();
+    setBatchSubmitting(false);
   };
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
@@ -717,133 +840,489 @@ export default function PlayerAdminPage() {
         )}
       </div>
 
-      {/* ── Bulk Import ──────────────────────────────────────────────────────── */}
+      {/* ── Stat Presets ─────────────────────────────────────────────────────── */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
-            <Upload size={20} className="text-blue-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Bulk Import Players</h2>
-            <p className="text-sm text-gray-400">Import players from a JSON file created with the VBM player builder</p>
-          </div>
-        </div>
-
-        {/* Upload area */}
-        <div className="relative">
-          <input
-            type="file"
-            accept=".json"
-            onChange={handleBulkImport}
-            disabled={bulkImporting}
-            className="hidden"
-            id="bulk-import-input"
-          />
-          <label
-            htmlFor="bulk-import-input"
-            className={`flex items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
-              bulkImporting
-                ? 'border-gray-600 bg-white/[0.02]'
-                : 'border-blue-500/30 bg-blue-500/5 hover:border-blue-500/50 hover:bg-blue-500/10'
-            }`}
-          >
-            <div className="text-center">
-              {bulkImporting ? (
-                <>
-                  <Loader2 size={24} className="text-blue-400 mb-2 animate-spin mx-auto" />
-                  <p className="text-sm text-white font-medium">Processing import...</p>
-                </>
-              ) : (
-                <>
-                  <Download size={24} className="text-blue-400 mb-2 mx-auto" />
-                  <p className="text-sm text-white font-medium">Click to select JSON file</p>
-                  <p className="text-xs text-gray-400 mt-1">or drag and drop</p>
-                </>
-              )}
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-violet-500/10 rounded-lg border border-violet-500/20">
+              <Bookmark size={20} className="text-violet-400" />
             </div>
-          </label>
-        </div>
-
-        {/* Error display */}
-        {bulkError && (
-          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
-            <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-red-400">Import Failed</p>
-              <p className="text-sm text-red-300 mt-1">{bulkError}</p>
+              <h2 className="text-xl font-bold text-white">Stat Presets</h2>
+              <p className="text-sm text-gray-400">Save position + stat builds and load them instantly when batch-adding players</p>
             </div>
+          </div>
+          <button
+            onClick={openNewPreset}
+            className="flex items-center gap-2 px-4 py-2 bg-violet-500/10 border border-violet-500/30 hover:bg-violet-500/20 text-violet-400 rounded-lg text-sm font-semibold transition-all cursor-pointer active:scale-95 shrink-0"
+          >
+            <BookmarkPlus size={16} /> New Preset
+          </button>
+        </div>
+
+        {/* Preset cards grid */}
+        {presets.length === 0 && !presetEditor ? (
+          <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-white/10 rounded-xl text-gray-600">
+            <Bookmark size={32} className="mb-3 opacity-20" />
+            <p className="text-sm">No presets yet — click "New Preset" to create your first build</p>
+          </div>
+        ) : presets.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {presets.map(preset => {
+              const pc = POSITION_COLORS[preset.position];
+              const ovr = preset.position ? calculateOverall(preset.stats, preset.position) : 0;
+              const isEditing = presetEditor?.id === preset.id;
+              return (
+                <div
+                  key={preset.id}
+                  className={`relative border-l-4 ${pc?.border ?? 'border-l-white/20'} bg-white/[0.04] border border-white/10 rounded-xl p-4 space-y-3 transition-all ${isEditing ? 'ring-1 ring-violet-500/40 bg-violet-500/5' : 'hover:bg-white/[0.06]'}`}
+                >
+                  {/* Top row: name + OVR */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-white text-sm leading-tight truncate">{preset.name}</p>
+                      <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pc?.badge ?? 'bg-white/10 text-gray-400 border-white/10'}`}>
+                        {preset.position}
+                      </span>
+                    </div>
+                    <div className={`flex flex-col items-center px-3 py-1.5 rounded-lg shrink-0 ${
+                      ovr >= 80 ? 'bg-emerald-500/10 border border-emerald-500/20' :
+                      ovr >= 60 ? 'bg-amber-500/10 border border-amber-500/20' :
+                      'bg-red-500/10 border border-red-500/20'
+                    }`}>
+                      <span className="text-[9px] text-gray-500 uppercase tracking-wider leading-none mb-0.5">OVR</span>
+                      <span className={`text-xl font-black tabular-nums leading-none ${ovr >= 80 ? 'text-emerald-400' : ovr >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{ovr}</span>
+                    </div>
+                  </div>
+
+                  {/* Core stat mini-bars */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {CORE_STAT_KEYS.map(k => {
+                      const v = preset.stats[k] ?? 75;
+                      const barColor = pc?.accent ?? 'rgb(245 158 11)';
+                      return (
+                        <div key={k} className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500 w-7 shrink-0 uppercase font-mono">{k.slice(0, 3).toUpperCase()}</span>
+                          <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: barColor, opacity: 0.7 }} />
+                          </div>
+                          <span className={`text-[10px] tabular-nums font-semibold w-5 text-right ${v >= 80 ? 'text-emerald-400' : v >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{v}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                    <button
+                      onClick={() => isEditing ? setPresetEditor(null) : openEditPreset(preset)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        isEditing
+                          ? 'bg-violet-500/20 border border-violet-500/40 text-violet-300'
+                          : 'bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300'
+                      }`}
+                    >
+                      <Pencil size={11} /> {isEditing ? 'Editing…' : 'Edit'}
+                    </button>
+                    <button
+                      onClick={() => handleDeletePreset(preset.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/5 border border-red-500/20 hover:bg-red-500/15 text-red-400 transition-all cursor-pointer"
+                    >
+                      <Trash2 size={11} /> Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Results display */}
-        {bulkResults && (
-          <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-emerald-400">Import Successful</p>
-                <span className={`text-2xl font-bold ${bulkResults.created > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
-                  +{bulkResults.created}
-                </span>
-              </div>
-              <p className="text-xs text-emerald-300">
-                Created {bulkResults.created} player{bulkResults.created !== 1 ? 's' : ''}
-                {bulkResults.failed > 0 && ` • ${bulkResults.failed} failed`}
-              </p>
+        {/* Preset Editor panel */}
+        {presetEditor && (
+          <div className="border border-violet-500/20 bg-violet-500/5 rounded-2xl p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-violet-300 uppercase tracking-wider">
+                {presetEditor.id ? 'Edit Preset' : 'New Preset'}
+              </h3>
+              <button onClick={() => setPresetEditor(null)} className="p-1.5 text-gray-500 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer">
+                <X size={15} />
+              </button>
             </div>
 
-            {/* Success results table */}
-            {bulkResults.results && bulkResults.results.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Player</th>
-                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">ID</th>
-                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bulkResults.results.map((r: any, i: number) => (
-                      <tr key={i} className="border-b border-white/5 hover:bg-white/[0.03]">
-                        <td className="py-2 px-3 text-white">{r.player_name}</td>
-                        <td className="py-2 px-3 text-gray-400">#{r.player_id}</td>
-                        <td className="py-2 px-3">
-                          <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold">
-                            <CheckCircle2 size={12} /> Created
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Name + Position */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className={LABEL_CLS}>Preset Name *</label>
+                <input
+                  type="text"
+                  value={presetEditor.name}
+                  onChange={e => setPresetEditor(prev => prev ? { ...prev, name: e.target.value } : null)}
+                  placeholder="e.g. Attacking Setter"
+                  className="w-full px-3 py-2 bg-white/5 border border-violet-500/20 rounded-lg text-sm text-white placeholder-gray-600 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className={LABEL_CLS}>Position *</label>
+                <select
+                  value={presetEditor.position}
+                  onChange={e => setPresetEditor(prev => prev ? { ...prev, position: e.target.value } : null)}
+                  className="w-full px-3 py-2 bg-[#1a1a2e] border border-violet-500/20 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all"
+                >
+                  <option value="">Select position</option>
+                  {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Live OVR preview */}
+            {presetEditor.position && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">Live Overall:</span>
+                {(() => {
+                  const ovr = calculateOverall(presetEditor.stats, presetEditor.position);
+                  return (
+                    <span className={`text-2xl font-black tabular-nums ${ovr >= 80 ? 'text-emerald-400' : ovr >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{ovr}</span>
+                  );
+                })()}
               </div>
             )}
 
-            {/* Error results table */}
-            {bulkResults.errors && bulkResults.errors.length > 0 && (
-              <div className="overflow-x-auto">
-                <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Failed Imports</h3>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-red-500/20">
-                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Player</th>
-                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Error</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bulkResults.errors.map((err: any, i: number) => (
-                      <tr key={i} className="border-b border-red-500/10">
-                        <td className="py-2 px-3 text-white">{err.player_name}</td>
-                        <td className="py-2 px-3 text-red-400 text-xs">{err.error}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Position-grouped stat sliders */}
+            {presetEditor.position ? (() => {
+              const grouping = POSITION_GROUPINGS[presetEditor.position] ?? null;
+              if (!grouping) return null;
+              const otherKeys = getOtherStats(grouping);
+              const groups: { title: string; color: string; border: string; weight: string; keys: StatKey[] }[] = [
+                { title: 'Main 1',    color: 'text-red-400',    border: 'border-red-500/30',    weight: '40%', keys: [grouping.main1] },
+                { title: 'Main 2',    color: 'text-orange-400', border: 'border-orange-500/30', weight: '35%', keys: [grouping.main2] },
+                { title: 'Secondary', color: 'text-cyan-400',   border: 'border-cyan-500/30',   weight: '20%', keys: grouping.secondary },
+                { title: 'Other',     color: 'text-gray-400',   border: 'border-white/10',      weight: '5%',  keys: otherKeys },
+              ];
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {groups.map(g => (
+                    <div key={g.title} className={`p-4 rounded-xl bg-white/[0.03] border ${g.border} space-y-3`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h4 className={`text-xs font-bold uppercase tracking-widest ${g.color}`}>{g.title}</h4>
+                          <span className="text-[10px] text-gray-600 font-mono">{g.weight}</span>
+                        </div>
+                        <button
+                          onClick={() => setPresetEditor(prev => {
+                            if (!prev) return null;
+                            const next = { ...prev.stats };
+                            for (const k of g.keys) next[k] = nudgeStat(prev.stats[k] ?? 75);
+                            return { ...prev, stats: next };
+                          })}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 ${g.color} cursor-pointer active:scale-95`}
+                        >
+                          <Shuffle size={12} /> Randomize
+                        </button>
+                      </div>
+                      <div className={`space-y-2.5 ${g.keys.length > 6 ? 'max-h-[320px] overflow-y-auto pr-1' : ''}`}>
+                        {g.keys.map(k => (
+                          <StatSlider
+                            key={k}
+                            label={STAT_LABEL[k] ?? k}
+                            value={presetEditor.stats[k] ?? 75}
+                            onChange={v => setPresetEditor(prev => prev ? { ...prev, stats: { ...prev.stats, [k]: clampStat(v) } } : null)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })() : (
+              <div className="flex flex-col items-center justify-center py-8 border border-dashed border-white/10 rounded-xl text-gray-600">
+                <p className="text-sm">Select a position above to configure stats</p>
               </div>
             )}
 
+            {/* Save / Cancel */}
+            <div className="flex items-center gap-3 pt-1 border-t border-white/10">
+              <button
+                onClick={handleSavePreset}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-400 hover:to-purple-400 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-violet-500/20 cursor-pointer active:scale-95"
+              >
+                <Bookmark size={15} /> {presetEditor.id ? 'Update Preset' : 'Save Preset'}
+              </button>
+              <button
+                onClick={() => setPresetEditor(null)}
+                className="px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Batch Add Queue ──────────────────────────────────────────────────── */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+              <Users size={20} className="text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Batch Add Queue</h2>
+              <p className="text-sm text-gray-400">Queue multiple players, expand any row to fine-tune stats, then submit all at once</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setBatchRows(prev => [...prev, newBatchRow()])}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 text-green-400 rounded-lg text-sm font-semibold transition-all cursor-pointer active:scale-95 shrink-0"
+          >
+            <Plus size={16} /> Add Row
+          </button>
+        </div>
+
+        {batchRows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-white/10 rounded-xl text-gray-600">
+            <Users size={32} className="mb-3 opacity-20" />
+            <p className="text-sm">No players in queue — click "Add Row" to start</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {batchRows.map((row, idx) => {
+              const grouping = POSITION_GROUPINGS[row.info.position] ?? null;
+              const ovr = grouping ? calculateOverall(row.stats, row.info.position) : null;
+              const otherKeys = grouping ? getOtherStats(grouping) : [];
+              const statGroups: { title: string; color: string; border: string; weight: string; keys: StatKey[] }[] = grouping ? [
+                { title: 'Main 1',    color: 'text-red-400',    border: 'border-red-500/30',    weight: '40%', keys: [grouping.main1] },
+                { title: 'Main 2',    color: 'text-orange-400', border: 'border-orange-500/30', weight: '35%', keys: [grouping.main2] },
+                { title: 'Secondary', color: 'text-cyan-400',   border: 'border-cyan-500/30',   weight: '20%', keys: grouping.secondary },
+                { title: 'Other',     color: 'text-gray-400',   border: 'border-white/10',      weight: '5%',  keys: otherKeys },
+              ] : [];
+
+              return (
+                <div key={row.rowId} className="border border-white/10 rounded-xl overflow-hidden">
+                  {/* Compact info row */}
+                  <div className="flex items-center gap-2 p-3 bg-white/[0.03]">
+                    <span className="text-xs text-gray-600 w-5 text-center shrink-0 tabular-nums">{idx + 1}</span>
+
+                    <input
+                      type="text"
+                      value={row.info.player_name}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'player_name', e.target.value)}
+                      placeholder="Player name *"
+                      className="flex-1 min-w-[110px] px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:border-green-500/50 focus:outline-none focus:ring-1 focus:ring-green-500/20 transition-all"
+                    />
+
+                    <select
+                      value={row.info.position}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'position', e.target.value)}
+                      className="w-36 px-2 py-1.5 bg-[#1a1a2e] border border-white/10 rounded-lg text-sm text-white focus:border-green-500/50 focus:outline-none transition-all shrink-0"
+                    >
+                      <option value="">Position *</option>
+                      {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+
+                    <input
+                      type="number"
+                      min={16} max={50}
+                      value={row.info.age}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'age', e.target.value)}
+                      placeholder="Age *"
+                      className="w-16 px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:border-green-500/50 focus:outline-none transition-all shrink-0"
+                    />
+
+                    <input
+                      type="text"
+                      value={row.info.country}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'country', e.target.value)}
+                      placeholder="Country *"
+                      className="w-24 px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:border-green-500/50 focus:outline-none transition-all shrink-0"
+                    />
+
+                    <input
+                      type="number"
+                      min={1} max={99}
+                      value={row.info.jersey_number}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'jersey_number', e.target.value)}
+                      placeholder="# *"
+                      className="w-14 px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:border-green-500/50 focus:outline-none transition-all shrink-0"
+                    />
+
+                    <select
+                      value={row.info.team_id}
+                      onChange={e => updateBatchRowInfo(row.rowId, 'team_id', e.target.value)}
+                      className="w-32 px-2 py-1.5 bg-[#1a1a2e] border border-white/10 rounded-lg text-sm text-white focus:border-green-500/50 focus:outline-none transition-all shrink-0 hidden sm:block"
+                    >
+                      <option value="">Free Agent</option>
+                      {allTeams.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+                    </select>
+
+                    {ovr !== null && (
+                      <span className={`text-sm font-black tabular-nums w-8 text-center shrink-0 ${ovr >= 80 ? 'text-emerald-400' : ovr >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {ovr}
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-1 shrink-0 relative">
+                      {/* Preset loader */}
+                      {presets.length > 0 && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setBatchPresetOpen(batchPresetOpen === row.rowId ? null : row.rowId)}
+                            title="Load preset"
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer text-xs font-bold ${batchPresetOpen === row.rowId ? 'text-violet-400 bg-violet-500/15' : 'text-gray-500 hover:text-violet-400 hover:bg-violet-500/10'}`}
+                          >
+                            <Bookmark size={13} />
+                          </button>
+                          {batchPresetOpen === row.rowId && (
+                            <div className="absolute right-0 top-full mt-1 w-56 bg-[#13131f] border border-violet-500/20 rounded-xl shadow-2xl z-30 overflow-hidden">
+                              <p className="px-3 py-2 text-[10px] font-bold text-violet-400 uppercase tracking-wider border-b border-white/10">Load Preset</p>
+                              {presets.map(preset => {
+                                const pc = POSITION_COLORS[preset.position];
+                                const ovr = preset.position ? calculateOverall(preset.stats, preset.position) : 0;
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    onClick={() => applyPresetToBatchRow(row.rowId, preset)}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0"
+                                  >
+                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${pc?.text.replace('text-', 'bg-') ?? 'bg-gray-400'}`} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold text-white truncate">{preset.name}</p>
+                                      <p className="text-[10px] text-gray-500">{preset.position}</p>
+                                    </div>
+                                    <span className={`text-xs font-black tabular-nums shrink-0 ${ovr >= 80 ? 'text-emerald-400' : ovr >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{ovr}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => duplicateBatchRow(row.rowId)}
+                        title="Duplicate row"
+                        className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Copy size={13} />
+                      </button>
+                      <button
+                        onClick={() => toggleBatchRow(row.rowId)}
+                        title={row.expanded ? 'Collapse stats' : 'Expand stats'}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${row.expanded ? 'text-green-400 bg-green-500/10' : 'text-gray-500 hover:text-green-400 hover:bg-green-500/10'}`}
+                      >
+                        {row.expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                      <button
+                        onClick={() => removeBatchRow(row.rowId)}
+                        title="Remove row"
+                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded stats */}
+                  {row.expanded && (
+                    <div className="p-4 border-t border-white/10 bg-white/[0.02]">
+                      {grouping ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {statGroups.map(g => (
+                            <div key={g.title} className={`p-4 rounded-xl bg-white/[0.03] border ${g.border} space-y-3`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <h3 className={`text-xs font-bold uppercase tracking-widest ${g.color}`}>{g.title}</h3>
+                                  <span className="text-[10px] text-gray-600 font-mono">{g.weight}</span>
+                                </div>
+                                <button
+                                  onClick={() => randomizeBatchGroup(row.rowId, g.keys)}
+                                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 ${g.color} cursor-pointer active:scale-95`}
+                                >
+                                  <Shuffle size={12} /> Randomize
+                                </button>
+                              </div>
+                              <div className={`space-y-2.5 ${g.keys.length > 6 ? 'max-h-[320px] overflow-y-auto pr-1' : ''}`}>
+                                {g.keys.map(k => (
+                                  <StatSlider
+                                    key={k}
+                                    label={STAT_LABEL[k] ?? k}
+                                    value={row.stats[k] ?? 75}
+                                    onChange={v => updateBatchRowStat(row.rowId, k, v)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-600 text-center py-4">Select a position above to tune stats</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Submit bar */}
+        {batchRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-white/10">
             <button
-              onClick={() => { setBulkResults(null); setBulkError(null); }}
+              onClick={handleBatchSubmit}
+              disabled={batchSubmitting}
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 disabled:opacity-50 text-black rounded-lg text-sm font-semibold transition-all shadow-lg shadow-green-500/20 cursor-pointer active:scale-95"
+            >
+              {batchSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />}
+              {batchSubmitting ? 'Creating players…' : `Add ${batchRows.length} Player${batchRows.length !== 1 ? 's' : ''}`}
+            </button>
+            <button
+              onClick={() => { setBatchRows([]); setBatchResults(null); }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-sm font-medium transition-all cursor-pointer"
+            >
+              <X size={14} /> Clear All
+            </button>
+            <span className="text-xs text-gray-600">{batchRows.length} player{batchRows.length !== 1 ? 's' : ''} queued</span>
+          </div>
+        )}
+
+        {/* Results */}
+        {batchResults && (
+          <div className="space-y-3">
+            <div className={`p-4 rounded-lg border ${batchResults.every(r => r.success) ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <p className={`text-sm font-semibold ${batchResults.every(r => r.success) ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {batchResults.filter(r => r.success).length} of {batchResults.length} players created
+                </p>
+                {batchResults.some(r => !r.success) && (
+                  <span className="text-xs text-red-400">{batchResults.filter(r => !r.success).length} failed — rows kept in queue</span>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Player</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold text-gray-400 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchResults.map((r, i) => (
+                    <tr key={i} className="border-b border-white/5 hover:bg-white/[0.03]">
+                      <td className="py-2 px-3 text-white">{r.name}</td>
+                      <td className="py-2 px-3">
+                        {r.success
+                          ? <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold"><CheckCircle2 size={12} /> Created</span>
+                          : <span className="inline-flex items-center gap-1 text-red-400 text-xs font-semibold"><AlertCircle size={12} /> {r.error}</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              onClick={() => setBatchResults(null)}
               className="w-full px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 rounded-lg text-sm font-medium transition-all cursor-pointer"
             >
               Clear Results
