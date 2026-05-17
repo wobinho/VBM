@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import {
   Dumbbell, Building2, Users, TrendingUp, Lock, Zap, Target, Brain, Shield, Flame,
@@ -1110,14 +1111,19 @@ function FacilityDetailModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  return createPortal((
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
       onClick={onClose}
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-[18px] surface-raised animate-fade-up"
+        className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-[18px] surface-raised animate-fade-up"
         style={{
           border: `1px solid ${c}40`,
           boxShadow: `0 24px 80px -20px ${c}55, 0 1px 0 rgba(255,255,255,0.06) inset`,
@@ -1245,7 +1251,7 @@ function FacilityDetailModal({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 /* ── Hired Coach Card ──────────────────────────────────────────────── */
