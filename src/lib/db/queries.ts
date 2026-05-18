@@ -1329,7 +1329,22 @@ export function getPlayoffGamesByDate(date: string, includeCompleted = false): P
   `).all(date) as PlayoffGame[];
 }
 
-export function getPlayoffGamesByTeam(teamId: number): PlayoffGame[] {
+export function getPlayoffGamesByTeam(teamId: number, seasonId?: number): PlayoffGame[] {
+  if (seasonId) {
+    return getDb().prepare(`
+      SELECT pg.*,
+        ht.team_name AS home_team_name,
+        at.team_name AS away_team_name
+      FROM playoff_games pg
+      JOIN teams ht ON pg.home_team_id = ht.id
+      JOIN teams at ON pg.away_team_id = at.id
+      JOIN playoff_series ps ON pg.series_id = ps.id
+      WHERE (pg.home_team_id = ? OR pg.away_team_id = ?)
+        AND pg.status != 'cancelled'
+        AND ps.season_id = ?
+      ORDER BY pg.scheduled_date ASC, pg.game_number ASC
+    `).all(teamId, teamId, seasonId) as PlayoffGame[];
+  }
   return getDb().prepare(`
     SELECT pg.*,
       ht.team_name AS home_team_name,
@@ -1648,7 +1663,14 @@ const CUP_FIXTURE_JOIN = `
   JOIN cup_competitions cc ON cf.cup_id = cc.id
 `;
 
-export function getCupGamesByTeam(teamId: number): CupGame[] {
+export function getCupGamesByTeam(teamId: number, year?: number): CupGame[] {
+  if (year !== undefined) {
+    return getDb().prepare(`
+      ${CUP_FIXTURE_JOIN}
+      WHERE (cf.home_team_id = ? OR cf.away_team_id = ?) AND cc.year = ?
+      ORDER BY cf.scheduled_date ASC
+    `).all(teamId, teamId, year) as CupGame[];
+  }
   return getDb().prepare(`
     ${CUP_FIXTURE_JOIN}
     WHERE cf.home_team_id = ? OR cf.away_team_id = ?

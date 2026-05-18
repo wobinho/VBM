@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Trophy, Star, Flame, Crown, Shield, Swords, ChevronRight, Loader2 } from 'lucide-react';
+import { Trophy, Star, Flame, Crown, Shield, Swords, ChevronRight, Loader2, History } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -239,24 +239,91 @@ export default function PlayoffsPage() {
     const [bracket, setBracket] = useState<PlayoffBracket | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Available historical years + selected year (null = live)
+    const [availableYears, setAvailableYears] = useState<number[]>([]);
+    const [currentYear, setCurrentYear] = useState<number | null>(null);
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
+
     useEffect(() => {
-        fetch('/api/playoffs')
+        fetch('/api/playoffs?list=true')
+            .then(r => r.ok ? r.json() : null)
+            .then((d: { years: number[]; currentYear: number | null } | null) => {
+                if (d) {
+                    setAvailableYears(d.years ?? []);
+                    setCurrentYear(d.currentYear ?? null);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        setLoading(true);
+        const url = selectedYear !== null ? `/api/playoffs?year=${selectedYear}` : '/api/playoffs';
+        fetch(url)
             .then(r => r.ok ? r.json() : null)
             .then((data: PlayoffBracket | null) => { setBracket(data); setLoading(false); })
             .catch(() => setLoading(false));
-    }, []);
+    }, [selectedYear]);
+
+    const isHistorical = selectedYear !== null;
+    const pastYears = availableYears.filter(y => y !== currentYear);
+
+    const yearSelector = (
+        <div className="surface-raised px-5 py-3 flex items-center gap-2 flex-wrap">
+            <History size={12} className={isHistorical ? 'text-[var(--epic)]' : 'text-[var(--ink-500)]'} />
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Season</span>
+            <button
+                onClick={() => setSelectedYear(null)}
+                className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer ${
+                    !isHistorical
+                        ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                        : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+                }`}
+            >
+                Live
+            </button>
+            {pastYears.length === 0 && (
+                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-600)] italic">
+                    No archived seasons yet
+                </span>
+            )}
+            {pastYears.map(y => {
+                const isSel = selectedYear === y;
+                return (
+                    <button key={y}
+                        onClick={() => setSelectedYear(y)}
+                        className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer tabular ${
+                            isSel
+                                ? 'bg-[var(--epic)] text-black shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                                : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+                        }`}
+                    >
+                        {y}
+                    </button>
+                );
+            })}
+            {isHistorical && (
+                <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--epic)] font-black">
+                    Read-only archive
+                </span>
+            )}
+        </div>
+    );
 
     if (loading) {
         return (
-            <div className="min-h-[60vh] flex items-center justify-center">
-                <div className="text-center space-y-4">
-                    <div className="relative mx-auto w-16 h-16">
-                        <div className="absolute inset-0 rounded-full bg-[var(--volt)]/20 animate-ping" />
-                        <div className="relative w-16 h-16 rounded-full bg-[var(--volt)]/10 border border-[var(--volt)]/30 flex items-center justify-center">
-                            <Loader2 size={26} className="text-[var(--volt)] animate-spin" />
+            <div className="space-y-6 animate-fade-up">
+                {yearSelector}
+                <div className="min-h-[40vh] flex items-center justify-center">
+                    <div className="text-center space-y-4">
+                        <div className="relative mx-auto w-16 h-16">
+                            <div className="absolute inset-0 rounded-full bg-[var(--volt)]/20 animate-ping" />
+                            <div className="relative w-16 h-16 rounded-full bg-[var(--volt)]/10 border border-[var(--volt)]/30 flex items-center justify-center">
+                                <Loader2 size={26} className="text-[var(--volt)] animate-spin" />
+                            </div>
                         </div>
+                        <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
                     </div>
-                    <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
                 </div>
             </div>
         );
@@ -265,6 +332,7 @@ export default function PlayoffsPage() {
     if (!bracket || bracket.status === 'not_started') {
         return (
             <div className="space-y-6 animate-fade-up">
+                {yearSelector}
                 <div className="relative pb-5 border-b border-white/[0.06]">
                     <div className="absolute -top-2 left-0 h-[3px] w-16 bg-[var(--volt)]" />
                     <p className="eyebrow mb-2">Postseason · Bracket</p>
@@ -282,24 +350,30 @@ export default function PlayoffsPage() {
                             </div>
                         </div>
                         <p className="eyebrow mb-2">Status</p>
-                        <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-3">PLAYOFFS HAVEN&apos;T STARTED</h2>
+                        <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-3">
+                            {isHistorical ? `NO PLAYOFFS FOR ${selectedYear}` : 'PLAYOFFS HAVEN’T STARTED'}
+                        </h2>
                         <p className="text-sm text-[var(--ink-400)] max-w-md mx-auto leading-relaxed">
-                            The playoffs begin after the regular season ends on April 30. Top 4 teams from each conference qualify.
+                            {isHistorical
+                                ? 'No postseason was recorded for this season.'
+                                : 'The playoffs begin after the regular season ends on April 30. Top 4 teams from each conference qualify.'}
                         </p>
-                        <div className="flex items-center justify-center gap-6 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-6">
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
-                                <span>8 teams</span>
+                        {!isHistorical && (
+                            <div className="flex items-center justify-center gap-6 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-6">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
+                                    <span>8 teams</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
+                                    <span>Best of 5</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
+                                    <span>3 rounds</span>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
-                                <span>Best of 5</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--volt)]/60" />
-                                <span>3 rounds</span>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -315,6 +389,8 @@ export default function PlayoffsPage() {
 
     return (
         <div className="space-y-14 animate-fade-up">
+
+            {yearSelector}
 
             {/* ── Page Header ── */}
             <div className="relative pb-5 border-b border-white/[0.06]">

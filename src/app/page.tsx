@@ -91,24 +91,30 @@ function TeamLogo({ teamId, size = 32 }: { teamId: number; size?: number }) {
   );
 }
 
-function OpponentBadge({ teamId, oppName }: { teamId: number; oppName: string }) {
+function OpponentBadge({ teamId, oppName, accent }: { teamId: number; oppName: string; accent: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <span className="font-mono text-[8px] leading-none text-[var(--volt)]/85 font-bold truncate max-w-full px-0.5 mt-1 tracking-wider">
+      <span
+        className="absolute bottom-1 right-1 font-mono text-[8px] leading-none font-bold tracking-[0.08em] px-1 py-[2px] rounded-sm pointer-events-none"
+        style={{
+          color: accent,
+          backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)`,
+          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 28%, transparent)`,
+        }}
+      >
         {oppName.split(' ').map((w: string) => w[0]).join('').slice(0, 3).toUpperCase()}
       </span>
     );
   }
-  // Absolutely positioned so badge size doesn't affect the cell flex layout.
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 top-[55%] w-8 h-8 pointer-events-none">
+    <div className="absolute bottom-0.5 right-0.5 w-[32px] h-[32px] pointer-events-none transition-opacity duration-200 opacity-95 group-hover:opacity-100">
       <Image
         src={`/assets/teams/${teamId}.png`}
         alt={oppName}
         fill
         unoptimized
-        className="object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.85)]"
+        className="object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
         onError={() => setFailed(true)}
       />
     </div>
@@ -414,26 +420,26 @@ export default function DashboardPage() {
     const userStatus = userMatchDates.get(iso);
     const hasAnyMatch = matchDates.has(iso);
 
-    let base = 'relative flex flex-col items-center justify-center rounded text-xs font-medium transition-all duration-150 cursor-pointer select-none py-1 h-full min-h-[60px] ';
+    let base = 'group relative overflow-hidden rounded-[3px] text-xs font-medium cursor-pointer select-none h-full min-h-[60px] transition-[background-color,box-shadow,transform] duration-200 ease-out ';
 
     if (isSelected) {
-      base += 'ring-2 ring-[var(--volt)] bg-[var(--volt)]/20 text-[var(--volt)] ';
+      base += 'bg-[var(--volt)]/[0.14] text-[var(--volt)] shadow-[inset_0_0_0_1px_var(--volt),inset_3px_0_0_0_var(--volt)] ';
     } else if (isToday) {
-      base += 'ring-2 ring-[var(--bone)]/40 bg-white/[0.08] text-[var(--bone)] font-bold ';
+      base += 'bg-white/[0.06] text-[var(--bone)] font-bold shadow-[inset_0_1px_0_0_var(--volt),inset_0_0_0_1px_rgba(255,255,255,0.08)] ';
     } else if (isPast) {
-      base += 'opacity-45 text-[var(--ink-500)] ';
-      if (userStatus === 'win') base += 'bg-[var(--win)]/10 ';
-      else if (userStatus === 'loss') base += 'bg-[var(--loss)]/10 ';
-      else if (userStatus === 'scheduled') base += 'bg-[var(--volt)]/10 ';
-      else if (hasAnyMatch) base += 'bg-white/[0.03] ';
+      if (userStatus === 'win') base += 'bg-[var(--win)]/[0.06] text-[var(--win)]/70 shadow-[inset_2px_0_0_0_var(--win)] ';
+      else if (userStatus === 'loss') base += 'bg-[var(--loss)]/[0.06] text-[var(--loss)]/70 shadow-[inset_2px_0_0_0_var(--loss)] ';
+      else if (userStatus === 'scheduled') base += 'bg-white/[0.02] text-[var(--ink-500)] shadow-[inset_2px_0_0_0_var(--volt)] opacity-60 ';
+      else if (hasAnyMatch) base += 'bg-white/[0.02] text-[var(--ink-500)]/80 ';
+      else base += 'opacity-40 text-[var(--ink-500)] ';
     } else if (userStatus === 'win') {
-      base += 'bg-[var(--win)]/15 text-[var(--win)] hover:bg-[var(--win)]/25 ';
+      base += 'bg-[var(--win)]/[0.10] text-[var(--win)] shadow-[inset_2px_0_0_0_var(--win)] hover:bg-[var(--win)]/[0.18] ';
     } else if (userStatus === 'loss') {
-      base += 'bg-[var(--loss)]/15 text-[var(--loss)] hover:bg-[var(--loss)]/25 ';
+      base += 'bg-[var(--loss)]/[0.10] text-[var(--loss)] shadow-[inset_2px_0_0_0_var(--loss)] hover:bg-[var(--loss)]/[0.18] ';
     } else if (userStatus === 'scheduled') {
-      base += 'bg-[var(--volt)]/15 text-[var(--volt)] hover:bg-[var(--volt)]/25 ';
+      base += 'bg-[var(--volt)]/[0.08] text-[var(--volt)] shadow-[inset_2px_0_0_0_var(--volt)] hover:bg-[var(--volt)]/[0.16] hover:-translate-y-[1px] ';
     } else if (hasAnyMatch) {
-      base += 'text-[var(--ink-300)] hover:bg-white/[0.06] ';
+      base += 'text-[var(--ink-300)] shadow-[inset_1px_0_0_0_var(--info)] hover:bg-white/[0.04] ';
     } else {
       base += 'text-[var(--ink-500)] hover:bg-white/[0.03] ';
     }
@@ -446,10 +452,11 @@ export default function DashboardPage() {
     const userStatus = userMatchDates.get(iso);
     const hasAnyMatch = matchDates.has(iso);
 
-    if (userStatus === 'win') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--win)]" />;
-    if (userStatus === 'loss') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--loss)]" />;
-    if (userStatus === 'scheduled') return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--volt)]" />;
-    if (hasAnyMatch) return <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--info)]/60" />;
+    // Left accent bar already signals user-fixture status; only show a dot for
+    // generic league matchdays (no left bar) to keep that lightweight cue.
+    if (!userStatus && hasAnyMatch) {
+      return <span className="absolute bottom-1.5 left-1.5 w-1 h-1 rounded-full bg-[var(--info)]/60" />;
+    }
     return null;
   }
 
@@ -666,15 +673,28 @@ export default function DashboardPage() {
                 const hasAnyMatch = matchDates.has(iso);
                 const isAfterToday = iso > currentDateStr;
                 const isClickable = hasAnyMatch || !!userStatus || isAfterToday;
+                const isTodayCell = iso === currentDateStr && todayIsInView;
+                const accent =
+                  userStatus === 'win' ? 'var(--win)' :
+                  userStatus === 'loss' ? 'var(--loss)' :
+                  userStatus === 'scheduled' ? 'var(--volt)' :
+                  'var(--ink-300)';
                 return (
                   <div key={i}
                     className={dayCellClasses(day)}
                     onClick={() => { if (isClickable) selectDate(iso); }}
                     title={opp ? `vs ${opp.name}` : undefined}
                   >
-                    <span className="leading-none z-10 font-mono text-xs font-bold tabular">{day}</span>
+                    <span className="absolute top-1.5 left-1.5 leading-none font-mono text-[11px] font-bold tabular tracking-tight">
+                      {day}
+                    </span>
+                    {isTodayCell && (
+                      <span className="absolute top-1.5 right-1.5 font-mono text-[7px] font-bold tracking-[0.2em] text-[var(--volt)] uppercase">
+                        Now
+                      </span>
+                    )}
                     {opp && (
-                      <OpponentBadge teamId={opp.teamId} oppName={opp.name} />
+                      <OpponentBadge teamId={opp.teamId} oppName={opp.name} accent={accent} />
                     )}
                     <DayDot day={day} />
                   </div>

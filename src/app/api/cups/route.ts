@@ -1,32 +1,58 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { getGameState, getSeasonById } from '@/lib/db/queries';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = getDb();
-    
-    // 1. Get the current active cup, or if none, the most recent completed cup
-    // that belongs to the current season year (visible until Dec 31 of that year).
-    const today = new Date();
-    const currentYear = today.getFullYear();
 
-    let cup = db.prepare(`
-      SELECT * FROM cup_competitions
-      WHERE status = 'active'
-      ORDER BY year DESC, id DESC LIMIT 1
-    `).get() as any;
+    const { searchParams } = new URL(request.url);
+    const yearParam = searchParams.get('year');
+    const listOnly = searchParams.get('list') === 'true';
 
-    if (!cup) {
-      // Show the most recently completed cup if it's still within its season year
+    // Resolve "current" year from the in-game date / active season.
+    const state = getGameState();
+    let currentYear: number | null = null;
+    if (state?.season_id) {
+      const s = getSeasonById(state.season_id);
+      currentYear = s?.year ?? null;
+    }
+    if (currentYear === null && state?.current_date) {
+      currentYear = parseInt(state.current_date.slice(0, 4), 10);
+    }
+
+    // Return the list of years that have a cup record (for the history selector).
+    if (listOnly) {
+      const years = (db.prepare(
+        'SELECT DISTINCT year FROM cup_competitions ORDER BY year DESC'
+      ).all() as { year: number }[]).map(r => r.year);
+      return NextResponse.json({ years, currentYear });
+    }
+
+    let cup: any = null;
+
+    if (yearParam) {
+      // Historical view — show the cup for the requested year (any status)
       cup = db.prepare(`
         SELECT * FROM cup_competitions
-        WHERE status = 'completed' AND year = ?
+        WHERE year = ?
         ORDER BY id DESC LIMIT 1
-      `).get(currentYear) as any;
+      `).get(Number(yearParam));
+    } else {
+      // Live view — only show a cup that belongs to the current in-game year.
+      // Once the season rolls over the previous cup disappears (parallels playoffs).
+      if (currentYear !== null) {
+        cup = db.prepare(`
+          SELECT * FROM cup_competitions
+          WHERE year = ?
+          ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, id DESC
+          LIMIT 1
+        `).get(currentYear);
+      }
     }
 
     if (!cup) {
-      return NextResponse.json({ error: 'No active cup found' }, { status: 404 });
+      return NextResponse.json({ error: 'No active cup found', currentYear }, { status: 404 });
     }
 
     // 2. Get rounds for this cup

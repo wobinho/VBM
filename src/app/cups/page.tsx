@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Trophy, Calendar, Loader2, Crown, LayoutList, Share2,
-  Star, Flame, Swords, Shield, ChevronRight,
+  Star, Flame, Swords, Shield, ChevronRight, History,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
@@ -95,35 +95,115 @@ export default function CupsPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'bracket'>('bracket');
 
+  // Available historical years + currently-selected year (null = live)
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+
+  // Fetch list of years once on mount
   useEffect(() => {
-    fetch('/api/cups').then(r => r.ok ? r.json() : null).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    fetch('/api/cups?list=true')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { years: number[]; currentYear: number | null } | null) => {
+        if (d) {
+          setAvailableYears(d.years ?? []);
+          setCurrentYear(d.currentYear ?? null);
+        }
+      })
+      .catch(() => {});
   }, []);
 
+  // Fetch cup data — live (no year) or historical (year=X)
+  useEffect(() => {
+    setLoading(true);
+    const url = selectedYear !== null ? `/api/cups?year=${selectedYear}` : '/api/cups';
+    fetch(url).then(r => r.ok ? r.json() : null).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  }, [selectedYear]);
+
+  const isHistorical = selectedYear !== null;
+  // Past years are those NOT equal to the current in-game year
+  const pastYears = availableYears.filter(y => y !== currentYear);
+
+  const yearSelector = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <History size={12} className={isHistorical ? 'text-[var(--epic)]' : 'text-[var(--ink-500)]'} />
+      <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Season</span>
+      <button
+        onClick={() => setSelectedYear(null)}
+        className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer ${
+          !isHistorical
+            ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+            : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+        }`}
+      >
+        Live
+      </button>
+      {pastYears.length === 0 && (
+        <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-600)] italic">
+          No archived seasons yet
+        </span>
+      )}
+      {pastYears.map(y => {
+        const isSel = selectedYear === y;
+        return (
+          <button key={y}
+            onClick={() => setSelectedYear(y)}
+            className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer tabular ${
+              isSel
+                ? 'bg-[var(--epic)] text-black shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+            }`}
+          >
+            {y}
+          </button>
+        );
+      })}
+      {isHistorical && (
+        <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--epic)] font-black">
+          Read-only archive
+        </span>
+      )}
+    </div>
+  );
+
   if (loading) return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <Loader2 className="w-8 h-8 text-[var(--volt)] animate-spin mx-auto" />
-        <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
+    <div className="space-y-6 animate-fade-up">
+      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+      <div className="min-h-[40vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 text-[var(--volt)] animate-spin mx-auto" />
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[var(--ink-500)]">Loading bracket…</p>
+        </div>
       </div>
     </div>
   );
 
   if (!data?.rounds?.length) return (
-    <div className="surface-raised text-center py-24 px-8 relative overflow-hidden animate-fade-up">
-      <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-[var(--volt)]/8 blur-3xl" />
-      <div className="relative">
-        <div className="w-20 h-20 rounded-full bg-[var(--volt)]/15 border border-[var(--volt)]/30 flex items-center justify-center mx-auto mb-6">
-          <Trophy className="w-10 h-10 text-[var(--volt)]" />
+    <div className="space-y-6 animate-fade-up">
+      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+      <div className="surface-raised text-center py-24 px-8 relative overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-[var(--volt)]/8 blur-3xl" />
+        <div className="relative">
+          <div className="w-20 h-20 rounded-full bg-[var(--volt)]/15 border border-[var(--volt)]/30 flex items-center justify-center mx-auto mb-6">
+            <Trophy className="w-10 h-10 text-[var(--volt)]" />
+          </div>
+          <p className="eyebrow mb-2">Cup Block</p>
+          <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-2">
+            {isHistorical ? `NO CUP FOR ${selectedYear}` : 'NO ACTIVE CUPS'}
+          </h2>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--ink-500)]">
+            {isHistorical ? 'No cup competition was recorded for this year' : 'Copa Italia generates after June 30'}
+          </p>
         </div>
-        <p className="eyebrow mb-2">Cup Block</p>
-        <h2 className="font-display text-4xl tracking-[0.02em] text-[var(--bone)] mb-2">NO ACTIVE CUPS</h2>
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--ink-500)]">Copa Italia generates after June 30</p>
       </div>
     </div>
   );
 
   return (
     <div className="space-y-6 animate-fade-up">
+      {/* ── Season selector ── */}
+      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+
       {/* ── Hero ── */}
       <div className="surface-raised relative overflow-hidden p-8">
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />

@@ -3,6 +3,7 @@ import {
   getFixtures, getFixturesByDate, getScheduledDatesForSeason, getActiveSeason, getSeasonById,
   getPlayoffGamesByTeam, getPlayoffGameDatesForSeason, getPlayoffGamesByDate,
   getCupGamesByTeam, getCupGameDatesForYear, getCupGamesByDate,
+  getGameState,
   PlayoffGame, Fixture, CupGame,
 } from '@/lib/db/queries';
 
@@ -103,12 +104,32 @@ export async function GET(request: Request) {
     ]);
   }
 
-  const fixtures = getFixtures({ seasonId, leagueId, teamId, status, gameWeek, limit });
+  // Optional: when "currentSeasonOnly=true", restrict league/playoff/cup results
+  // to the currently-active season (per game_state). Used by team-detail cards
+  // so they never bleed historical seasons into the live view.
+  const currentSeasonOnly = searchParams.get('currentSeasonOnly') === 'true';
+  let effectiveSeasonId = seasonId;
+  let currentYear: number | undefined;
+  if (currentSeasonOnly && !effectiveSeasonId) {
+    const state = getGameState();
+    if (state?.season_id) {
+      effectiveSeasonId = state.season_id;
+      const s = getSeasonById(state.season_id);
+      currentYear = s?.year;
+    } else if (state?.current_date) {
+      currentYear = parseInt(state.current_date.slice(0, 4), 10);
+    }
+  } else if (effectiveSeasonId) {
+    const s = getSeasonById(effectiveSeasonId);
+    currentYear = s?.year;
+  }
+
+  const fixtures = getFixtures({ seasonId: effectiveSeasonId, leagueId, teamId, status, gameWeek, limit });
 
   // When fetching by teamId, also include the team's playoff and cup games
   if (teamId) {
-    const playoffGames = getPlayoffGamesByTeam(teamId);
-    const cupGames = getCupGamesByTeam(teamId);
+    const playoffGames = getPlayoffGamesByTeam(teamId, effectiveSeasonId);
+    const cupGames = getCupGamesByTeam(teamId, currentYear);
     return NextResponse.json([
       ...fixtures,
       ...playoffGames.map(playoffGameAsFixture),

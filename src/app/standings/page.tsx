@@ -265,13 +265,12 @@ export default function StandingsPage() {
 
                     <div className="overflow-x-auto">
                         {/* Table header */}
-                        <div className="grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 bg-[var(--ink-950)]/40 border-b border-white/[0.06] font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.28em] font-black min-w-fit">
+                        <div className="grid grid-cols-[auto_1fr_44px_44px_44px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 bg-[var(--ink-950)]/40 border-b border-white/[0.06] font-mono text-[9.5px] text-[var(--ink-500)] uppercase tracking-[0.28em] font-black min-w-fit">
                             <span className="w-6 md:w-8 text-center">#</span>
                             <span>Team</span>
                             <span className="text-center" title="Played">P</span>
                             <span className="text-center" title="Won">W</span>
                             <span className="text-center" title="Lost">L</span>
-                            <span className="text-center" title="Point Differential">PD</span>
                             <span className="text-center" title="Points">Pts</span>
                         </div>
 
@@ -281,7 +280,6 @@ export default function StandingsPage() {
                                 ? relegatedTeamIds.has(team.id)
                                 : idx === total - 1;
                             const isUserTeam = userTeam?.id === team.id;
-                            const pd = team.score_diff;
                             const pointsPct = totalPoints > 0 ? Math.max(4, Math.round((team.points / Math.max(...conferenceTeams.map(t => t.points), 1)) * 100)) : 0;
 
                             // Row background
@@ -310,7 +308,7 @@ export default function StandingsPage() {
                                     )}
 
                                     <div
-                                        className={`relative grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-3.5 items-center transition-colors min-w-fit border-l-[3px] ${isHistorical ? '' : 'cursor-pointer'} ${bgClass}`}
+                                        className={`relative grid grid-cols-[auto_1fr_44px_44px_44px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-3.5 items-center transition-colors min-w-fit border-l-[3px] ${isHistorical ? '' : 'cursor-pointer'} ${bgClass}`}
                                         style={{ borderLeftColor: railColor }}
                                         onClick={isHistorical ? undefined : () => setSelectedTeam({ ...team, rank: idx + 1 })}
                                     >
@@ -347,9 +345,6 @@ export default function StandingsPage() {
                                         <span className="text-center font-mono text-xs md:text-sm text-[var(--ink-400)] tabular">{team.played}</span>
                                         <span className="text-center font-mono text-xs md:text-sm text-[var(--win)] font-bold tabular">{team.won}</span>
                                         <span className="text-center font-mono text-xs md:text-sm text-[var(--loss)] font-bold tabular">{team.lost}</span>
-                                        <span className={`text-center font-mono text-xs md:text-sm font-bold tabular ${pd > 0 ? 'text-[var(--win)]' : pd < 0 ? 'text-[var(--loss)]' : 'text-[var(--ink-500)]'}`}>
-                                            {pd > 0 ? `+${pd}` : pd}
-                                        </span>
 
                                         {/* Points cell — bar + value */}
                                         <div className="flex items-center justify-end gap-1.5 md:gap-2">
@@ -734,7 +729,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
         setLoading(true);
         Promise.all([
             fetch(`/api/players?teamId=${team.id}`).then(r => r.json()),
-            fetch(`/api/fixtures?teamId=${team.id}&status=completed`).then(r => r.json()),
+            fetch(`/api/fixtures?teamId=${team.id}&status=completed&currentSeasonOnly=true`).then(r => r.json()),
         ]).then(([playerData, fixtureData]) => {
             setPlayers(playerData);
             const sorted = (Array.isArray(fixtureData) ? fixtureData as Fixture[] : [])
