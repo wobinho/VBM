@@ -315,6 +315,14 @@ export function getDb(): Database.Database {
     db.exec(`UPDATE leagues SET tier = 2 WHERE league_name = 'IVL Premier Division'`);
     db.exec(`UPDATE leagues SET tier = 3 WHERE league_name IN ('IVL North', 'IVL South')`);
 
+    // Backfill league_links for existing DBs where configs were seeded earlier
+    // but links never were. seedLeagueConfigs is idempotent (its own guard skips
+    // when links already exist), so this is safe to re-run.
+    const emptyLinks = db.prepare("SELECT COUNT(*) as c FROM league_links").get() as { c: number };
+    if (emptyLinks.c === 0) {
+      seedLeagueConfigs(db);
+    }
+
     // Ensure league_presets table exists if league_configs already did (migration for existing DBs)
     const presetsCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='league_presets'"

@@ -212,21 +212,35 @@ function pickReceiver(lu: SimLineup): SimPlayer | null {
     return weightedPick(cands, p => p.receive * 0.35 + p.digging * 0.25 + p.ball_control * 0.20 + p.flexibility * 0.10 + p.balance * 0.10);
 }
 
+function attackerPositionMultiplier(pos: string): number {
+    if (pos === 'Outside Hitter')  return 1.30;
+    if (pos === 'Opposite Hitter') return 1.20;
+    if (pos === 'Middle Blocker')  return 0.95;
+    if (pos === 'Setter')          return 0.15;
+    if (pos === 'Libero')          return 0.05;
+    return 1.0;
+}
+
 function pickAttacker(lu: SimLineup): SimPlayer | null {
-    const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
+    const cands = [lu.OH1, lu.OH2, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
     if (!cands.length) return null;
-    return weightedPick(cands, p => p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10);
+    return weightedPick(cands, p => (p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10) * attackerPositionMultiplier(p.position));
+}
+
+function blockerPositionMultiplier(pos: string): number {
+    if (pos === 'Middle Blocker')  return 1.40;
+    if (pos === 'Opposite Hitter') return 1.20;
+    if (pos === 'Outside Hitter')  return 0.95;
+    return 0.0;
 }
 
 function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer | null {
-    const blockWeight = (p: SimPlayer) => p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15;
-    if (attackerPos === 'Middle Blocker') {
-        const cands = [lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, blockWeight);
-    } else {
-        const cands = [lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, blockWeight);
-    }
+    const blockWeight = (p: SimPlayer) => (p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15) * blockerPositionMultiplier(p.position);
+    const pinBlockers = attackerPos === 'Opposite Hitter'
+        ? [lu.OH1, lu.OH2]
+        : [lu.OPP];
+    const cands = [lu.MB1, lu.MB2, ...pinBlockers].filter(Boolean) as SimPlayer[];
+    if (cands.length) return weightedPick(cands, blockWeight);
     const all = [lu.MB1, lu.MB2, lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
     if (!all.length) return null;
     return weightedPick(all, blockWeight);

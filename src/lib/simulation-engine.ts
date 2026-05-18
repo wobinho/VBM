@@ -164,31 +164,45 @@ function pickReceiver(lu: SimLineup): SimPlayer | null {
 
 // Real-volleyball set distribution: Outside Hitters are the primary attacking option,
 // Opposite gets right-side sets, Middles run quicks (lower volume), Setters rarely attack (dumps only).
+// Softened toward 1.0 to give Opposite Hitters and Middle Blockers a real shot at the
+// top-scorer leaderboard — pure realism makes OHs dominate every category.
 function attackerPositionMultiplier(pos: string): number {
-  if (pos === 'Outside Hitter')  return 1.55;
-  if (pos === 'Opposite Hitter') return 1.10;
-  if (pos === 'Middle Blocker')  return 0.70;
+  if (pos === 'Outside Hitter')  return 1.30;
+  if (pos === 'Opposite Hitter') return 1.20;
+  if (pos === 'Middle Blocker')  return 0.95;
   if (pos === 'Setter')          return 0.15;
   if (pos === 'Libero')          return 0.05;
   return 1.0;
 }
 
 function pickAttacker(lu: SimLineup): SimPlayer | null {
-  const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
+  const cands = [lu.OH1, lu.OH2, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
   return cands.length
     ? weightedPick(cands, p => (p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10) * attackerPositionMultiplier(p.position))
     : null;
 }
 
+// Real-volleyball block distribution: Middle Blockers are the primary blockers
+// (they're at the net every rotation and run all block schemes). Opposite is
+// second (right-side block against the opponent's OH). Outside Hitters block
+// the opponent's OPP/right side. Setters and Liberos do not block at the net.
+// Tightened so OPPs and OHs land on the block leaderboard alongside MBs.
+function blockerPositionMultiplier(pos: string): number {
+  if (pos === 'Middle Blocker')  return 1.40;
+  if (pos === 'Opposite Hitter') return 1.20;
+  if (pos === 'Outside Hitter')  return 0.95;
+  return 0.0;
+}
+
 function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer | null {
-  const blockWeight = (p: SimPlayer) => p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15;
-  if (attackerPos === 'Middle Blocker') {
-    const cands = [lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
-    if (cands.length) return weightedPick(cands, blockWeight);
-  } else {
-    const cands = [lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
-    if (cands.length) return weightedPick(cands, blockWeight);
-  }
+  const blockWeight = (p: SimPlayer) => (p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15) * blockerPositionMultiplier(p.position);
+  // MBs are at the net for every attack regardless of where it comes from.
+  // The pin blocker (OH or OPP) depends on which side the attacker hit from.
+  const pinBlockers = attackerPos === 'Opposite Hitter'
+    ? [lu.OH1, lu.OH2]            // their OPP hits right side → our OHs block
+    : [lu.OPP];                    // their OH/MB hits → our OPP blocks (MB also helps)
+  const cands = [lu.MB1, lu.MB2, ...pinBlockers].filter(Boolean) as SimPlayer[];
+  if (cands.length) return weightedPick(cands, blockWeight);
   const all = [lu.MB1, lu.MB2, lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
   return all.length ? weightedPick(all, blockWeight) : null;
 }
@@ -429,6 +443,21 @@ export function runFullMatch(
   const awayChem = computeChemistry(awayLu);
 
   const statAcc = new Map<number, { teamId: number; points: number; spikes: number; blocks: number; aces: number; digs: number }>();
+
+  // Pre-seed every starter with a zero-row so they're counted as having played,
+  // even if they never score (common for Setters and Liberos). Real scoring
+  // events accumulate on top of these. Only seeded when team IDs are known —
+  // without them the stat rows can't be persisted anyway.
+  if (homeTeamId !== undefined) {
+    for (const p of Object.values(homeLu)) {
+      if (p && !statAcc.has(p.id)) statAcc.set(p.id, { teamId: homeTeamId, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 });
+    }
+  }
+  if (awayTeamId !== undefined) {
+    for (const p of Object.values(awayLu)) {
+      if (p && !statAcc.has(p.id)) statAcc.set(p.id, { teamId: awayTeamId, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 });
+    }
+  }
 
   let homeSets = 0, awaySets = 0;
   let homeTotalPoints = 0, awayTotalPoints = 0;

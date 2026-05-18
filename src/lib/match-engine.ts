@@ -156,30 +156,41 @@ export function pickReceiver(lu: SimLineup): SimPlayer | null {
 
 // Real-volleyball set distribution: Outside Hitters are the primary attacking option,
 // Opposite gets right-side sets, Middles run quicks (lower volume), Setters rarely attack (dumps only).
+// Softened toward 1.0 so OPP/MB land on the top-scorer leaderboard alongside OHs.
 export function attackerPositionMultiplier(pos: string): number {
-    if (pos === 'Outside Hitter')  return 1.55;
-    if (pos === 'Opposite Hitter') return 1.10;
-    if (pos === 'Middle Blocker')  return 0.70;
+    if (pos === 'Outside Hitter')  return 1.30;
+    if (pos === 'Opposite Hitter') return 1.20;
+    if (pos === 'Middle Blocker')  return 0.95;
     if (pos === 'Setter')          return 0.15;
     if (pos === 'Libero')          return 0.05;
     return 1.0;
 }
 
 export function pickAttacker(lu: SimLineup): SimPlayer | null {
-    const cands = [lu.OH1, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
+    const cands = [lu.OH1, lu.OH2, lu.OPP, lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
     if (!cands.length) return null;
     return weightedPick(cands, p => (p.attack * 0.35 + p.precision * 0.25 + p.flair * 0.15 + p.strength * 0.15 + p.vertical * 0.10) * attackerPositionMultiplier(p.position));
 }
 
+// Real-volleyball block distribution: Middle Blockers are the primary blockers
+// (they're at the net every rotation and run all block schemes). Opposite is
+// second (right-side block against the opponent's OH). Outside Hitters block
+// the opponent's OPP/right side. Setters and Liberos do not block at the net.
+// Tightened so OPP/OH land on the block leaderboard alongside MBs.
+export function blockerPositionMultiplier(pos: string): number {
+    if (pos === 'Middle Blocker')  return 1.40;
+    if (pos === 'Opposite Hitter') return 1.20;
+    if (pos === 'Outside Hitter')  return 0.95;
+    return 0.0;
+}
+
 export function pickBlocker(attackerPos: string | undefined, lu: SimLineup): SimPlayer | null {
-    const blockWeight = (p: SimPlayer) => p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15;
-    if (attackerPos === 'Middle Blocker') {
-        const cands = [lu.MB1, lu.MB2].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, blockWeight);
-    } else {
-        const cands = [lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
-        if (cands.length) return weightedPick(cands, blockWeight);
-    }
+    const blockWeight = (p: SimPlayer) => (p.block * 0.40 + p.positioning * 0.25 + p.vertical * 0.20 + p.concentration * 0.15) * blockerPositionMultiplier(p.position);
+    const pinBlockers = attackerPos === 'Opposite Hitter'
+        ? [lu.OH1, lu.OH2]
+        : [lu.OPP];
+    const cands = [lu.MB1, lu.MB2, ...pinBlockers].filter(Boolean) as SimPlayer[];
+    if (cands.length) return weightedPick(cands, blockWeight);
     const all = [lu.MB1, lu.MB2, lu.OH1, lu.OH2, lu.OPP].filter(Boolean) as SimPlayer[];
     if (!all.length) return null;
     return weightedPick(all, blockWeight);

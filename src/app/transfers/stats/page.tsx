@@ -31,7 +31,16 @@ interface SeasonStats {
 
 interface Accolade { type: string; name: string; year: number; position?: number; }
 interface CupHistoryEntry { name: string; year: number; max_round: number; round_reached: string; won: number; }
-interface LeagueHistoryEntry { year: number; league_name: string; position: number | null; played: number; won: number; lost: number; points: number; }
+interface LeagueHistoryEntry {
+  year: number; league_name: string; position: number | null;
+  played: number; won: number; lost: number; points: number;
+  overall_position?: number | null;
+  total_in_league?: number | null;
+  is_multi_conference?: boolean;
+  conference?: string | null;
+  conference_size?: number | null;
+  playoff_result?: string | null;
+}
 
 interface SeasonBreakdownRow {
   season_year: number;
@@ -90,6 +99,17 @@ const POSITION_COLORS: Record<string, string> = {
   'Libero': 'bg-[#22c55e]/15 text-[#86efac] border-[#22c55e]/30',
 };
 
+const POSITION_ABBREV: Record<string, string> = {
+  'Setter': 'S',
+  'Outside Hitter': 'OH',
+  'Middle Blocker': 'MB',
+  'Opposite Hitter': 'OPP',
+  'Libero': 'L',
+};
+function positionAbbrev(pos: string): string {
+  return POSITION_ABBREV[pos] ?? pos.split(' ').map(w => w[0]).join('');
+}
+
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: string | number; icon: React.ElementType; color: string }) {
   return (
     <div className="surface-raised p-4 flex items-center gap-3 card-hover">
@@ -119,6 +139,38 @@ function positionColor(pos: number | null): string {
   if (pos != null && pos <= 4) return 'text-[var(--info)]';
   if (pos != null && pos <= 8) return 'text-[var(--ink-300)]';
   return 'text-[var(--ink-500)]';
+}
+
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+function playoffBadgeStyle(result: string | null | undefined): { cls: string; label: string } | null {
+  if (!result) return null;
+  switch (result) {
+    case 'Champion':
+      return { cls: 'bg-[var(--volt)]/15 text-[var(--volt)] border-[var(--volt)]/30', label: 'Champion' };
+    case 'Runner-up (Grand Final)':
+      return { cls: 'bg-amber-400/15 text-amber-300 border-amber-300/30', label: 'Runner-up' };
+    case 'Reached Grand Final':
+      return { cls: 'bg-amber-400/15 text-amber-300 border-amber-300/30', label: 'Grand Final' };
+    case 'Lost Conference Finals':
+    case 'Reached Conference Finals':
+      return { cls: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30', label: 'Conf. Finals' };
+    case 'Lost Conference Semifinals':
+      return { cls: 'bg-white/10 text-[var(--ink-300)] border-white/15', label: 'Conf. Semis' };
+    case 'Did not qualify':
+      return { cls: 'bg-white/5 text-[var(--ink-500)] border-white/10', label: 'Missed Playoffs' };
+    default:
+      return { cls: 'bg-white/5 text-[var(--ink-400)] border-white/10', label: result };
+  }
 }
 
 function TeamOverviewTab({
@@ -345,9 +397,10 @@ function TeamOverviewTab({
                       </button>
                       {isExpanded && (
                         <div className="border-t border-white/[0.06] divide-y divide-white/[0.04]">
-                          <div className="grid grid-cols-[60px_1fr_80px_80px_80px] gap-3 px-4 py-2 bg-white/[0.02] font-mono text-[9px] uppercase tracking-widest text-[var(--ink-500)]">
+                          <div className="grid grid-cols-[60px_1fr_140px_60px_60px_70px] gap-3 px-4 py-2 bg-white/[0.02] font-mono text-[9px] uppercase tracking-widest text-[var(--ink-500)]">
                             <span>Year</span>
-                            <span>Result</span>
+                            <span>Finish</span>
+                            <span>Playoffs</span>
                             <span className="text-center">W</span>
                             <span className="text-center">L</span>
                             <span className="text-right">Pts</span>
@@ -355,19 +408,42 @@ function TeamOverviewTab({
                           {seasons.sort((a, b) => b.year - a.year).map(s => {
                             const isChamp = s.position === 1;
                             const isTop4 = s.position != null && s.position <= 4;
+                            const playoffBadge = playoffBadgeStyle(s.playoff_result);
+                            const isMC = !!s.is_multi_conference;
+                            const confName = s.conference
+                              ? `${s.conference.charAt(0).toUpperCase()}${s.conference.slice(1)}`
+                              : null;
                             return (
-                              <div key={s.year} className="grid grid-cols-[60px_1fr_80px_80px_80px] gap-3 px-4 py-2.5 items-center">
+                              <div key={s.year} className="grid grid-cols-[60px_1fr_140px_60px_60px_70px] gap-3 px-4 py-2.5 items-center">
                                 <span className="font-display text-base text-[var(--volt)]/75 tabular leading-none">{s.year}</span>
-                                <div className="flex items-center gap-2">
-                                  {s.position != null && (
-                                    <span className={`font-mono text-[10px] font-bold tabular px-1.5 py-0.5 rounded ${
-                                      isChamp ? 'bg-[var(--volt)]/15 text-[var(--volt)] border border-[var(--volt)]/30' :
-                                      isTop4 ? 'bg-[var(--info)]/15 text-[var(--info)]' : 'bg-white/5 text-[var(--ink-400)]'
-                                    }`}>#{s.position}</span>
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {s.position != null && (
+                                      <span className={`font-mono text-[10px] font-bold tabular px-1.5 py-0.5 rounded ${
+                                        isChamp ? 'bg-[var(--volt)]/15 text-[var(--volt)] border border-[var(--volt)]/30' :
+                                        isTop4 ? 'bg-[var(--info)]/15 text-[var(--info)]' : 'bg-white/5 text-[var(--ink-400)]'
+                                      }`}>#{s.position}</span>
+                                    )}
+                                    <span className={`text-sm font-medium ${positionColor(s.position)}`}>
+                                      {isMC && s.position != null && confName
+                                        ? `${ordinal(s.position)} in ${confName}`
+                                        : positionLabel(s.position)}
+                                    </span>
+                                  </div>
+                                  {isMC && s.overall_position != null && s.total_in_league != null && (
+                                    <span className="font-mono text-[10px] text-[var(--ink-500)] uppercase tracking-wider">
+                                      {ordinal(s.overall_position)} overall · {s.total_in_league} teams
+                                    </span>
                                   )}
-                                  <span className={`text-sm font-medium ${positionColor(s.position)}`}>
-                                    {positionLabel(s.position)}
-                                  </span>
+                                </div>
+                                <div>
+                                  {playoffBadge ? (
+                                    <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${playoffBadge.cls}`}>
+                                      {playoffBadge.label}
+                                    </span>
+                                  ) : (
+                                    <span className="font-mono text-[10px] text-[var(--ink-600)] uppercase tracking-wider">—</span>
+                                  )}
                                 </div>
                                 <span className="text-center font-mono text-sm text-[var(--win)] tabular">{s.won}</span>
                                 <span className="text-center font-mono text-sm text-[var(--loss)] tabular">{s.lost}</span>
@@ -486,7 +562,7 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                     <div className="flex items-center gap-1.5 mt-1">
                       <Flag country={p.country} />
                       <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border font-bold tracking-wider ${POSITION_COLORS[p.position] ?? 'bg-white/10 text-[var(--ink-300)] border-white/15'}`}>
-                        {p.position.split(' ').map(w => w[0]).join('')}
+                        {positionAbbrev(p.position)}
                       </span>
                       {p.team_id && p.current_team_name && (
                         <div className="flex items-center gap-1">
@@ -752,7 +828,7 @@ function LeagueStatsTab({
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <Flag country={p.country} />
                             <span className={`font-mono text-[9px] px-1 py-[1px] rounded border font-bold tracking-wider ${POSITION_COLORS[p.position] ?? 'bg-white/10 text-[var(--ink-300)] border-white/15'}`}>
-                              {p.position.split(' ').map(w => w[0]).join('')}
+                              {positionAbbrev(p.position)}
                             </span>
                             {p.team_id && p.current_team_name && (
                               <div className="flex items-center gap-1">

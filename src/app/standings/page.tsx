@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Trophy, TrendingUp, TrendingDown, X, MapPin, Users, Calendar, Award,
-    BarChart2, Gamepad2, Shield, Swords, DollarSign, ChevronDown, Globe,
+    BarChart2, Gamepad2, Shield, Swords, DollarSign, ChevronDown, Globe, History,
 } from 'lucide-react';
 import Image from 'next/image';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
@@ -60,6 +60,24 @@ interface TeamWithRank extends Team {
     rank: number;
 }
 
+interface HistoricalStanding {
+    team_id: number;
+    team_name: string;
+    league_id: number;
+    league_name: string | null;
+    country: string | null;
+    region: string | null;
+    played: number;
+    won: number;
+    lost: number;
+    points: number;
+    sets_won: number;
+    sets_lost: number;
+    score_diff: number;
+    final_position: number | null;
+    season_year: number;
+}
+
 
 export default function StandingsPage() {
     const { team: userTeam } = useAuth();
@@ -73,6 +91,12 @@ export default function StandingsPage() {
     const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
     // Country → selected league id
     const [selectedLeagueByCountry, setSelectedLeagueByCountry] = useState<Record<string, number>>({});
+
+    // Historical view: null = live current standings
+    const [availableYears, setAvailableYears] = useState<number[]>([]);
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
+    const [historicalStandings, setHistoricalStandings] = useState<HistoricalStanding[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
     useEffect(() => {
         fetch('/api/leagues').then(r => r.json()).then((data: League[]) => {
@@ -102,6 +126,54 @@ export default function StandingsPage() {
         });
         fetch('/api/teams').then(r => r.json()).then(setTeams);
     }, [userTeam?.league_id]);
+
+    // Available historical years (one fetch on mount)
+    useEffect(() => {
+        fetch('/api/standings/history')
+            .then(r => r.json())
+            .then((data: { years: number[] }) => setAvailableYears(data.years ?? []));
+    }, []);
+
+    // Fetch snapshot data when a historical year is selected
+    useEffect(() => {
+        if (selectedYear === null) {
+            setHistoricalStandings([]);
+            return;
+        }
+        setLoadingHistory(true);
+        fetch(`/api/standings/history?year=${selectedYear}`)
+            .then(r => r.json())
+            .then((data: { standings: HistoricalStanding[] }) => {
+                setHistoricalStandings(data.standings ?? []);
+            })
+            .finally(() => setLoadingHistory(false));
+    }, [selectedYear]);
+
+    const isHistorical = selectedYear !== null;
+
+    // For historical view, derive a Team[] equivalent from snapshots so the StandingsTable
+    // component renders identically. Stats and rank come from the snapshot, not live tables.
+    const effectiveTeams: Team[] = isHistorical
+        ? historicalStandings.map(s => ({
+            id: s.team_id,
+            team_name: s.team_name ?? '(Unknown Team)',
+            league_id: s.league_id,
+            league_name: s.league_name ?? '',
+            country: s.country ?? undefined,
+            region: s.region ?? undefined,
+            played: s.played,
+            won: s.won,
+            lost: s.lost,
+            points: s.points,
+            sets_won: s.sets_won,
+            sets_lost: s.sets_lost,
+            score_diff: s.score_diff,
+            team_money: 0,
+            stadium: '',
+            capacity: 0,
+            founded: '',
+        }))
+        : teams;
 
     // Group leagues by country
     const countriesWithLeagues: { country: string; leagues: (League & { country?: string })[] }[] = [];
@@ -238,9 +310,9 @@ export default function StandingsPage() {
                                     )}
 
                                     <div
-                                        className={`relative grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-3.5 items-center cursor-pointer transition-colors min-w-fit border-l-[3px] ${bgClass}`}
+                                        className={`relative grid grid-cols-[auto_1fr_44px_44px_44px_60px_70px] md:grid-cols-[auto_1fr_52px_52px_52px_72px_88px] gap-2 md:gap-3 px-3 md:px-6 py-3 md:py-3.5 items-center transition-colors min-w-fit border-l-[3px] ${isHistorical ? '' : 'cursor-pointer'} ${bgClass}`}
                                         style={{ borderLeftColor: railColor }}
-                                        onClick={() => setSelectedTeam({ ...team, rank: idx + 1 })}
+                                        onClick={isHistorical ? undefined : () => setSelectedTeam({ ...team, rank: idx + 1 })}
                                     >
                                         {/* Rank */}
                                         <div className="w-6 md:w-8 flex items-center justify-center">
@@ -326,9 +398,9 @@ export default function StandingsPage() {
 
     // Global stats for the header strip
     const totalCountries = countriesWithLeagues.length;
-    const userTeamRow = userTeam ? teams.find(t => t.id === userTeam.id) : null;
+    const userTeamRow = userTeam ? effectiveTeams.find(t => t.id === userTeam.id) : null;
     const userLeagueTeams = userTeamRow
-        ? teams.filter(t => t.league_id === userTeamRow.league_id)
+        ? effectiveTeams.filter(t => t.league_id === userTeamRow.league_id)
             .sort((a, b) => b.points - a.points || b.score_diff - a.score_diff || (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost))
         : [];
     const userRank = userTeamRow ? userLeagueTeams.findIndex(t => t.id === userTeamRow.id) + 1 : 0;
@@ -361,14 +433,16 @@ export default function StandingsPage() {
                             LEAGUE <span className="text-[var(--volt)]">STANDINGS</span>
                         </h1>
                         <p className="font-mono text-[10.5px] text-[var(--ink-400)] mt-3.5 uppercase tracking-[0.22em]">
-                            Live competition tables across every active league
+                            {isHistorical
+                                ? `Archive · Final standings from the ${selectedYear} season`
+                                : 'Live competition tables across every active league'}
                         </p>
                     </div>
 
                     {/* Metric strip */}
                     <div className="grid grid-cols-3 gap-2.5 lg:gap-3 lg:min-w-[420px]">
                         {[
-                            { label: 'Clubs', val: teams.length, icon: Users, color: 'var(--volt)' },
+                            { label: 'Clubs', val: effectiveTeams.length, icon: Users, color: 'var(--volt)' },
                             { label: 'Leagues', val: leagues.length, icon: Award, color: 'var(--info)' },
                             { label: 'Nations', val: totalCountries, icon: Globe, color: 'var(--epic)' },
                         ].map((m) => (
@@ -382,6 +456,52 @@ export default function StandingsPage() {
                             </div>
                         ))}
                     </div>
+                </div>
+
+                {/* Season selector ribbon — live + archived past seasons */}
+                <div className="relative px-6 md:px-8 py-3 border-t border-white/[0.05] bg-black/30 flex items-center gap-2 flex-wrap">
+                    <History size={12} className={isHistorical ? 'text-[var(--epic)]' : 'text-[var(--ink-500)]'} />
+                    <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Season</span>
+                    <button
+                        onClick={() => setSelectedYear(null)}
+                        className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer ${
+                            !isHistorical
+                                ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                                : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+                        }`}
+                    >
+                        Live
+                    </button>
+                    {availableYears.length === 0 && (
+                        <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-600)] italic">
+                            No archived seasons yet
+                        </span>
+                    )}
+                    {availableYears.map(y => {
+                        const isSel = selectedYear === y;
+                        return (
+                            <button key={y}
+                                onClick={() => setSelectedYear(y)}
+                                className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.2em] transition-colors cursor-pointer tabular ${
+                                    isSel
+                                        ? 'bg-[var(--epic)] text-black shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                                        : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+                                }`}
+                            >
+                                {y}
+                            </button>
+                        );
+                    })}
+                    {loadingHistory && (
+                        <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--ink-500)] ml-1">
+                            loading…
+                        </span>
+                    )}
+                    {isHistorical && (
+                        <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--epic)] font-black">
+                            Read-only archive
+                        </span>
+                    )}
                 </div>
 
                 {/* User team rank ribbon */}
@@ -419,7 +539,7 @@ export default function StandingsPage() {
                     const isExpanded = expandedCountries.has(country);
                     const selectedLeagueId = selectedLeagueByCountry[country] ?? countryLeagues[0]?.id ?? null;
                     const selectedLeague = countryLeagues.find(l => l.id === selectedLeagueId) ?? countryLeagues[0];
-                    const leagueTeams = teams
+                    const leagueTeams = effectiveTeams
                         .filter(t => t.league_id === selectedLeagueId)
                         .sort((a, b) => b.points - a.points || b.score_diff - a.score_diff || (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost));
 
@@ -430,7 +550,7 @@ export default function StandingsPage() {
 
                     const countryCode = country.length > 2 ? getCountryCode(country) : country.toLowerCase();
 
-                    const countryTeamCount = teams.filter(t => countryLeagues.some(l => l.id === t.league_id)).length;
+                    const countryTeamCount = effectiveTeams.filter(t => countryLeagues.some(l => l.id === t.league_id)).length;
                     const hasUserClubInCountry = !!(userTeam && countryLeagues.some(l => l.id === userTeam.league_id));
 
                     return (

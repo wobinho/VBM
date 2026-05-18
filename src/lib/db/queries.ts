@@ -1089,6 +1089,64 @@ export function endSeason(): EndSeasonResult {
   // Step 1: Mark all active seasons completed
   db.prepare("UPDATE seasons SET status = 'completed' WHERE status = 'active'").run();
 
+  // Step 1b: Snapshot final standings before promotion/relegation moves teams between leagues
+  // and before team stats are reset. Final position is computed per (league, region) by points,
+  // then score_diff, then sets differential — matching the live standings ordering.
+  const finalTeams = db.prepare(`
+    SELECT t.id, t.league_id, t.region, t.played, t.won, t.lost, t.points,
+           t.sets_won, t.sets_lost, t.score_diff, l.league_name
+    FROM teams t
+    LEFT JOIN leagues l ON t.league_id = l.id
+  `).all() as {
+    id: number; league_id: number; region: string | null;
+    played: number; won: number; lost: number; points: number;
+    sets_won: number; sets_lost: number; score_diff: number;
+    league_name: string | null;
+  }[];
+
+  const groupKey = (t: { league_id: number; region: string | null }) => `${t.league_id}::${t.region ?? ''}`;
+  const grouped = new Map<string, typeof finalTeams>();
+  for (const t of finalTeams) {
+    const k = groupKey(t);
+    if (!grouped.has(k)) grouped.set(k, []);
+    grouped.get(k)!.push(t);
+  }
+
+  const insertSnapshot = db.prepare(`
+    INSERT OR REPLACE INTO team_season_snapshots
+      (team_id, season_year, league_id, played, won, lost, points,
+       sets_won, sets_lost, score_diff, final_position, league_name, cup_result)
+    VALUES (@team_id, @season_year, @league_id, @played, @won, @lost, @points,
+            @sets_won, @sets_lost, @score_diff, @final_position, @league_name, @cup_result)
+  `);
+
+  db.transaction(() => {
+    for (const group of grouped.values()) {
+      const sorted = [...group].sort((a, b) =>
+        b.points - a.points ||
+        b.score_diff - a.score_diff ||
+        (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost)
+      );
+      sorted.forEach((t, idx) => {
+        insertSnapshot.run({
+          team_id: t.id,
+          season_year: oldYear,
+          league_id: t.league_id,
+          played: t.played,
+          won: t.won,
+          lost: t.lost,
+          points: t.points,
+          sets_won: t.sets_won,
+          sets_lost: t.sets_lost,
+          score_diff: t.score_diff,
+          final_position: idx + 1,
+          league_name: t.league_name,
+          cup_result: null,
+        });
+      });
+    }
+  })();
+
   // Step 2: Process promotion / relegation (modifies teams.league_id)
   const promotion = processPromotionRelegation();
 

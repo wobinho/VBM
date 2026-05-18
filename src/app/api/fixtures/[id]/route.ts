@@ -129,7 +129,7 @@ export async function PATCH(
       if (f.status === 'completed' || (!isPlayoffGame && !isCupGame && f.id === gameId)) continue;
       const homeLu = buildLineup(f.home_team_id);
       const awayLu = buildLineup(f.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const result = runFullMatch(homeLu, awayLu, f.home_team_id, f.away_team_id);
       updateFixtureResult(f.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,
@@ -137,6 +137,9 @@ export async function PATCH(
         away_points: result.awayTotalPoints,
       });
       updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+      if (result.playerStats?.length) {
+        insertPlayerMatchStats(db, result.playerStats, 'league', f.id, seasonYear);
+      }
     }
 
     // 4. Simulate all remaining playoff games on the same date
@@ -145,13 +148,16 @@ export async function PATCH(
       if (pg.status === 'completed' || (isPlayoffGame && pg.id === gameId)) continue;
       const homeLu = buildLineup(pg.home_team_id);
       const awayLu = buildLineup(pg.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const result = runFullMatch(homeLu, awayLu, pg.home_team_id, pg.away_team_id);
       recordPlayoffGameResult(pg.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,
         home_points: result.homeTotalPoints,
         away_points: result.awayTotalPoints,
       });
+      if (result.playerStats?.length) {
+        insertPlayerMatchStats(db, result.playerStats, 'playoff', pg.id, seasonYear);
+      }
     }
 
     // 4b. Simulate all remaining cup fixtures on the same date
@@ -160,13 +166,16 @@ export async function PATCH(
       if (cf.status === 'completed' || (isCupGame && cf.id === gameId)) continue;
       const homeLu = buildLineup(cf.home_team_id);
       const awayLu = buildLineup(cf.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const result = runFullMatch(homeLu, awayLu, cf.home_team_id, cf.away_team_id);
       recordCupFixtureResult(cf.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,
         home_points: result.homeTotalPoints,
         away_points: result.awayTotalPoints,
       });
+      if (result.playerStats?.length) {
+        insertPlayerMatchStats(db, result.playerStats, 'cup', cf.id, seasonYear);
+      }
     }
 
     // 5. If ALL fixtures for this date (regular, playoff, cup) are now complete,
@@ -325,6 +334,8 @@ export async function POST(
       }
     }
 
+    const quickSimSeasonYear = parseInt(targetDate.slice(0, 4), 10);
+
     // ── Simulate all regular fixtures on this date ───────────────────────────────
     const dayFixtures = getFixtures({ date: targetDate });
     const simulatedRegular = [];
@@ -334,7 +345,7 @@ export async function POST(
 
       const homeLu = buildLineup(f.home_team_id);
       const awayLu = buildLineup(f.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const result = runFullMatch(homeLu, awayLu, f.home_team_id, f.away_team_id);
 
       updateFixtureResult(f.id, {
         home_sets:   result.homeSets,
@@ -343,6 +354,9 @@ export async function POST(
         away_points: result.awayTotalPoints,
       });
       updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+      if (result.playerStats?.length) {
+        insertPlayerMatchStats(db, result.playerStats, 'league', f.id, quickSimSeasonYear);
+      }
 
       const updated = getFixtureById(f.id);
       simulatedRegular.push({
@@ -365,7 +379,7 @@ export async function POST(
 
       const homeLu = buildLineup(pg.home_team_id);
       const awayLu = buildLineup(pg.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const result = runFullMatch(homeLu, awayLu, pg.home_team_id, pg.away_team_id);
 
       recordPlayoffGameResult(pg.id, {
         home_sets:   result.homeSets,
@@ -373,6 +387,9 @@ export async function POST(
         home_points: result.homeTotalPoints,
         away_points: result.awayTotalPoints,
       });
+      if (result.playerStats?.length) {
+        insertPlayerMatchStats(db, result.playerStats, 'playoff', pg.id, quickSimSeasonYear);
+      }
 
       simulatedPlayoff.push({
         id:       pg.id,

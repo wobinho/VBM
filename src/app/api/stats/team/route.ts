@@ -163,15 +163,96 @@ export async function GET(req: Request) {
   `).all(teamId, teamId, teamId, teamId, teamId) as any[];
 
   // ── Full league history (all seasons from snapshots) ──
-  const leagueHistory = snapshots.map((s: any) => ({
-    year: s.season_year,
-    league_name: s.league_name ?? 'League',
-    position: s.final_position,
-    played: s.played,
-    won: s.won,
-    lost: s.lost,
-    points: s.points,
-  }));
+  // Enrich each snapshot with:
+  //   - overall_position / total_in_league (rank across the whole league, not just conference)
+  //   - conference / conference_size (when the league is multi-conference; snapshot.final_position
+  //     is already conference-relative, since end-of-season grouping is by league+region)
+  //   - playoff_result (Grand Final winner, runner-up, Conference Finals loss, etc.)
+  const teamRegion = (db.prepare(`SELECT region FROM teams WHERE id = ?`).get(teamId) as { region: string | null } | undefined)?.region ?? null;
+
+  const leagueHistory = snapshots.map((snap: any) => {
+    // All snapshots for this league+year (for overall rank + total team count).
+    const peers = db.prepare(`
+      SELECT team_id, points, score_diff, sets_won, sets_lost
+      FROM team_season_snapshots
+      WHERE league_id = ? AND season_year = ?
+    `).all(snap.league_id, snap.season_year) as {
+      team_id: number; points: number; score_diff: number; sets_won: number; sets_lost: number;
+    }[];
+
+    const overallSorted = [...peers].sort((a, b) =>
+      b.points - a.points ||
+      b.score_diff - a.score_diff ||
+      (b.sets_won - b.sets_lost) - (a.sets_won - a.sets_lost)
+    );
+    const overallIdx = overallSorted.findIndex(p => p.team_id === teamId);
+    const overall_position = overallIdx >= 0 ? overallIdx + 1 : null;
+    const total_in_league = peers.length;
+
+    // Conference info — only meaningful for multi_conference leagues.
+    const cfgRow = db.prepare(`SELECT config FROM league_configs WHERE league_id = ?`).get(snap.league_id) as { config: string } | undefined;
+    let isMultiConference = false;
+    let conferenceSize: number | null = null;
+    if (cfgRow?.config) {
+      try {
+        const cfg = JSON.parse(cfgRow.config) as { format?: { type?: string; conferences?: { size: number }[] } };
+        if (cfg.format?.type === 'multi_conference') {
+          isMultiConference = true;
+          // Best guess at conference size — first conference's declared size.
+          conferenceSize = cfg.format.conferences?.[0]?.size ?? null;
+        }
+      } catch { /* ignore malformed config */ }
+    }
+
+    // Playoff result for this season (if any playoff series exist).
+    let playoff_result: string | null = null;
+    const seasonRow = db.prepare(`
+      SELECT id FROM seasons WHERE league_id = ? AND year = ?
+    `).get(snap.league_id, snap.season_year) as { id: number } | undefined;
+
+    if (seasonRow) {
+      const series = db.prepare(`
+        SELECT round, conference, winner_team_id, home_team_id, away_team_id, status
+        FROM playoff_series
+        WHERE season_id = ? AND (home_team_id = ? OR away_team_id = ?)
+        ORDER BY round DESC
+      `).all(seasonRow.id, teamId, teamId) as {
+        round: number; conference: string | null; winner_team_id: number | null;
+        home_team_id: number; away_team_id: number; status: string;
+      }[];
+
+      if (series.length > 0) {
+        const deepest = series[0]; // already ordered round DESC
+        const wonDeepest = deepest.winner_team_id === teamId;
+        if (deepest.round === 3) {
+          playoff_result = wonDeepest ? 'Champion' : 'Runner-up (Grand Final)';
+        } else if (deepest.round === 2) {
+          playoff_result = wonDeepest ? 'Reached Grand Final' : 'Lost Conference Finals';
+        } else if (deepest.round === 1) {
+          playoff_result = wonDeepest ? 'Reached Conference Finals' : 'Lost Conference Semifinals';
+        }
+      } else if (isMultiConference) {
+        // Multi-conference league but no series means the team did not qualify for playoffs.
+        playoff_result = 'Did not qualify';
+      }
+    }
+
+    return {
+      year: snap.season_year,
+      league_name: snap.league_name ?? 'League',
+      position: snap.final_position,             // conference position when multi_conference, else overall
+      played: snap.played,
+      won: snap.won,
+      lost: snap.lost,
+      points: snap.points,
+      overall_position,
+      total_in_league,
+      is_multi_conference: isMultiConference,
+      conference: isMultiConference ? teamRegion : null,
+      conference_size: isMultiConference ? conferenceSize : null,
+      playoff_result,
+    };
+  });
 
   // ── Available years ──
   const years = db.prepare(`
