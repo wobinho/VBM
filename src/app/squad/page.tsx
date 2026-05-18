@@ -354,6 +354,7 @@ export default function SquadPage() {
     const [draggedPlayer, setDraggedPlayer] = useState<Player | null>(null);
     const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
     useEffect(() => {
@@ -422,8 +423,9 @@ export default function SquadPage() {
         const available = [...players];
         const newLineup: Record<string, Player | null> = {};
         POSITIONS.forEach(pos => {
-            const best = available.filter(p => p.position.includes(pos.label.split(' ')[0]) || available.length === players.length)
-                .sort((a, b) => b.overall - a.overall)[0] || available.sort((a, b) => b.overall - a.overall)[0];
+            const best = available
+                .filter(p => isValidForSlot(p.position, pos.label))
+                .sort((a, b) => b.overall - a.overall)[0];
             if (best) { newLineup[pos.key] = best; available.splice(available.indexOf(best), 1); }
             else newLineup[pos.key] = null;
         });
@@ -438,6 +440,7 @@ export default function SquadPage() {
         const posKeyMap: Record<string, string> = { OH1: 'oh1', MB1: 'mb1', OPP: 'opp', S: 's', MB2: 'mb2', OH2: 'oh2', L: 'l' };
         const lineupData: Record<string, number | null> = {};
         POSITIONS.forEach(pos => { lineupData[posKeyMap[pos.key]] = lineup[pos.key]?.id ?? null; });
+        setSaveError(null);
         try {
             const res = await fetch('/api/squad', {
                 method: 'POST',
@@ -445,13 +448,16 @@ export default function SquadPage() {
                 body: JSON.stringify({ teamId: team.id, lineup: lineupData }),
             });
             if (!res.ok) {
-                console.error('Save failed:', await res.text());
+                const body = await res.json().catch(() => ({} as { error?: string }));
+                setSaveError(body.error ?? 'Save failed');
+                setTimeout(() => setSaveError(null), 4000);
                 return;
             }
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (e) {
-            console.error('Save error:', e);
+            setSaveError(e instanceof Error ? e.message : 'Save error');
+            setTimeout(() => setSaveError(null), 4000);
         }
     };
 
@@ -466,12 +472,17 @@ export default function SquadPage() {
                         <span className="text-[var(--volt)] font-bold">{lineupCount}</span>/7 POSITIONS // TEAM STRENGTH <span className="text-[var(--volt)] font-bold">{lineupCount > 0 ? Math.round(lineupStrength / lineupCount) : 0}</span> AVG
                     </p>
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                    <button onClick={autoFill} className="btn-ghost">Auto Fill</button>
-                    <button onClick={resetLineup} className="btn-ghost flex items-center gap-2"><RotateCcw size={13} />Reset</button>
-                    <button onClick={handleSave} className="btn-volt flex items-center gap-2">
-                        {saved ? <><Check size={14} />Saved</> : <><Save size={14} />Save Lineup</>}
-                    </button>
+                <div className="flex flex-col items-end gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                        <button onClick={autoFill} className="btn-ghost">Auto Fill</button>
+                        <button onClick={resetLineup} className="btn-ghost flex items-center gap-2"><RotateCcw size={13} />Reset</button>
+                        <button onClick={handleSave} className="btn-volt flex items-center gap-2">
+                            {saved ? <><Check size={14} />Saved</> : <><Save size={14} />Save Lineup</>}
+                        </button>
+                    </div>
+                    {saveError && (
+                        <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--loss)]">{saveError}</p>
+                    )}
                 </div>
             </div>
 

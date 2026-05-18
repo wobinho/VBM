@@ -2,7 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
-import { getSquadLineupWithPlayers, saveSquadLineup, getUserTeam } from '@/lib/db/queries';
+import { getSquadLineupWithPlayers, saveSquadLineup, getUserTeam, getPlayers } from '@/lib/db/queries';
+
+const SLOT_POSITION: Record<string, string> = {
+    oh1: 'Outside Hitter',
+    mb1: 'Middle Blocker',
+    opp: 'Opposite Hitter',
+    s:   'Setter',
+    mb2: 'Middle Blocker',
+    oh2: 'Outside Hitter',
+    l:   'Libero',
+};
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -26,6 +36,23 @@ export async function POST(req: NextRequest) {
     const userTeam = getUserTeam(session.userId);
     if (!userTeam || userTeam.team_id !== teamId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Validate every assigned player is on this team and matches their slot's position
+    const roster = getPlayers(teamId);
+    const rosterById = new Map(roster.map(p => [p.id, p]));
+    for (const [slot, playerId] of Object.entries(lineup)) {
+        if (playerId == null) continue;
+        const player = rosterById.get(playerId);
+        if (!player) {
+            return NextResponse.json({ error: `Player ${playerId} not on team ${teamId}` }, { status: 400 });
+        }
+        const required = SLOT_POSITION[slot];
+        if (required && player.position !== required) {
+            return NextResponse.json({
+                error: `Slot ${slot.toUpperCase()} requires a ${required}; ${player.player_name} is a ${player.position}`,
+            }, { status: 400 });
+        }
     }
 
     saveSquadLineup(teamId, lineup);

@@ -5,24 +5,25 @@ import { stackedStatMultiplier, STAT_TO_FACILITIES } from './facilities';
 import { POSITION_GROUPINGS, calculateOverall } from '@/lib/overall';
 
 /** Daily base gain on a *targeted* stat before age/resistance/facility/coach modifiers. */
-const BASE_RATE = 0.025;
+const BASE_RATE = 0.012;
 
 /**
- * Position-relevance multiplier. Training a stat that drives the player's role
- * (main1/main2 of their position) compounds far faster than off-position work.
- * Calibrated so a season of on-position training nets ~+5–6 OVR, while
- * mis-aligned plans only drift ~+1–2 OVR.
+ * Position-relevance multiplier. All 4 plan stats develop at a visible rate so
+ * users see progress on every targeted stat. Overall growth is still gated by
+ * the OVR formula's natural weighting (main1 40% / main2 35% / secondary 20% /
+ * other 5%), so on-position plans naturally yield bigger OVR gains without
+ * needing to suppress raw stat growth on off-position stats.
  */
 function getPositionRelevance(statKey: string, position: string): number {
   const g = POSITION_GROUPINGS[position];
   if (!g) return 1.0;
-  if (statKey === g.main1 || statKey === g.main2) return 4.0;
-  if (g.secondary.includes(statKey as never)) return 2.0;
-  return 0.3;
+  if (statKey === g.main1 || statKey === g.main2) return 1.2;
+  if (g.secondary.includes(statKey as never)) return 1.1;
+  return 1.0;
 }
 
 /** Passive growth on *non-targeted* stats while a player is in training. */
-const PASSIVE_RATE = 0.005;
+const PASSIVE_RATE = 0.0025;
 
 /** Physical stats — decline gently past prime when not actively trained. */
 const PHYSICAL_STATS = new Set([
@@ -68,7 +69,7 @@ function getPotentialCapFactor(currentOverall: number, potential: number): numbe
 }
 
 function getCoachBonus(coachQuality: number): number {
-  return (coachQuality / 100) * 0.7;
+  return (coachQuality / 100) * 1.0;
 }
 
 function getAgePassiveMultiplier(age: number): number {

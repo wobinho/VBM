@@ -237,6 +237,34 @@ button, a, [role="button"] {
   height: 1px;
 }
 
+/* Music player volume slider */
+.vbm-volume {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+.vbm-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bone);
+  border: 2px solid var(--volt);
+  cursor: pointer;
+}
+.vbm-volume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bone);
+  border: 2px solid var(--volt);
+  cursor: pointer;
+}
+
 /* Stat number display */
 .stat-num {
   font-family: var(--font-display, 'Bebas Neue'), sans-serif;

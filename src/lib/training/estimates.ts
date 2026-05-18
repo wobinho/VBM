@@ -6,13 +6,13 @@ import { stackedStatMultiplier, STAT_TO_FACILITIES } from './facilities';
 function getPositionRelevance(statKey: string, position: string): number {
   const g = POSITION_GROUPINGS[position];
   if (!g) return 1.0;
-  if (statKey === g.main1 || statKey === g.main2) return 4.0;
-  if (g.secondary.includes(statKey as never)) return 2.0;
-  return 0.3;
+  if (statKey === g.main1 || statKey === g.main2) return 1.2;
+  if (g.secondary.includes(statKey as never)) return 1.1;
+  return 1.0;
 }
 
-const BASE_RATE = 0.025;
-const PASSIVE_RATE = 0.005;
+const BASE_RATE = 0.012;
+const PASSIVE_RATE = 0.0025;
 
 const PHYSICAL_STATS = new Set([
   'speed', 'agility', 'strength', 'torque', 'vertical',
@@ -48,7 +48,7 @@ function getPotentialCapFactor(currentOverall: number, potential: number): numbe
 }
 
 function getCoachBonus(coachQuality: number): number {
-  return (coachQuality / 100) * 0.7;
+  return (coachQuality / 100) * 1.0;
 }
 
 function getAgePassiveMultiplier(age: number): number {

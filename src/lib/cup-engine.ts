@@ -15,6 +15,7 @@
 
 import { getDb } from './db/index';
 import { getCupMatchdays } from './schedule-engine';
+import { incrementMatchesPlayedForTeams } from './db/queries';
 
 export interface CupCompetition {
   id: number;
@@ -293,21 +294,26 @@ export function recordCupFixtureResult(
 
   const fixture = db.prepare(`
     SELECT * FROM cup_fixtures WHERE id = ?
-  `).get(fixtureId) as { id: number; cup_id: number; home_team_id: number; away_team_id: number };
+  `).get(fixtureId) as { id: number; cup_id: number; home_team_id: number; away_team_id: number; status: string };
 
   if (!fixture) return;
+  const wasAlreadyCompleted = fixture.status === 'completed';
 
   const winner = result.home_sets > result.away_sets ? fixture.home_team_id : fixture.away_team_id;
 
   db.prepare(`
     UPDATE cup_fixtures
-    SET status = 'completed', 
-        home_sets = ?, away_sets = ?, 
-        home_points = ?, away_points = ?, 
-        winner_team_id = ?, 
+    SET status = 'completed',
+        home_sets = ?, away_sets = ?,
+        home_points = ?, away_points = ?,
+        winner_team_id = ?,
         played_at = datetime('now')
     WHERE id = ?
   `).run(result.home_sets, result.away_sets, result.home_points, result.away_points, winner, fixtureId);
+
+  if (!wasAlreadyCompleted) {
+    incrementMatchesPlayedForTeams(fixture.home_team_id, fixture.away_team_id);
+  }
 
   advanceCupRound(fixture.cup_id);
 }

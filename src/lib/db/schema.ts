@@ -75,6 +75,8 @@ export function runSchema(db: Database.Database) {
       contract_years INTEGER NOT NULL DEFAULT 1,
       monthly_wage REAL NOT NULL DEFAULT 1000.00,
       player_value REAL NOT NULL DEFAULT 100000.00,
+      -- Career stats
+      matches_played INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );

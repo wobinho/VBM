@@ -35,13 +35,13 @@ interface LeagueHistoryEntry { year: number; league_name: string; position: numb
 
 interface SeasonBreakdownRow {
   season_year: number;
-  points: number; spikes: number; blocks: number; aces: number; digs: number;
+  points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number;
 }
 
 interface PlayerStat {
   id: number; player_name: string; position: string; overall: number;
   country: string; team_id: number | null; current_team_name?: string;
-  stats: { points: number; spikes: number; blocks: number; aces: number; digs: number };
+  stats: { points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number };
   seasonBreakdown: SeasonBreakdownRow[];
   teamHistory: { season_year: number; team_name: string; team_id: number | null }[];
 }
@@ -396,6 +396,7 @@ function TeamOverviewTab({
 // ─── Player Stats Tab ─────────────────────────────────────────────────────────
 
 const STAT_LABELS = [
+  { key: 'matches', label: 'MP', color: 'text-[var(--ink-300)]' },
   { key: 'points', label: 'PTS', color: 'text-[var(--volt)]' },
   { key: 'spikes', label: 'SPK', color: 'text-[var(--ink-300)]' },
   { key: 'blocks', label: 'BLK', color: 'text-[var(--ink-300)]' },
@@ -527,10 +528,11 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                             <span className="font-display text-base text-[var(--volt)]/85 w-12 shrink-0 tabular leading-none">{s.season_year}</span>
                             <div className="flex items-center gap-5 flex-1 justify-end">
                               {([
-                                { val: s.points, label: 'PTS', color: 'text-[var(--volt)]' },
-                                { val: s.spikes, label: 'SPK', color: 'text-[var(--ink-300)]' },
-                                { val: s.blocks, label: 'BLK', color: 'text-[var(--ink-300)]' },
-                                { val: s.aces,   label: 'ACE', color: 'text-[var(--ink-300)]' },
+                                { val: s.matches, label: 'MP',  color: 'text-[var(--ink-300)]' },
+                                { val: s.points,  label: 'PTS', color: 'text-[var(--volt)]' },
+                                { val: s.spikes,  label: 'SPK', color: 'text-[var(--ink-300)]' },
+                                { val: s.blocks,  label: 'BLK', color: 'text-[var(--ink-300)]' },
+                                { val: s.aces,    label: 'ACE', color: 'text-[var(--ink-300)]' },
                               ] as const).map(({ val, label, color }) => (
                                 <div key={label} className="text-center min-w-[2.5rem]">
                                   <p className={`font-display text-base leading-tight tabular ${color}`}>{val}</p>
@@ -545,10 +547,11 @@ function PlayerStatsTab({ teamId, years }: { teamId: number; years: number[] }) 
                             <span className="font-mono text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--ink-400)] w-12 shrink-0">Total</span>
                             <div className="flex items-center gap-5 flex-1 justify-end">
                               {([
-                                { val: p.stats?.points ?? 0, label: 'PTS', color: 'text-[var(--volt)]' },
-                                { val: p.stats?.spikes ?? 0, label: 'SPK', color: 'text-[var(--ink-300)]' },
-                                { val: p.stats?.blocks ?? 0, label: 'BLK', color: 'text-[var(--ink-300)]' },
-                                { val: p.stats?.aces   ?? 0, label: 'ACE', color: 'text-[var(--ink-300)]' },
+                                { val: p.stats?.matches ?? 0, label: 'MP',  color: 'text-[var(--ink-300)]' },
+                                { val: p.stats?.points  ?? 0, label: 'PTS', color: 'text-[var(--volt)]' },
+                                { val: p.stats?.spikes  ?? 0, label: 'SPK', color: 'text-[var(--ink-300)]' },
+                                { val: p.stats?.blocks  ?? 0, label: 'BLK', color: 'text-[var(--ink-300)]' },
+                                { val: p.stats?.aces    ?? 0, label: 'ACE', color: 'text-[var(--ink-300)]' },
                               ] as const).map(({ val, label, color }) => (
                                 <div key={label} className="text-center min-w-[2.5rem]">
                                   <p className={`font-display text-base leading-tight tabular ${color}`}>{val}</p>
@@ -607,7 +610,7 @@ interface LeagueStatPlayer {
   id: number; player_name: string; position: string; overall: number;
   country: string; team_id: number | null; current_team_name?: string;
   in_league_now: boolean;
-  stats: { points: number; spikes: number; blocks: number; aces: number; digs: number };
+  stats: { points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number };
 }
 
 function LeagueStatsTab({
@@ -762,7 +765,12 @@ function LeagueStatsTab({
                             )}
                           </div>
                         </div>
-                        <span className={`relative font-display text-xl ${board.accent} tabular leading-none shrink-0`}>{val}</span>
+                        <div className="relative text-right shrink-0 leading-none">
+                          <span className={`font-display text-xl ${board.accent} tabular block`}>{val}</span>
+                          <span className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-[var(--ink-500)] tabular mt-0.5 block">
+                            {p.stats?.matches ?? 0} MP
+                          </span>
+                        </div>
                       </div>
                     );
                   })}

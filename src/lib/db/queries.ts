@@ -23,6 +23,8 @@ export interface Player {
     consistency: number; vision: number; game_iq: number; intimidation: number;
     // Contract
     contract_years: number; monthly_wage: number; player_value: number;
+    // Career stats
+    matches_played: number;
     created_at: string; updated_at: string; team_name?: string;
 }
 export interface Transfer { id: number; player_id: number; from_team: number | null; to_team: number | null; price: number; transfer_date: string; status: string; created_at: string; updated_at: string; player_name?: string; from_team_name?: string; to_team_name?: string; }
@@ -590,7 +592,12 @@ export function updateFixtureResult(
   id: number,
   result: { home_sets: number; away_sets: number; home_points: number; away_points: number },
 ): void {
-  getDb().prepare(`
+  const db = getDb();
+  const fixture = db.prepare('SELECT home_team_id, away_team_id, status FROM fixtures WHERE id = ?')
+    .get(id) as { home_team_id: number; away_team_id: number; status: string } | undefined;
+  const wasAlreadyCompleted = fixture?.status === 'completed';
+
+  db.prepare(`
     UPDATE fixtures
     SET status = 'completed',
         home_sets = @home_sets,
@@ -600,6 +607,53 @@ export function updateFixtureResult(
         played_at = datetime('now')
     WHERE id = @id
   `).run({ ...result, id });
+
+  if (fixture && !wasAlreadyCompleted) {
+    incrementMatchesPlayedForTeams(fixture.home_team_id, fixture.away_team_id);
+  }
+}
+
+/**
+ * Increment matches_played for the seven starters of each team. Uses the
+ * saved squad lineup when available, otherwise falls back to the top-7 by
+ * overall (mirroring the auto-lineup used by the simulation engine).
+ */
+export function incrementMatchesPlayedForTeams(homeTeamId: number, awayTeamId: number): void {
+  const db = getDb();
+  const playerIds = [...getStartingPlayerIds(homeTeamId), ...getStartingPlayerIds(awayTeamId)];
+  if (!playerIds.length) return;
+  const stmt = db.prepare('UPDATE players SET matches_played = matches_played + 1 WHERE id = ?');
+  const tx = db.transaction((ids: number[]) => {
+    for (const pid of ids) stmt.run(pid);
+  });
+  tx(playerIds);
+}
+
+function getStartingPlayerIds(teamId: number): number[] {
+  const db = getDb();
+  const lineup = db.prepare(`
+    SELECT oh1_player_id, mb1_player_id, opp_player_id, s_player_id,
+           mb2_player_id, oh2_player_id, l_player_id
+    FROM squad_lineups WHERE team_id = ?
+  `).get(teamId) as {
+    oh1_player_id: number | null; mb1_player_id: number | null; opp_player_id: number | null;
+    s_player_id: number | null; mb2_player_id: number | null; oh2_player_id: number | null;
+    l_player_id: number | null;
+  } | undefined;
+
+  if (lineup) {
+    const ids = [
+      lineup.oh1_player_id, lineup.mb1_player_id, lineup.opp_player_id,
+      lineup.s_player_id, lineup.mb2_player_id, lineup.oh2_player_id, lineup.l_player_id,
+    ].filter((x): x is number => x != null);
+    if (ids.length >= 5) return ids;
+  }
+
+  // Fallback: top-7 by overall on the current roster
+  const rows = db.prepare(
+    'SELECT id FROM players WHERE team_id = ? ORDER BY overall DESC LIMIT 7'
+  ).all(teamId) as { id: number }[];
+  return rows.map(r => r.id);
 }
 
 /**
@@ -874,6 +928,9 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
 
   // Clear all player match stats
   db.prepare('DELETE FROM player_match_stats').run();
+
+  // Reset career counters that get rebuilt from match completion
+  db.prepare('UPDATE players SET matches_played = 0').run();
 
   // Rewind game_state to Jan 1 of the origin year
   const startDate = `${originYear}-01-01`;
@@ -1430,6 +1487,8 @@ export function recordPlayoffGameResult(
       db.prepare('UPDATE playoff_series SET away_wins = away_wins + 1 WHERE id = ?').run(series.id);
     }
   })();
+
+  incrementMatchesPlayedForTeams(game.home_team_id, game.away_team_id);
 
   // Re-fetch updated series
   const updated = db.prepare('SELECT * FROM playoff_series WHERE id = ?').get(series.id) as PlayoffSeries;

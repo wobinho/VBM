@@ -60,7 +60,8 @@ export async function GET(req: Request) {
       statsRows = db.prepare(`
         SELECT player_id, team_id,
                SUM(points) as points, SUM(spikes) as spikes,
-               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs,
+               COUNT(DISTINCT fixture_type || ':' || fixture_id) as matches
         FROM player_match_stats
         WHERE team_id IN (${teamPlaceholders}) AND season_year = ?
         GROUP BY player_id, team_id
@@ -69,7 +70,8 @@ export async function GET(req: Request) {
       statsRows = db.prepare(`
         SELECT player_id, team_id,
                SUM(points) as points, SUM(spikes) as spikes,
-               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+               SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs,
+               COUNT(DISTINCT fixture_type || ':' || fixture_id) as matches
         FROM player_match_stats
         WHERE team_id IN (${teamPlaceholders})
         GROUP BY player_id, team_id
@@ -81,15 +83,16 @@ export async function GET(req: Request) {
     // Aggregate per-player totals (a player may have played for multiple teams
     // within this league across seasons). The "team" shown is the most-recent
     // in-league team or, if none, their current team.
-    type Totals = { player_id: number; points: number; spikes: number; blocks: number; aces: number; digs: number };
+    type Totals = { player_id: number; points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number };
     const totals = new Map<number, Totals>();
     for (const r of statsRows) {
-      const cur = totals.get(r.player_id) ?? { player_id: r.player_id, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 };
+      const cur = totals.get(r.player_id) ?? { player_id: r.player_id, points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0, matches: 0 };
       cur.points += r.points ?? 0;
       cur.spikes += r.spikes ?? 0;
       cur.blocks += r.blocks ?? 0;
       cur.aces += r.aces ?? 0;
       cur.digs += r.digs ?? 0;
+      cur.matches += r.matches ?? 0;
       totals.set(r.player_id, cur);
     }
 
@@ -98,7 +101,7 @@ export async function GET(req: Request) {
     const playerPlaceholders = playerIdList.map(() => '?').join(',');
 
     const players = db.prepare(`
-      SELECT p.id, p.player_name, p.position, p.overall, p.country, p.team_id,
+      SELECT p.id, p.player_name, p.position, p.overall, p.country, p.team_id, p.matches_played,
              t.team_name as current_team_name
       FROM players p
       LEFT JOIN teams t ON p.team_id = t.id
@@ -107,9 +110,13 @@ export async function GET(req: Request) {
 
     const result = players.map(p => {
       const inLeagueNow = p.team_id != null && teamIdSet.has(p.team_id);
+      const t = totals.get(p.id);
+      // Season filter: use distinct fixtures from player_match_stats.
+      // Overall: use the career counter on the player row (covers bulk-sim matches with no per-player rows).
+      const matches = seasonYear ? (t?.matches ?? 0) : (p.matches_played ?? 0);
       return {
         ...p,
-        stats: totals.get(p.id) ?? { points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 },
+        stats: { ...(t ?? { points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 }), matches },
         seasonBreakdown: [],
         teamHistory: [],
         in_league_now: inLeagueNow,
@@ -136,7 +143,7 @@ export async function GET(req: Request) {
 
   // Base player info
   const players = db.prepare(`
-    SELECT p.id, p.player_name, p.position, p.overall, p.country, p.team_id,
+    SELECT p.id, p.player_name, p.position, p.overall, p.country, p.team_id, p.matches_played,
            t.team_name as current_team_name
     FROM players p
     LEFT JOIN teams t ON p.team_id = t.id
@@ -155,7 +162,8 @@ export async function GET(req: Request) {
     statsQuery = `
       SELECT player_id,
              SUM(points) as points, SUM(spikes) as spikes,
-             SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+             SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs,
+             COUNT(DISTINCT fixture_type || ':' || fixture_id) as matches
       FROM player_match_stats
       WHERE player_id IN (${placeholders}) AND season_year = ? AND team_id = ?
       GROUP BY player_id
@@ -166,7 +174,8 @@ export async function GET(req: Request) {
     statsQuery = `
       SELECT player_id,
              SUM(points) as points, SUM(spikes) as spikes,
-             SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+             SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs,
+             COUNT(DISTINCT fixture_type || ':' || fixture_id) as matches
       FROM player_match_stats
       WHERE player_id IN (${placeholders}) AND team_id = ?
       GROUP BY player_id
@@ -181,14 +190,15 @@ export async function GET(req: Request) {
   const seasonBreakdownRows = db.prepare(`
     SELECT player_id, season_year,
            SUM(points) as points, SUM(spikes) as spikes,
-           SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs
+           SUM(blocks) as blocks, SUM(aces) as aces, SUM(digs) as digs,
+           COUNT(DISTINCT fixture_type || ':' || fixture_id) as matches
     FROM player_match_stats
     WHERE player_id IN (${placeholders}) AND team_id = ?
     GROUP BY player_id, season_year
     ORDER BY player_id, season_year ASC
   `).all(...ids, teamId) as any[];
 
-  const seasonBreakdownMap = new Map<number, { season_year: number; points: number; spikes: number; blocks: number; aces: number; digs: number }[]>();
+  const seasonBreakdownMap = new Map<number, { season_year: number; points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number }[]>();
   for (const row of seasonBreakdownRows) {
     if (!seasonBreakdownMap.has(row.player_id)) seasonBreakdownMap.set(row.player_id, []);
     seasonBreakdownMap.get(row.player_id)!.push({
@@ -198,6 +208,7 @@ export async function GET(req: Request) {
       blocks: row.blocks ?? 0,
       aces: row.aces ?? 0,
       digs: row.digs ?? 0,
+      matches: row.matches ?? 0,
     });
   }
 
@@ -215,12 +226,18 @@ export async function GET(req: Request) {
     historyMap.get(row.player_id)!.push({ season_year: row.season_year, team_name: row.team_name, team_id: row.team_id });
   }
 
-  const result = players.map(p => ({
-    ...p,
-    stats: statsMap.get(p.id) ?? { points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 },
-    seasonBreakdown: seasonBreakdownMap.get(p.id) ?? [],
-    teamHistory: historyMap.get(p.id) ?? [],
-  }));
+  const result = players.map(p => {
+    const s = statsMap.get(p.id) as { points: number; spikes: number; blocks: number; aces: number; digs: number; matches: number } | undefined;
+    // Season filter: scoped match count from player_match_stats.
+    // Overall: career counter from players row (includes bulk-simmed matches).
+    const matches = seasonYear ? (s?.matches ?? 0) : (p.matches_played ?? 0);
+    return {
+      ...p,
+      stats: { ...(s ?? { points: 0, spikes: 0, blocks: 0, aces: 0, digs: 0 }), matches },
+      seasonBreakdown: seasonBreakdownMap.get(p.id) ?? [],
+      teamHistory: historyMap.get(p.id) ?? [],
+    };
+  });
 
   return NextResponse.json({ players: result });
 }

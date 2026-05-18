@@ -1,6 +1,6 @@
 'use client';
 import Image from 'next/image';
-import { X, History, TrendingUp, Calendar, DollarSign, Ruler, Cake, FileSignature } from 'lucide-react';
+import { X, History, TrendingUp, Calendar, DollarSign, Ruler, Cake, FileSignature, Trophy } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { getCountryName, getCountryCode } from '@/lib/country-codes';
@@ -16,6 +16,7 @@ interface Player {
     leadership?: number; teamwork?: number; concentration?: number; pressure?: number;
     consistency?: number; vision?: number; game_iq?: number; intimidation?: number;
     contract_years?: number; monthly_wage?: number; player_value?: number;
+    matches_played?: number;
     team_id?: number | null; team_name?: string; team_country?: string;
 }
 
@@ -423,12 +424,13 @@ export default function PlayerModal({ player, onClose }: { player: Player; onClo
                 </div>
 
                 {/* ── VITALS STRIP ── */}
-                <div className="relative grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 px-6 md:px-8 py-5 border-y border-white/[0.06] bg-zinc-950/80">
+                <div className="relative grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 px-6 md:px-8 py-5 border-y border-white/[0.06] bg-zinc-950/80">
                     <VitalTile icon={DollarSign} label="Value" value={player.player_value ? formatMoney(player.player_value) : '—'} />
                     <VitalTile icon={FileSignature} label="Wage / mo" value={player.monthly_wage ? formatMoney(player.monthly_wage) : '—'} />
                     <VitalTile icon={Calendar} label="Contract" value={player.contract_years ? `${player.contract_years} yr` : '—'} />
                     <VitalTile icon={Cake} label="Age" value={String(player.age)} />
                     <VitalTile icon={Ruler} label="Height" value={player.height ? `${player.height} cm` : '—'} />
+                    <VitalTile icon={Trophy} label="Matches" value={String(player.matches_played ?? 0)} />
                 </div>
 
                 {/* ── ATTRIBUTE SUMMARY DASHBOARD ── */}

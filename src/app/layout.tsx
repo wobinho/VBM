@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Bebas_Neue, JetBrains_Mono, Manrope } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/auth-context';
+import { AudioProvider } from '@/contexts/audio-context';
 import AppShell from '@/components/app-shell';
 
 const bebas = Bebas_Neue({
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`dark ${bebas.variable} ${mono.variable} ${manrope.variable}`}>
       <body className="antialiased">
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <AudioProvider>
+            <AppShell>{children}</AppShell>
+          </AudioProvider>
         </AuthProvider>
       </body>
     </html>

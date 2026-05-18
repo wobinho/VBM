@@ -87,6 +87,18 @@ export function getDb(): Database.Database {
     if (!playerColNames.includes('updated_at')) {
       db.exec(`ALTER TABLE players ADD COLUMN updated_at TEXT`);
     }
+    if (!playerColNames.includes('matches_played')) {
+      db.exec(`ALTER TABLE players ADD COLUMN matches_played INTEGER NOT NULL DEFAULT 0`);
+      // Backfill from existing per-match rows so prior matches count.
+      // Bulk-simulated matches (no per-player rows) cannot be recovered.
+      db.exec(`
+        UPDATE players SET matches_played = COALESCE((
+          SELECT COUNT(DISTINCT fixture_type || ':' || fixture_id)
+          FROM player_match_stats
+          WHERE player_match_stats.player_id = players.id
+        ), 0)
+      `);
+    }
     // Recalculate overall for existing players using new formula when migrating
     const needsOverallRecalc = !playerColNames.includes('vertical') || !playerColNames.includes('pressure');
     if (needsOverallRecalc) {
