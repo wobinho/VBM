@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
 import Sidebar from '@/components/sidebar';
 import AuthModal from '@/components/auth-modal';
@@ -14,12 +15,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <ClickSoundListener />
                 <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center space-y-6 max-w-sm w-full px-6 animate-fade-up">
-                        <div className="flex items-center justify-center gap-3">
-                            <span className="text-5xl animate-float">🏐</span>
+                        <div className="flex items-center justify-center">
+                            <Image
+                                src="/assets/vbm_logo.png"
+                                alt="VBM"
+                                width={140}
+                                height={140}
+                                priority
+                                className="animate-float object-contain"
+                            />
                         </div>
                         <div>
                             <p className="eyebrow mb-1">Initializing</p>
-                            <h1 className="font-display text-4xl tracking-wide text-[var(--bone)]">SPIKE DYNASTY</h1>
+                            <h1 className="font-display text-4xl tracking-wide text-[var(--bone)]">VBM</h1>
                         </div>
                         <div className="w-full h-[3px] bg-white/5 overflow-hidden">
                             <div className="h-full bg-[var(--volt)] animate-shimmer" style={{ width: '60%' }} />

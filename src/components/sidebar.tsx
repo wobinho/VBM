@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield, BarChart2, Dumbbell } from 'lucide-react';
@@ -50,12 +51,16 @@ export default function Sidebar() {
                 {/* Top brand band */}
                 <div className="relative px-6 pt-7 pb-5 border-b border-white/[0.05]">
                     <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl leading-none">🏐</span>
-                        <div>
-                            <h1 className="font-display text-2xl tracking-[0.05em] text-[var(--bone)] leading-none">SPIKE</h1>
-                            <p className="font-display text-2xl tracking-[0.05em] text-[var(--volt)] leading-none mt-0.5">DYNASTY</p>
-                        </div>
+                    <div className="flex items-center gap-3">
+                        <Image
+                            src="/assets/vbm_logo.png"
+                            alt="VBM"
+                            width={48}
+                            height={48}
+                            priority
+                            className="w-12 h-12 object-contain"
+                        />
+                        <h1 className="font-display text-3xl tracking-[0.08em] text-[var(--bone)] leading-none">VBM</h1>
                     </div>
                     <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--ink-500)] mt-3">v0.4 // est. 2026</p>
                 </div>

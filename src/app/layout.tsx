@@ -24,7 +24,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Spike Dynasty — Volleyball Manager',
+  title: 'VBM — Volleyball Manager',
   description: 'Build your dynasty. Manage your team. Dominate the court.',
 };
 

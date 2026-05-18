@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Eye, EyeOff, LogIn, UserPlus, Loader2, ArrowLeft } from 'lucide-react';
@@ -81,8 +82,17 @@ export default function AuthModal() {
                     <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
                     <div className="absolute -top-20 -right-16 w-48 h-48 rounded-full bg-[var(--volt)]/10 blur-3xl" />
                     <div className="relative">
-                        <div className="text-5xl mb-3 animate-float inline-block">🏐</div>
-                        <h2 className="font-display text-3xl tracking-[0.06em] text-[var(--bone)]">SPIKE DYNASTY</h2>
+                        <div className="mb-3 inline-block animate-float">
+                            <Image
+                                src="/assets/vbm_logo.png"
+                                alt="VBM"
+                                width={96}
+                                height={96}
+                                priority
+                                className="object-contain"
+                            />
+                        </div>
+                        <h2 className="font-display text-3xl tracking-[0.06em] text-[var(--bone)]">VBM</h2>
                         <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--ink-400)] mt-2">Volleyball Manager · Season 1</p>
                     </div>
                 </div>
