@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { runSchema } from './schema';
 import { seedDatabase } from './seed';
+import { seedFrance } from './seed-france';
 import type { LeagueConfig } from '../league-engine';
 import { generateScheduleForLeague } from '../league-engine';
 
@@ -341,6 +342,12 @@ export function getDb(): Database.Database {
       seedLeagueConfigs(db);
     }
 
+    // One-time French league seed: idempotent — runs only when France is absent.
+    // Seeds FVL Premier Division, FVL North, FVL South, their 48 teams (16 each),
+    // 7 players per team, league configs, presets, and promotion/relegation links.
+    // Once France exists in the leagues table, this short-circuits on every reboot.
+    seedFrance(db);
+
     // Migration: seasons, fixtures, game_state tables
     const seasonsCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='seasons'"
@@ -657,7 +664,12 @@ function migrateTrainingFacilitiesLevel(db: Database.Database) {
 }
 
 function seedMissingLeagueSeasons(db: Database.Database) {
-  const year = 2026;
+  // Use the current game year (from game_state) so newly added leagues join the
+  // season that's actually being played, not a stale 2026 default.
+  // NOTE: "current_date" must be quoted — it's a reserved SQLite function name
+  // and unquoted use returns today's calendar date, not the column value.
+  const gs = db.prepare('SELECT "current_date" AS current_date FROM game_state WHERE id = 1').get() as { current_date: string } | undefined;
+  const year = gs?.current_date ? parseInt(gs.current_date.slice(0, 4), 10) : 2026;
   const leagues = db.prepare("SELECT id FROM leagues ORDER BY id").all() as { id: number }[];
 
   const insertFixture = db.prepare(`
@@ -669,26 +681,30 @@ function seedMissingLeagueSeasons(db: Database.Database) {
     const teams = db.prepare("SELECT id FROM teams WHERE league_id = ? ORDER BY id").all(league.id) as { id: number }[];
     if (teams.length < 2) continue;
 
-    const seasonResult = db.prepare(`
-      INSERT OR IGNORE INTO seasons (league_id, year, name, start_date, end_date)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(league.id, year, `${year} Season`, `${year}-01-01`, `${year}-12-31`);
-
-    let seasonId: number;
-    if (seasonResult.changes === 0) {
-      const existing = db.prepare("SELECT id FROM seasons WHERE league_id = ? AND year = ?").get(league.id, year) as { id: number };
-      seasonId = existing.id;
-    } else {
-      seasonId = Number(seasonResult.lastInsertRowid);
-    }
-
-    const existing = db.prepare("SELECT COUNT(*) as c FROM fixtures WHERE season_id = ?").get(seasonId) as { c: number };
-    if (existing.c > 0) continue;
-
+    // Pre-compute schedule slots outside the transaction (no DB writes).
     const teamIds = teams.map(t => t.id);
     const slots = generateScheduleForLeague(league.id, teamIds, year);
 
-    const insertAll = db.transaction(() => {
+    // Atomic upsert: season-row + existence-gated fixture insert run under one
+    // IMMEDIATE write lock so concurrent boots (Next dev hot-reload) can't
+    // both pass the empty-fixtures check and double-insert.
+    const seedOneLeague = db.transaction(() => {
+      const seasonResult = db.prepare(`
+        INSERT OR IGNORE INTO seasons (league_id, year, name, start_date, end_date)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(league.id, year, `${year} Season`, `${year}-01-01`, `${year}-12-31`);
+
+      let seasonId: number;
+      if (seasonResult.changes === 0) {
+        const existing = db.prepare("SELECT id FROM seasons WHERE league_id = ? AND year = ?").get(league.id, year) as { id: number };
+        seasonId = existing.id;
+      } else {
+        seasonId = Number(seasonResult.lastInsertRowid);
+      }
+
+      const existing = db.prepare("SELECT COUNT(*) as c FROM fixtures WHERE season_id = ?").get(seasonId) as { c: number };
+      if (existing.c > 0) return;
+
       for (const slot of slots) {
         insertFixture.run({
           season_id: seasonId,
@@ -699,8 +715,9 @@ function seedMissingLeagueSeasons(db: Database.Database) {
           scheduled_date: slot.scheduled_date,
         });
       }
-    });
-    insertAll();
+    }).immediate;
+
+    seedOneLeague();
   }
 }
 

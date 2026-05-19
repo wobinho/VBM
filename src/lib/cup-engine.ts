@@ -1,9 +1,9 @@
 /**
  * Cup Engine
  *
- * Drives the Copa Italia (National Cup) with a 2-tier entry format:
- * - Round 1: IVL North & IVL South teams (32 teams) → 16 winners on first matchday
- * - Round 2: 16 R1 winners + 16 IVL Premier Division (32 teams) → 16 winners on second matchday
+ * Drives each country's National Cup with a 2-tier entry format:
+ * - Round 1: tier-3 league teams (32 teams) → 16 winners on first matchday
+ * - Round 2: 16 R1 winners + 16 tier-2 league teams (32 teams) → 16 winners on second matchday
  * - Round of 16: 16 teams → 8 winners on third matchday
  * - Quarter Finals: 8 teams → 4 winners on fourth matchday
  * - Semi Finals: 4 teams → 2 winners on fifth matchday
@@ -11,6 +11,10 @@
  *
  * Each round's fixtures are played on the same day (first available Mon/Wed/Fri of the month).
  * Cup matchdays are spread across Jul-Dec using all available Mon/Wed/Fri dates.
+ *
+ * Countries are picked up dynamically from the leagues table: any country that has
+ * at least one tier-2 league plus matching tier-3 league(s) gets a national cup
+ * generated automatically — no per-country hardcoding.
  */
 
 import { getDb } from './db/index';
@@ -40,12 +44,44 @@ export function generateAllCups(year: number): void {
   execute();
 }
 
+// National cup names per country. Anything not listed falls back to "<Country> National Cup".
+const NATIONAL_CUP_NAMES: Record<string, string> = {
+  Italy: 'Copa Italia',
+  France: 'Coup de France',
+};
+
 function _generateAllCupsInternal(db: any, year: number): void {
-  // We now only generate the National Cup (Copa Italia)
-  const cupName = 'Copa Italia';
+  // Find every country that has at least one tier-2 league. Each gets its own
+  // national cup. Countries with no tier-3 feeder leagues are skipped.
+  const countries = db.prepare(`
+    SELECT DISTINCT country FROM leagues WHERE tier = 2 AND country IS NOT NULL
+  `).all() as { country: string }[];
+
+  for (const { country } of countries) {
+    const tier3Leagues = db.prepare(
+      `SELECT id FROM leagues WHERE country = ? AND tier = 3 ORDER BY id`
+    ).all(country) as { id: number }[];
+    const tier2Leagues = db.prepare(
+      `SELECT id FROM leagues WHERE country = ? AND tier = 2 ORDER BY id`
+    ).all(country) as { id: number }[];
+
+    if (tier3Leagues.length === 0 || tier2Leagues.length === 0) continue;
+
+    const cupName = NATIONAL_CUP_NAMES[country] ?? `${country} National Cup`;
+    generateNationalCup(db, year, country, cupName, tier2Leagues.map(l => l.id), tier3Leagues.map(l => l.id));
+  }
+}
+
+function generateNationalCup(
+  db: any,
+  year: number,
+  country: string,
+  cupName: string,
+  tier2LeagueIds: number[],
+  tier3LeagueIds: number[],
+): void {
   const cupType = 'national';
   const format = 'single_elimination';
-  const country = 'Italy';
 
   // Create the cup_competitions row
   const cupResult = db.prepare(`
@@ -54,7 +90,7 @@ function _generateAllCupsInternal(db: any, year: number): void {
   `).run(cupName, cupType, format, country, year);
 
   if (cupResult.changes === 0) {
-    // Cup already exists for this year
+    // Cup already exists for this country/year
     return;
   }
 
@@ -63,16 +99,17 @@ function _generateAllCupsInternal(db: any, year: number): void {
   // Get all matchday dates (Jul 1 – Dec 31: Mon/Wed/Fri)
   const matchdays = getCupMatchdays(year, 'national');
 
-  // Fetch teams for Round 1: IVL North (2) and IVL South (3) = 32 teams
-  const tier3Teams = db.prepare(`
-    SELECT id FROM teams WHERE league_id IN (2, 3)
-  `).all() as { id: number }[];
+  // Fetch teams for Round 1: all tier-3 league teams = 32 teams
+  const tier3Placeholders = tier3LeagueIds.map(() => '?').join(',');
+  const tier3Teams = db.prepare(
+    `SELECT id FROM teams WHERE league_id IN (${tier3Placeholders})`
+  ).all(...tier3LeagueIds) as { id: number }[];
 
   const teamsR1 = shuffle(tier3Teams.map(t => t.id));
 
   // Define All Knockout Rounds
-  // Round 1: 32 teams (North/South) -> 16 winners
-  // Round 2: 16 winners + 16 Premier -> 32 teams -> 16 winners
+  // Round 1: 32 teams (tier-3) -> 16 winners
+  // Round 2: 16 winners + 16 tier-2 -> 32 teams -> 16 winners
   // Round 3: 16 teams -> 8 winners
   // Round 4: 8 teams -> 4 winners
   // Round 5: 4 teams -> 2 winners
@@ -171,7 +208,7 @@ export function advanceCupRound(cupId: number): void {
 }
 
 /**
- * Seed Round 2: 16 winners from R1 + 16 teams from IVL Premier (1) = 32 teams.
+ * Seed Round 2: 16 winners from R1 + 16 teams from the cup's tier-2 league(s) = 32 teams.
  * All 16 matches play on the same day (second matchday).
  */
 function seedRound2WithPremier(cupId: number, r1Id: number, r2Id: number): void {
@@ -180,13 +217,16 @@ function seedRound2WithPremier(cupId: number, r1Id: number, r2Id: number): void 
     SELECT winner_team_id FROM cup_fixtures WHERE round_id = ?
   `).all(r1Id) as { winner_team_id: number }[];
 
+  const cup = db.prepare('SELECT year, country FROM cup_competitions WHERE id = ?').get(cupId) as { year: number; country: string };
+
   const premierTeams = db.prepare(`
-    SELECT id FROM teams WHERE league_id = 1
-  `).all() as { id: number }[];
+    SELECT t.id FROM teams t
+    JOIN leagues l ON t.league_id = l.id
+    WHERE l.country = ? AND l.tier = 2
+  `).all(cup.country) as { id: number }[];
 
   // Shuffle and combine: 16 R1 winners + 16 Premier teams
   const pool = shuffle([...winnersR1.map(w => w.winner_team_id), ...premierTeams.map(p => p.id)]);
-  const cup = db.prepare('SELECT year FROM cup_competitions WHERE id = ?').get(cupId) as { year: number };
   const matchdays = getCupMatchdays(cup.year, 'national');
   const dateR2 = matchdays[1]; // Second matchday
 

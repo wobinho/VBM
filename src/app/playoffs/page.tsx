@@ -41,6 +41,7 @@ interface PlayoffSeries {
 interface PlayoffBracket {
     seasonId: number;
     year: number;
+    leagueName: string | null;
     round1: PlayoffSeries[];
     round2: PlayoffSeries[];
     round3: PlayoffSeries[];
@@ -247,7 +248,7 @@ export default function PlayoffsPage() {
     useEffect(() => {
         fetch('/api/playoffs?list=true')
             .then(r => r.ok ? r.json() : null)
-            .then((d: { years: number[]; currentYear: number | null } | null) => {
+            .then((d: { years: number[]; currentYear: number | null; leagueName: string | null } | null) => {
                 if (d) {
                     setAvailableYears(d.years ?? []);
                     setCurrentYear(d.currentYear ?? null);
@@ -401,7 +402,9 @@ export default function PlayoffsPage() {
                         <h1 className="font-display text-5xl tracking-[0.02em] text-[var(--bone)] leading-[0.85]">
                             <span className="text-[var(--volt)]">{bracket.year}</span> PLAYOFFS
                         </h1>
-                        <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider uppercase">IVL Championship Bracket</p>
+                        <p className="font-mono text-xs text-[var(--ink-400)] mt-3 tracking-wider uppercase">
+                            {bracket.leagueName ? `${bracket.leagueName} Championship Bracket` : 'Championship Bracket'}
+                        </p>
                     </div>
                     <div className={`px-3 py-1.5 rounded font-mono text-[11px] font-bold uppercase tracking-[0.22em] border
                         ${isCompleted
@@ -429,7 +432,7 @@ export default function PlayoffsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="font-mono text-[10px] text-[var(--volt)]/85 uppercase tracking-[0.3em] font-bold mb-1.5">
-                                {bracket.year} IVL Champion
+                                {bracket.year} {bracket.leagueName ? `${bracket.leagueName} ` : ''}Champion
                             </p>
                             <p className="font-display text-3xl tracking-[0.04em] text-[var(--volt)] truncate">
                                 {bracket.champion.teamName.toUpperCase()}

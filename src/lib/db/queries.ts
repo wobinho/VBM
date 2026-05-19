@@ -929,6 +929,9 @@ export function resetSeasonForTesting(): { seasonId: number; startDate: string; 
   // Clear all player match stats
   db.prepare('DELETE FROM player_match_stats').run();
 
+  // Clear team season snapshots from origin year onwards so historical standings get rebuilt
+  db.prepare('DELETE FROM team_season_snapshots WHERE season_year >= ?').run(originYear);
+
   // Reset career counters that get rebuilt from match completion
   db.prepare('UPDATE players SET matches_played = 0').run();
 
