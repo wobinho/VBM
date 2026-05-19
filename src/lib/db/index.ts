@@ -673,6 +673,29 @@ function initializeGameDb(db: Database.Database) {
     }
 
     migrateTrainingFacilitiesLevel(db);
+
+    ensureGameStateRow(db);
+}
+
+/**
+ * Guarantees a row exists in game_state. seedInitialSeason only inserts one
+ * when the seasons table is being created for the first time AND at least one
+ * league has teams — DBs that hit the seedMissingLeagueSeasons path (e.g. an
+ * existing save that gained Italy after the fact) would otherwise boot without
+ * a row, breaking every API route that calls getGameState().
+ */
+function ensureGameStateRow(db: Database.Database) {
+  const existing = db.prepare("SELECT id FROM game_state WHERE id = 1").get();
+  if (existing) return;
+
+  const earliest = db.prepare(
+    "SELECT id, start_date FROM seasons ORDER BY start_date ASC, id ASC LIMIT 1"
+  ).get() as { id: number; start_date: string } | undefined;
+  if (!earliest) return;
+
+  const startDate = earliest.start_date || `${earliest.start_date?.slice(0, 4) ?? '2026'}-01-01`;
+  db.prepare("INSERT OR IGNORE INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)")
+    .run(startDate, earliest.id);
 }
 
 /**
