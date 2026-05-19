@@ -249,6 +249,11 @@ Object.entries(COUNTRY_CODES).forEach(([code, name]) => {
   COUNTRY_NAME_TO_CODE[name] = code;
 });
 
+// Common short names / alternate spellings the rest of the app uses.
+// Without these the flag/standings lookup falls back to "un".
+COUNTRY_NAME_TO_CODE['USA'] = 'us';
+COUNTRY_NAME_TO_CODE['Czechia'] = 'cz';
+
 // Get country code from country name (case-insensitive)
 export function getCountryCode(countryName: string): string {
   // Try exact match first

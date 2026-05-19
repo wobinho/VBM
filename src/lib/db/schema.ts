@@ -7,6 +7,7 @@ export function runSchema(db: Database.Database) {
       league_name TEXT NOT NULL UNIQUE,
       country TEXT DEFAULT 'Italy',
       tier INTEGER DEFAULT 2,
+      continent TEXT DEFAULT 'Europe',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );

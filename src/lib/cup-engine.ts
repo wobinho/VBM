@@ -50,11 +50,43 @@ const NATIONAL_CUP_NAMES: Record<string, string> = {
   France: 'Coup de France',
   Poland: 'Polska Cup',
   Turkey: 'Turkish Cup',
+  // Europe (added with worldwide expansion)
+  Slovenia: 'Pokal Slovenije',
+  Bulgaria: 'Bulgarian Cup',
+  Germany: 'DVV-Pokal',
+  Serbia: 'Kup Srbije',
+  Belgium: 'Beker van België',
+  Russia: 'Russian Cup',
+  Ukraine: 'Ukrainian Cup',
+  Czechia: 'Český Pohár',
+  Finland: 'Suomen Cup',
+  Netherlands: 'KNVB Beker',
+  Portugal: 'Taça de Portugal',
+  Spain: 'Copa del Rey',
+  // Asia
+  Japan: 'Emperor’s Cup',
+  China: 'Chinese Cup',
+  'South Korea': 'KOVO Cup',
+  Philippines: 'PNVF Cup',
+  Vietnam: 'Vietnamese Cup',
+  Thailand: 'Thailand Cup',
+  Taiwan: 'Taiwan Cup',
+  Iran: 'Hazfi Cup',
+  // America
+  USA: 'US Open Cup',
+  Canada: 'Canadian Cup',
+  Mexico: 'Copa MX',
+  Cuba: 'Copa Cuba',
+  'Puerto Rico': 'Copa Puerto Rico',
+  Brazil: 'Copa do Brasil',
+  Argentina: 'Copa Argentina',
+  Chile: 'Copa Chile',
 };
 
 function _generateAllCupsInternal(db: any, year: number): void {
-  // Find every country that has at least one tier-2 league. Each gets its own
-  // national cup. Countries with no tier-3 feeder leagues are skipped.
+  // Every country with a tier-2 league gets its own national cup. Countries
+  // with tier-3 feeder leagues use the 6-round (32+16) format; countries
+  // without feeders use a 4-round 16-team single-elimination format.
   const countries = db.prepare(`
     SELECT DISTINCT country FROM leagues WHERE tier = 2 AND country IS NOT NULL
   `).all() as { country: string }[];
@@ -67,10 +99,90 @@ function _generateAllCupsInternal(db: any, year: number): void {
       `SELECT id FROM leagues WHERE country = ? AND tier = 2 ORDER BY id`
     ).all(country) as { id: number }[];
 
-    if (tier3Leagues.length === 0 || tier2Leagues.length === 0) continue;
+    if (tier2Leagues.length === 0) continue;
 
     const cupName = NATIONAL_CUP_NAMES[country] ?? `${country} National Cup`;
-    generateNationalCup(db, year, country, cupName, tier2Leagues.map(l => l.id), tier3Leagues.map(l => l.id));
+    if (tier3Leagues.length === 0) {
+      generateSingleTierCup(db, year, country, cupName, tier2Leagues.map(l => l.id));
+    } else {
+      generateNationalCup(db, year, country, cupName, tier2Leagues.map(l => l.id), tier3Leagues.map(l => l.id));
+    }
+  }
+}
+
+/**
+ * Single-tier national cup: 16 teams from a country's only tier-2 league,
+ * run as straight single-elimination — Round of 16 → Quarter Finals →
+ * Semi Finals → Grand Final (best-of-3).
+ *
+ * Reuses the same advance/best-of-3 logic as the standard cup by giving the
+ * rounds the same final-round name ("Grand Final"). seedNextKnockoutRound
+ * keys off `round_number === 6` for the best-of-3 schedule, so we offset our
+ * round numbers to land the final on round 6 as well.
+ */
+function generateSingleTierCup(
+  db: any,
+  year: number,
+  country: string,
+  cupName: string,
+  tier2LeagueIds: number[],
+): void {
+  const cupType = 'national';
+  const format = 'single_elimination';
+
+  const cupResult = db.prepare(`
+    INSERT OR IGNORE INTO cup_competitions (name, cup_type, format, country, year, status)
+    VALUES (?, ?, ?, ?, ?, 'active')
+  `).run(cupName, cupType, format, country, year);
+
+  if (cupResult.changes === 0) return; // already exists
+
+  const cupId = Number(cupResult.lastInsertRowid);
+
+  const matchdays = getCupMatchdays(year, 'national');
+
+  // Pull the 16 teams from the country's single tier-2 league.
+  const placeholders = tier2LeagueIds.map(() => '?').join(',');
+  const teams = db.prepare(
+    `SELECT id FROM teams WHERE league_id IN (${placeholders})`
+  ).all(...tier2LeagueIds) as { id: number }[];
+
+  const teamsR16 = shuffle(teams.map(t => t.id));
+
+  // Round numbers 3..6 so the Grand Final lands at round 6, matching the
+  // best-of-3 logic in seedNextKnockoutRound / handleBestOf3Final that
+  // checks `round_number === 6` for scheduling and `matchdays[5]/[6]/[7]`
+  // for game dates.
+  const rounds = [
+    { num: 3, name: 'Round of 16',    matchdayIdx: 2 },
+    { num: 4, name: 'Quarter Finals', matchdayIdx: 3 },
+    { num: 5, name: 'Semi Finals',    matchdayIdx: 4 },
+    { num: 6, name: 'Grand Final',    matchdayIdx: 5 },
+  ];
+
+  const roundIds: number[] = [];
+  for (const r of rounds) {
+    const isFinal = r.name === 'Grand Final';
+    const startDate = matchdays[r.matchdayIdx] || matchdays[matchdays.length - 1];
+    const endDate = isFinal
+      ? (matchdays[Math.min(r.matchdayIdx + 1, matchdays.length - 1)] || matchdays[matchdays.length - 1])
+      : startDate;
+
+    const res = db.prepare(`
+      INSERT INTO cup_rounds (cup_id, round_number, round_name, round_type, start_date, end_date, status)
+      VALUES (?, ?, ?, 'knockout', ?, ?, 'scheduled')
+    `).run(cupId, r.num, r.name, startDate, endDate);
+    roundIds.push(Number(res.lastInsertRowid));
+  }
+
+  // Seed Round of 16: 8 matchups, all on the same day (matchdays[2]).
+  const r16Id = roundIds[0];
+  const dateR16 = matchdays[2];
+  for (let i = 0; i < teamsR16.length; i += 2) {
+    db.prepare(`
+      INSERT INTO cup_fixtures (cup_id, round_id, home_team_id, away_team_id, scheduled_date, status)
+      VALUES (?, ?, ?, ?, ?, 'scheduled')
+    `).run(cupId, r16Id, teamsR16[i], teamsR16[i+1], dateR16);
   }
 }
 
