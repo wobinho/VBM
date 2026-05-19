@@ -628,16 +628,18 @@ export function updateFixtureResult(
  * Increment matches_played for the seven starters of each team. Uses the
  * saved squad lineup when available, otherwise falls back to the top-7 by
  * overall (mirroring the auto-lineup used by the simulation engine).
+ *
+ * Issues a single IN(?,...) UPDATE so it works inside an outer transaction
+ * without spinning up a nested one.
  */
 export function incrementMatchesPlayedForTeams(homeTeamId: number, awayTeamId: number): void {
   const db = getDb();
   const playerIds = [...getStartingPlayerIds(homeTeamId), ...getStartingPlayerIds(awayTeamId)];
   if (!playerIds.length) return;
-  const stmt = db.prepare('UPDATE players SET matches_played = matches_played + 1 WHERE id = ?');
-  const tx = db.transaction((ids: number[]) => {
-    for (const pid of ids) stmt.run(pid);
-  });
-  tx(playerIds);
+  const placeholders = playerIds.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE players SET matches_played = matches_played + 1 WHERE id IN (${placeholders})`,
+  ).run(...playerIds);
 }
 
 function getStartingPlayerIds(teamId: number): number[] {

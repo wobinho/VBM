@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { getDb } from '@/lib/db';
 import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, getFixtures, getFixtureById,
-  updateFixtureResult, updateTeamStatsAfterMatch,
-  getSquadLineup, getPlayers, getUserTeam,
+  getUserTeam,
   getPlayoffGamesByDate, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { runFullMatch } from '@/lib/simulation-engine';
+import { createSimCache } from '@/lib/sim-cache';
 
 /**
  * POST /api/simulate-matchday
@@ -32,6 +33,7 @@ export const POST = withUserDb(async () => {
 
   // ── Regular-season fixtures ───────────────────────────────────────────────
   const dayFixtures = getFixtures({ date: currentDate });
+  const dayPlayoffGames = getPlayoffGamesByDate(currentDate);
 
   const simulated: Array<{
     id: number; homeTeam: string; awayTeam: string;
@@ -41,74 +43,82 @@ export const POST = withUserDb(async () => {
   let userFixtureId: number | null = null;
   let userPlayoffGameId: number | null = null;
 
-  for (const f of dayFixtures) {
-    if (f.status === 'completed') continue;
+  const db = getDb();
+  const sim = createSimCache();
 
-    const isUserFixture = userTeamId !== null &&
-      (f.home_team_id === userTeamId || f.away_team_id === userTeamId);
+  const run = db.transaction(() => {
+    for (const f of dayFixtures) {
+      if (f.status === 'completed') continue;
 
-    if (isUserFixture) {
-      userFixtureId = f.id;
-      continue;
+      const isUserFixture = userTeamId !== null &&
+        (f.home_team_id === userTeamId || f.away_team_id === userTeamId);
+
+      if (isUserFixture) {
+        userFixtureId = f.id;
+        continue;
+      }
+
+      const homeLu = sim.buildLineup(f.home_team_id);
+      const awayLu = sim.buildLineup(f.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+
+      sim.updateFixtureResult(f.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+      sim.updateTeamStatsAfterMatch(
+        f.home_team_id, f.away_team_id,
+        result.homeSets, result.awaySets,
+        result.homeTotalPoints, result.awayTotalPoints,
+      );
+
+      simulated.push({
+        id:       f.id,
+        homeTeam: f.home_team_name ?? f.home_team_id.toString(),
+        awayTeam: f.away_team_name ?? f.away_team_id.toString(),
+        homeSets: result.homeSets,
+        awaySets: result.awaySets,
+        winner:   result.winner,
+        type:     'regular',
+      });
     }
 
-    const homeLu = buildLineup(f.home_team_id);
-    const awayLu = buildLineup(f.away_team_id);
-    const result = runFullMatch(homeLu, awayLu);
+    // ── Playoff games ───────────────────────────────────────────────────────
+    for (const pg of dayPlayoffGames) {
+      const isUserGame = userTeamId !== null &&
+        (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId);
 
-    updateFixtureResult(f.id, {
-      home_sets:   result.homeSets,
-      away_sets:   result.awaySets,
-      home_points: result.homeTotalPoints,
-      away_points: result.awayTotalPoints,
-    });
-    updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+      if (isUserGame) {
+        userPlayoffGameId = pg.id;
+        continue;
+      }
 
-    const updated = getFixtureById(f.id);
-    simulated.push({
-      id:       f.id,
-      homeTeam: updated?.home_team_name ?? f.home_team_id.toString(),
-      awayTeam: updated?.away_team_name ?? f.away_team_id.toString(),
-      homeSets: result.homeSets,
-      awaySets: result.awaySets,
-      winner:   result.winner,
-      type:     'regular',
-    });
-  }
+      const homeLu = sim.buildLineup(pg.home_team_id);
+      const awayLu = sim.buildLineup(pg.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
 
-  // ── Playoff games ─────────────────────────────────────────────────────────
-  const dayPlayoffGames = getPlayoffGamesByDate(currentDate);
+      recordPlayoffGameResult(pg.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
 
-  for (const pg of dayPlayoffGames) {
-    const isUserGame = userTeamId !== null &&
-      (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId);
-
-    if (isUserGame) {
-      userPlayoffGameId = pg.id;
-      continue;
+      simulated.push({
+        id:       pg.id,
+        homeTeam: pg.home_team_name ?? pg.home_team_id.toString(),
+        awayTeam: pg.away_team_name ?? pg.away_team_id.toString(),
+        homeSets: result.homeSets,
+        awaySets: result.awaySets,
+        winner:   result.winner,
+        type:     'playoff',
+      });
     }
+  });
 
-    const homeLu = buildLineup(pg.home_team_id);
-    const awayLu = buildLineup(pg.away_team_id);
-    const result = runFullMatch(homeLu, awayLu);
-
-    recordPlayoffGameResult(pg.id, {
-      home_sets:   result.homeSets,
-      away_sets:   result.awaySets,
-      home_points: result.homeTotalPoints,
-      away_points: result.awayTotalPoints,
-    });
-
-    simulated.push({
-      id:       pg.id,
-      homeTeam: pg.home_team_name ?? pg.home_team_id.toString(),
-      awayTeam: pg.away_team_name ?? pg.away_team_id.toString(),
-      homeSets: result.homeSets,
-      awaySets: result.awaySets,
-      winner:   result.winner,
-      type:     'playoff',
-    });
-  }
+  run();
 
   const hasAnything = dayFixtures.length > 0 || dayPlayoffGames.length > 0;
   if (!hasAnything) {
@@ -126,25 +136,3 @@ export const POST = withUserDb(async () => {
     simulated,
   });
 });
-
-function buildLineup(teamId: number): SimLineup {
-  const saved   = getSquadLineup(teamId);
-  const players = getPlayers(teamId) as unknown as SimPlayer[];
-
-  if (saved) {
-    const idMap = new Map(players.map(p => [p.id, p]));
-    const lu: SimLineup = {
-      OH1: saved.oh1_player_id ? (idMap.get(saved.oh1_player_id) ?? null) : null,
-      MB1: saved.mb1_player_id ? (idMap.get(saved.mb1_player_id) ?? null) : null,
-      OPP: saved.opp_player_id ? (idMap.get(saved.opp_player_id) ?? null) : null,
-      S:   saved.s_player_id   ? (idMap.get(saved.s_player_id)   ?? null) : null,
-      MB2: saved.mb2_player_id ? (idMap.get(saved.mb2_player_id) ?? null) : null,
-      OH2: saved.oh2_player_id ? (idMap.get(saved.oh2_player_id) ?? null) : null,
-      L:   saved.l_player_id   ? (idMap.get(saved.l_player_id)   ?? null) : null,
-    };
-    const filled = Object.values(lu).filter(Boolean).length;
-    if (filled >= 5) return lu;
-  }
-
-  return autoLineupFromPlayers(players);
-}

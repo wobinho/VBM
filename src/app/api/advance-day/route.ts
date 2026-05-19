@@ -6,14 +6,14 @@ import { getDb } from '@/lib/db';
 import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate, getFixtures,
-  updateFixtureResult, updateTeamStatsAfterMatch,
-  getSquadLineup, getPlayers, getUserTeam, runMonthlyEconomy,
+  getUserTeam, runMonthlyEconomy,
   shouldGeneratePlayoffs, generatePlayoffs,
   getPlayoffGamesByDate, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib/simulation-engine';
+import { runFullMatch } from '@/lib/simulation-engine';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 import { tickTraining } from '@/lib/training/engine';
+import { createSimCache } from '@/lib/sim-cache';
 
 /**
  * POST /api/advance-day — advance the game calendar by exactly 1 day.
@@ -93,91 +93,107 @@ export const POST = withUserDb(async () => {
     );
   }
 
-  // Auto-simulate all remaining AI regular-season fixtures for today
-  const remaining = todayFixtures.filter(f => f.status !== 'completed' && f.id !== userFixture?.id);
-  for (const f of remaining) {
-    const homeLu = buildLineup(f.home_team_id);
-    const awayLu = buildLineup(f.away_team_id);
-    const result = runFullMatch(homeLu, awayLu);
-    updateFixtureResult(f.id, {
-      home_sets:   result.homeSets,
-      away_sets:   result.awaySets,
-      home_points: result.homeTotalPoints,
-      away_points: result.awayTotalPoints,
-    });
-    updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
-  }
-
-  // Also auto-simulate any AI playoff games scheduled for today
-  // (user playoff games are left for the user to play manually)
-  for (const pg of todayPlayoffGames) {
-    const isUserGame = userTeamId !== null &&
-      (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId);
-    if (isUserGame) continue;
-
-    const homeLu = buildLineup(pg.home_team_id);
-    const awayLu = buildLineup(pg.away_team_id);
-    const result = runFullMatch(homeLu, awayLu);
-    recordPlayoffGameResult(pg.id, {
-      home_sets:   result.homeSets,
-      away_sets:   result.awaySets,
-      home_points: result.homeTotalPoints,
-      away_points: result.awayTotalPoints,
-    });
-  }
-
-  // Also auto-simulate any AI cup fixtures scheduled for today
-  // (user cup fixtures are left for the user to play manually)
-  for (const cf of todayCupFixtures) {
-    const isUserGame = userTeamId !== null &&
-      (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId);
-    if (isUserGame) continue;
-
-    const homeLu = buildLineup(cf.home_team_id);
-    const awayLu = buildLineup(cf.away_team_id);
-    const result = runFullMatch(homeLu, awayLu);
-    recordCupFixtureResult(cf.id, {
-      home_sets:   result.homeSets,
-      away_sets:   result.awaySets,
-      home_points: result.homeTotalPoints,
-      away_points: result.awayTotalPoints,
-    });
-  }
-
   // Advance by exactly 1 calendar day
   const current = new Date(state.current_date);
   current.setDate(current.getDate() + 1);
   const newDate = current.toISOString().slice(0, 10);
 
-  advanceGameDate(newDate);
+  const db = getDb();
+  const sim = createSimCache();
 
-  // Training tick: run for all AI and user teams
+  // Counts captured inside the transaction so the response stays accurate.
   let trainingGainCount = 0;
-  {
-    const db = getDb();
-    const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
-    for (const t of allTeams) {
+  let monthlyEconomyRan = false;
+  let playoffsGenerated = false;
+
+  // Wrap the entire day's work in a single transaction. The default better-sqlite3
+  // behavior is to fsync after every statement; for ~30 AI fixtures + 600 training
+  // ticks + monthly economy this means thousands of small fsyncs per day.
+  const runDay = db.transaction(() => {
+    // Auto-simulate all remaining AI regular-season fixtures for today
+    const remaining = todayFixtures.filter(f => f.status !== 'completed' && f.id !== userFixture?.id);
+    for (const f of remaining) {
+      const homeLu = sim.buildLineup(f.home_team_id);
+      const awayLu = sim.buildLineup(f.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      sim.updateFixtureResult(f.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+      sim.updateTeamStatsAfterMatch(
+        f.home_team_id, f.away_team_id,
+        result.homeSets, result.awaySets,
+        result.homeTotalPoints, result.awayTotalPoints,
+      );
+    }
+
+    // Also auto-simulate any AI playoff games scheduled for today
+    // (user playoff games are left for the user to play manually)
+    for (const pg of todayPlayoffGames) {
+      const isUserGame = userTeamId !== null &&
+        (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId);
+      if (isUserGame) continue;
+
+      const homeLu = sim.buildLineup(pg.home_team_id);
+      const awayLu = sim.buildLineup(pg.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      recordPlayoffGameResult(pg.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+    }
+
+    // Also auto-simulate any AI cup fixtures scheduled for today
+    // (user cup fixtures are left for the user to play manually)
+    for (const cf of todayCupFixtures) {
+      const isUserGame = userTeamId !== null &&
+        (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId);
+      if (isUserGame) continue;
+
+      const homeLu = sim.buildLineup(cf.home_team_id);
+      const awayLu = sim.buildLineup(cf.away_team_id);
+      const result = runFullMatch(homeLu, awayLu);
+      recordCupFixtureResult(cf.id, {
+        home_sets:   result.homeSets,
+        away_sets:   result.awaySets,
+        home_points: result.homeTotalPoints,
+        away_points: result.awayTotalPoints,
+      });
+    }
+
+    advanceGameDate(newDate);
+
+    // Training tick: only run for teams that actually have an active training
+    // assignment. Skipping the other ~600 teams avoids a getPlayers() pass per
+    // team per day.
+    const trainingTeamRows = db.prepare(`
+      SELECT DISTINCT p.team_id AS id
+      FROM training_assignments ta
+      JOIN players p ON ta.player_id = p.id
+      WHERE p.team_id IS NOT NULL
+    `).all() as { id: number }[];
+    for (const t of trainingTeamRows) {
       const gains = tickTraining(t.id, newDate);
       trainingGainCount += gains.length;
+      // Player stats may have changed — refresh the cached roster for the team.
+      if (gains.length) sim.invalidateTeam(t.id);
     }
-  }
 
-  // Monthly economy: fire on the 1st of each month
-  let monthlyEconomyRan = false;
-  if (newDate.endsWith('-01')) {
-    const db = getDb();
-    const month = newDate.slice(0, 7); // "YYYY-MM"
-    const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
-    for (const t of allTeams) {
-      runMonthlyEconomy(t.id, month);
+    // Monthly economy: fire on the 1st of each month
+    if (newDate.endsWith('-01')) {
+      const month = newDate.slice(0, 7); // "YYYY-MM"
+      const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
+      for (const t of allTeams) {
+        runMonthlyEconomy(t.id, month);
+      }
+      monthlyEconomyRan = true;
     }
-    monthlyEconomyRan = true;
-  }
 
-  // Auto-generate playoffs for any tier-2 league season that just had its last fixture played
-  let playoffsGenerated = false;
-  {
-    const db = getDb();
+    // Auto-generate playoffs for any tier-2 league season that just had its last fixture played
     const tier2Seasons = db.prepare(`
       SELECT s.id FROM seasons s
       JOIN leagues l ON s.league_id = l.id
@@ -189,7 +205,12 @@ export const POST = withUserDb(async () => {
         playoffsGenerated = true;
       }
     }
-  }
+  });
+
+  runDay();
+
+  // Counts and "has match day" computed after the transaction commits.
+  const remainingCount = todayFixtures.filter(f => f.status !== 'completed' && f.id !== userFixture?.id).length;
 
   // Check if the new date has any fixtures, playoff games, or cup fixtures
   const dayFixtures = getFixtures({ date: newDate });
@@ -202,31 +223,9 @@ export const POST = withUserDb(async () => {
     newDate,
     hasMatchDay,
     fixtureCount: dayFixtures.length + dayPlayoffGames.length + dayCupFixtures.length,
-    autoSimulated: remaining.length,
+    autoSimulated: remainingCount,
     trainingGainCount,
     monthlyEconomyRan,
     playoffsGenerated,
   });
 });
-
-function buildLineup(teamId: number): SimLineup {
-  const saved   = getSquadLineup(teamId);
-  const players = getPlayers(teamId) as unknown as SimPlayer[];
-
-  if (saved) {
-    const idMap = new Map(players.map(p => [p.id, p]));
-    const lu: SimLineup = {
-      OH1: saved.oh1_player_id ? (idMap.get(saved.oh1_player_id) ?? null) : null,
-      MB1: saved.mb1_player_id ? (idMap.get(saved.mb1_player_id) ?? null) : null,
-      OPP: saved.opp_player_id ? (idMap.get(saved.opp_player_id) ?? null) : null,
-      S:   saved.s_player_id   ? (idMap.get(saved.s_player_id)   ?? null) : null,
-      MB2: saved.mb2_player_id ? (idMap.get(saved.mb2_player_id) ?? null) : null,
-      OH2: saved.oh2_player_id ? (idMap.get(saved.oh2_player_id) ?? null) : null,
-      L:   saved.l_player_id   ? (idMap.get(saved.l_player_id)   ?? null) : null,
-    };
-    const filled = Object.values(lu).filter(Boolean).length;
-    if (filled >= 5) return lu;
-  }
-
-  return autoLineupFromPlayers(players);
-}

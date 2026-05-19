@@ -3,11 +3,11 @@ import { getDb, runWithDb } from '@/lib/db';
 import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate, getFixtures, getPlayoffGamesByDate,
-  updateFixtureResult, updateTeamStatsAfterMatch,
-  getSquadLineup, getPlayers, runMonthlyEconomy, recordPlayoffGameResult,
+  runMonthlyEconomy, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer, PlayerStatLine } from '@/lib/simulation-engine';
+import { runFullMatch, PlayerStatLine } from '@/lib/simulation-engine';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
+import { createSimCache } from '@/lib/sim-cache';
 
 /**
  * POST /api/simulate-to-date
@@ -67,6 +67,31 @@ export const POST = withUserDb(async (req) => {
           const totalDays = Math.ceil((end.getTime() - cursor.getTime()) / (1000 * 60 * 60 * 24)) + 1;
           let daysProcessed = 0;
 
+          // One SimCache for the entire range. Rosters/lineups are reused across
+          // days; we only invalidate on monthly economy boundaries below if
+          // needed (currently nothing in the simulate-to-date path mutates
+          // player stats, so a single cache is safe).
+          const sim = createSimCache();
+
+          const insertPlayerStatsStmt = db.prepare(`
+            INSERT OR REPLACE INTO player_match_stats
+              (player_id, team_id, season_year, fixture_type, fixture_id, points, spikes, blocks, aces, digs)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          const insertPlayerStats = (
+            stats: PlayerStatLine[],
+            fixtureType: 'league' | 'playoff' | 'cup',
+            fixtureId: number,
+            seasonYear: number,
+          ) => {
+            for (const s of stats) {
+              insertPlayerStatsStmt.run(
+                s.playerId, s.teamId || null, seasonYear, fixtureType, fixtureId,
+                s.points, s.spikes, s.blocks, s.aces, s.digs,
+              );
+            }
+          };
+
           const execute = db.transaction(() => {
             while (cursor <= end) {
               const dateStr = cursor.toISOString().slice(0, 10);
@@ -94,22 +119,29 @@ export const POST = withUserDb(async (req) => {
 
               // ── Simulate regular season fixtures ───────────────────────────────────────
               const fixtures = getFixtures({ date: dateStr, status: 'scheduled' });
-              const matchesOnDay = [];
+              const matchesOnDay: Array<{
+                type: string; home?: string; away?: string;
+                result?: string; cup?: string;
+              }> = [];
 
               if (fixtures.length > 0) {
                 for (const f of fixtures) {
-                  const homeLu = buildLineup(f.home_team_id);
-                  const awayLu = buildLineup(f.away_team_id);
+                  const homeLu = sim.buildLineup(f.home_team_id);
+                  const awayLu = sim.buildLineup(f.away_team_id);
                   const result = runFullMatch(homeLu, awayLu, f.home_team_id, f.away_team_id);
-                  updateFixtureResult(f.id, {
+                  sim.updateFixtureResult(f.id, {
                     home_sets:   result.homeSets,
                     away_sets:   result.awaySets,
                     home_points: result.homeTotalPoints,
                     away_points: result.awayTotalPoints,
                   });
-                  updateTeamStatsAfterMatch(f.home_team_id, f.away_team_id, result.homeSets, result.awaySets, result.homeTotalPoints, result.awayTotalPoints);
+                  sim.updateTeamStatsAfterMatch(
+                    f.home_team_id, f.away_team_id,
+                    result.homeSets, result.awaySets,
+                    result.homeTotalPoints, result.awayTotalPoints,
+                  );
                   if (result.playerStats?.length) {
-                    insertPlayerMatchStats(db, result.playerStats, 'league', f.id, parseInt(dateStr.slice(0, 4), 10));
+                    insertPlayerStats(result.playerStats, 'league', f.id, parseInt(dateStr.slice(0, 4), 10));
                   }
 
                   matchesOnDay.push({
@@ -127,8 +159,8 @@ export const POST = withUserDb(async (req) => {
                 for (const pg of playoffGames) {
                   if (pg.status === 'completed') continue;
 
-                  const homeLu = buildLineup(pg.home_team_id);
-                  const awayLu = buildLineup(pg.away_team_id);
+                  const homeLu = sim.buildLineup(pg.home_team_id);
+                  const awayLu = sim.buildLineup(pg.away_team_id);
                   const result = runFullMatch(homeLu, awayLu, pg.home_team_id, pg.away_team_id);
 
                   recordPlayoffGameResult(pg.id, {
@@ -138,7 +170,7 @@ export const POST = withUserDb(async (req) => {
                     away_points: result.awayTotalPoints,
                   });
                   if (result.playerStats?.length) {
-                    insertPlayerMatchStats(db, result.playerStats, 'playoff', pg.id, parseInt(dateStr.slice(0, 4), 10));
+                    insertPlayerStats(result.playerStats, 'playoff', pg.id, parseInt(dateStr.slice(0, 4), 10));
                   }
 
                   matchesOnDay.push({
@@ -156,8 +188,8 @@ export const POST = withUserDb(async (req) => {
                 for (const cf of cupFixtures) {
                   if (cf.status === 'completed') continue;
 
-                  const homeLu = buildLineup(cf.home_team_id);
-                  const awayLu = buildLineup(cf.away_team_id);
+                  const homeLu = sim.buildLineup(cf.home_team_id);
+                  const awayLu = sim.buildLineup(cf.away_team_id);
                   const result = runFullMatch(homeLu, awayLu, cf.home_team_id, cf.away_team_id);
 
                   recordCupFixtureResult(cf.id, {
@@ -167,7 +199,7 @@ export const POST = withUserDb(async (req) => {
                     away_points: result.awayTotalPoints,
                   });
                   if (result.playerStats?.length) {
-                    insertPlayerMatchStats(db, result.playerStats, 'cup', cf.id, parseInt(dateStr.slice(0, 4), 10));
+                    insertPlayerStats(result.playerStats, 'cup', cf.id, parseInt(dateStr.slice(0, 4), 10));
                   }
 
                   matchesOnDay.push({
@@ -233,43 +265,3 @@ export const POST = withUserDb(async (req) => {
     },
   });
 });
-
-function buildLineup(teamId: number): SimLineup {
-  const saved   = getSquadLineup(teamId);
-  const players = getPlayers(teamId) as unknown as SimPlayer[];
-
-  if (saved) {
-    const idMap = new Map(players.map(p => [p.id, p]));
-    const lu: SimLineup = {
-      OH1: saved.oh1_player_id ? (idMap.get(saved.oh1_player_id) ?? null) : null,
-      MB1: saved.mb1_player_id ? (idMap.get(saved.mb1_player_id) ?? null) : null,
-      OPP: saved.opp_player_id ? (idMap.get(saved.opp_player_id) ?? null) : null,
-      S:   saved.s_player_id   ? (idMap.get(saved.s_player_id)   ?? null) : null,
-      MB2: saved.mb2_player_id ? (idMap.get(saved.mb2_player_id) ?? null) : null,
-      OH2: saved.oh2_player_id ? (idMap.get(saved.oh2_player_id) ?? null) : null,
-      L:   saved.l_player_id   ? (idMap.get(saved.l_player_id)   ?? null) : null,
-    };
-    const filled = Object.values(lu).filter(Boolean).length;
-    if (filled >= 5) return lu;
-  }
-
-  return autoLineupFromPlayers(players);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function insertPlayerMatchStats(
-  db: any,
-  stats: PlayerStatLine[],
-  fixtureType: 'league' | 'playoff' | 'cup',
-  fixtureId: number,
-  seasonYear: number,
-) {
-  const stmt = db.prepare(`
-    INSERT OR REPLACE INTO player_match_stats
-      (player_id, team_id, season_year, fixture_type, fixture_id, points, spikes, blocks, aces, digs)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const s of stats) {
-    stmt.run(s.playerId, s.teamId || null, seasonYear, fixtureType, fixtureId, s.points, s.spikes, s.blocks, s.aces, s.digs);
-  }
-}
