@@ -34,7 +34,7 @@ interface CupRound {
 }
 
 interface CupData {
-  cup: { id: number; name: string; year: number; status: string };
+  cup: { id: number; name: string; year: number; status: string; country?: string };
   rounds: CupRound[];
 }
 
@@ -57,6 +57,17 @@ const ROUND_META: Record<string, { icon: React.ElementType; shortLabel: string; 
 
 function getRoundMeta(name: string) {
   return ROUND_META[name] ?? { icon: Swords, shortLabel: '?', accent: 'gray' };
+}
+
+const COUNTRY_FLAG_CODES: Record<string, string> = {
+  italy: 'it',
+  france: 'fr',
+  poland: 'pl',
+  turkey: 'tr',
+};
+
+function flagCodeForCountry(country: string | undefined): string {
+  return COUNTRY_FLAG_CODES[country?.toLowerCase() ?? ''] ?? 'it';
 }
 
 // Accent color classes per round theme
@@ -192,7 +203,7 @@ export default function CupsPage() {
             {isHistorical ? `NO CUP FOR ${selectedYear}` : 'NO ACTIVE CUPS'}
           </h2>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--ink-500)]">
-            {isHistorical ? 'No cup competition was recorded for this year' : 'Copa Italia generates after June 30'}
+            {isHistorical ? 'No cup competition was recorded for this year' : 'National cups generate after June 30'}
           </p>
         </div>
       </div>
@@ -216,7 +227,7 @@ export default function CupsPage() {
           <div className="relative shrink-0">
             <div className="absolute inset-0 rounded bg-[var(--volt)]/30 blur-2xl" />
             <div className="relative w-[100px] h-[100px] rounded bg-gradient-to-br from-[var(--volt)]/25 to-transparent border-2 border-[var(--volt)]/40 flex items-center justify-center shadow-2xl shadow-[var(--volt)]/20 overflow-hidden">
-              <Image src="/assets/flags/it.svg" alt="Italian Flag" width={60} height={60} className="object-cover" />
+              <Image src={`/assets/flags/${flagCodeForCountry(data.cup.country)}.svg`} alt="Country Flag" width={60} height={60} className="object-cover" />
             </div>
           </div>
           <div className="flex-1 min-w-0 px-2">
@@ -257,7 +268,7 @@ export default function CupsPage() {
 
       {viewMode === 'list'
         ? <ListViewContainer rounds={data.rounds} />
-        : <BracketViewContainer rounds={data.rounds} userTeamId={userTeam?.id ?? null} cupStatus={data.cup.status} />
+        : <BracketViewContainer rounds={data.rounds} userTeamId={userTeam?.id ?? null} cupStatus={data.cup.status} cupName={data.cup.name} />
       }
     </div>
   );
@@ -343,11 +354,11 @@ function ListFixtureCard({ fixture: f }: { fixture: CupFixture }) {
 
 // ─── Bracket View ─────────────────────────────────────────────────────────────
 
-function BracketViewContainer({ rounds, userTeamId, cupStatus }: { rounds: CupRound[]; userTeamId: number | null; cupStatus: string }) {
-  return <CupBracket rounds={rounds} userTeamId={userTeamId} cupStatus={cupStatus} />;
+function BracketViewContainer({ rounds, userTeamId, cupStatus, cupName }: { rounds: CupRound[]; userTeamId: number | null; cupStatus: string; cupName: string }) {
+  return <CupBracket rounds={rounds} userTeamId={userTeamId} cupStatus={cupStatus} cupName={cupName} />;
 }
 
-function CupBracket({ rounds, userTeamId, cupStatus }: { rounds: CupRound[]; userTeamId: number | null; cupStatus: string }) {
+function CupBracket({ rounds, userTeamId, cupStatus, cupName }: { rounds: CupRound[]; userTeamId: number | null; cupStatus: string; cupName: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeRound, setActiveRound] = useState<number>(() => {
     // Start on furthest progressed round
@@ -389,7 +400,7 @@ function CupBracket({ rounds, userTeamId, cupStatus }: { rounds: CupRound[]; use
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)]/85 mb-1.5">Copa Italia Champion</p>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)]/85 mb-1.5">{cupName} Champion</p>
               <p className="font-display text-2xl tracking-[0.04em] text-[var(--volt)] truncate">{championName?.toUpperCase()}</p>
             </div>
             <TeamLogo teamId={championId} size={56} />

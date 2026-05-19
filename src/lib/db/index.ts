@@ -3,6 +3,8 @@ import path from 'path';
 import { runSchema } from './schema';
 import { seedDatabase } from './seed';
 import { seedFrance } from './seed-france';
+import { seedPoland } from './seed-poland';
+import { seedTurkey } from './seed-turkey';
 import type { LeagueConfig } from '../league-engine';
 import { generateScheduleForLeague } from '../league-engine';
 
@@ -347,6 +349,16 @@ export function getDb(): Database.Database {
     // 7 players per team, league configs, presets, and promotion/relegation links.
     // Once France exists in the leagues table, this short-circuits on every reboot.
     seedFrance(db);
+
+    // One-time Polish league seed: idempotent — runs only when Poland is absent.
+    // Seeds Polish Super League, Division 2, Division 3 (single-table, 16 teams each)
+    // with 7 players per team, configs (top-8 playoff for Super League), and
+    // promotion/relegation chain (bottom/top 2 between each tier).
+    seedPoland(db);
+
+    // One-time Turkish league seed: idempotent — runs only when Turkey is absent.
+    // Same structure as Poland: Turkish Super League + Division 2 + Division 3.
+    seedTurkey(db);
 
     // Migration: seasons, fixtures, game_state tables
     const seasonsCheck = db.prepare(

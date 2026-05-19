@@ -357,7 +357,7 @@ export default function PlayoffsPage() {
                         <p className="text-sm text-[var(--ink-400)] max-w-md mx-auto leading-relaxed">
                             {isHistorical
                                 ? 'No postseason was recorded for this season.'
-                                : 'The playoffs begin after the regular season ends on April 30. Top 4 teams from each conference qualify.'}
+                                : 'The playoffs begin after the regular season ends on April 30. The top qualifying teams from each league advance.'}
                         </p>
                         {!isHistorical && (
                             <div className="flex items-center justify-center gap-6 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-6">
@@ -381,6 +381,7 @@ export default function PlayoffsPage() {
         );
     }
 
+    const isSingleTable = bracket.round1.length > 0 && bracket.round1.every(s => s.conference === null);
     const northR1 = bracket.round1.filter(s => s.conference === 'north');
     const southR1 = bracket.round1.filter(s => s.conference === 'south');
     const northR2 = bracket.round2.filter(s => s.conference === 'north');
@@ -445,18 +446,26 @@ export default function PlayoffsPage() {
                 </div>
             )}
 
-            {/* ── Round 1 — Conference Semifinals ── */}
+            {/* ── Round 1 — Semifinals / Quarter Finals ── */}
             <div>
-                <RoundHeader label="Conference Semifinals" icon={Swords} />
-                <div className="flex w-full">
-                    <div className="flex-1 min-w-0 pr-6 lg:pr-10">
-                        <ConferenceColumn title="North Conference" series={northR1} userTeamId={userTeamId} />
+                <RoundHeader label={isSingleTable ? 'Quarter Finals' : 'Conference Semifinals'} icon={Swords} />
+                {isSingleTable ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {bracket.round1.map(s => (
+                            <SeriesCard key={s.id} series={s} userTeamId={userTeamId} />
+                        ))}
                     </div>
-                    <div className="w-px bg-white/[0.06] shrink-0 my-2" />
-                    <div className="flex-1 min-w-0 pl-6 lg:pl-10">
-                        <ConferenceColumn title="South Conference" series={southR1} userTeamId={userTeamId} />
+                ) : (
+                    <div className="flex w-full">
+                        <div className="flex-1 min-w-0 pr-6 lg:pr-10">
+                            <ConferenceColumn title="North Conference" series={northR1} userTeamId={userTeamId} />
+                        </div>
+                        <div className="w-px bg-white/[0.06] shrink-0 my-2" />
+                        <div className="flex-1 min-w-0 pl-6 lg:pl-10">
+                            <ConferenceColumn title="South Conference" series={southR1} userTeamId={userTeamId} />
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* ── Connector arrow ── */}
@@ -468,30 +477,46 @@ export default function PlayoffsPage() {
                 </div>
             </div>
 
-            {/* ── Round 2 — Conference Finals ── */}
+            {/* ── Round 2 — Semifinals / Conference Finals ── */}
             <div>
-                <RoundHeader label="Conference Finals" icon={Flame} />
-                <div className="flex w-full">
-                    <div className="flex-1 min-w-0 pr-6 lg:pr-10">
-                        <ConferenceColumn
-                            title="North Conference"
-                            series={northR2.length ? northR2 : []}
-                            userTeamId={userTeamId}
-                        />
-                    </div>
-                    <div className="w-px bg-white/[0.06] shrink-0 my-2" />
-                    <div className="flex-1 min-w-0 pl-6 lg:pl-10">
-                        <ConferenceColumn
-                            title="South Conference"
-                            series={southR2.length ? southR2 : []}
-                            userTeamId={userTeamId}
-                        />
-                    </div>
-                </div>
-                {!northR2.length && !southR2.length && (
-                    <p className="text-center text-xs text-gray-700 mt-4">
-                        {bracket.round1.some(s => s.status !== 'completed') ? 'Awaiting Semifinal results' : 'TBD'}
-                    </p>
+                <RoundHeader label={isSingleTable ? 'Semi Finals' : 'Conference Finals'} icon={Flame} />
+                {isSingleTable ? (
+                    bracket.round2.length ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                            {bracket.round2.map(s => (
+                                <SeriesCard key={s.id} series={s} userTeamId={userTeamId} />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-xs text-gray-700 mt-4">
+                            {bracket.round1.some(s => s.status !== 'completed') ? 'Awaiting Quarter Final results' : 'TBD'}
+                        </p>
+                    )
+                ) : (
+                    <>
+                        <div className="flex w-full">
+                            <div className="flex-1 min-w-0 pr-6 lg:pr-10">
+                                <ConferenceColumn
+                                    title="North Conference"
+                                    series={northR2.length ? northR2 : []}
+                                    userTeamId={userTeamId}
+                                />
+                            </div>
+                            <div className="w-px bg-white/[0.06] shrink-0 my-2" />
+                            <div className="flex-1 min-w-0 pl-6 lg:pl-10">
+                                <ConferenceColumn
+                                    title="South Conference"
+                                    series={southR2.length ? southR2 : []}
+                                    userTeamId={userTeamId}
+                                />
+                            </div>
+                        </div>
+                        {!northR2.length && !southR2.length && (
+                            <p className="text-center text-xs text-gray-700 mt-4">
+                                {bracket.round1.some(s => s.status !== 'completed') ? 'Awaiting Semifinal results' : 'TBD'}
+                            </p>
+                        )}
+                    </>
                 )}
             </div>
 

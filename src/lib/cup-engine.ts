@@ -48,6 +48,8 @@ export function generateAllCups(year: number): void {
 const NATIONAL_CUP_NAMES: Record<string, string> = {
   Italy: 'Copa Italia',
   France: 'Coup de France',
+  Poland: 'Polska Cup',
+  Turkey: 'Turkish Cup',
 };
 
 function _generateAllCupsInternal(db: any, year: number): void {

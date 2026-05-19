@@ -26,8 +26,9 @@ export interface ConferenceDefinition {
 
 export interface PlayoffRoundDefinition {
   name: string;
-  scope: 'per_conference' | 'cross_conference';
+  scope: 'per_conference' | 'cross_conference' | 'whole_table';
   teams_per_conference?: number;
+  teams_count?: number;            // used when scope = 'whole_table' (e.g. top 8)
   matchup_pattern?: 'top_vs_bottom';
 }
 
@@ -48,7 +49,7 @@ export interface LeagueConfig {
   };
 
   post_season: {
-    type: 'none' | 'conference_playoffs';
+    type: 'none' | 'conference_playoffs' | 'single_table_playoffs';
     start_month?: number;
     start_day?: number;
     series_length?: number;   // e.g. 5 for best-of-5
@@ -196,21 +197,15 @@ export function generatePostSeason(
     return { seriesCreated: 0, gamesScheduled: 0 };
   }
 
-  if (config.post_season.type !== 'conference_playoffs') {
+  if (config.post_season.type !== 'conference_playoffs' && config.post_season.type !== 'single_table_playoffs') {
     return { seriesCreated: 0, gamesScheduled: 0 };
   }
 
   const round1Def = config.post_season.rounds?.[0];
-  if (!round1Def || round1Def.scope !== 'per_conference') {
+  if (!round1Def) {
     return { seriesCreated: 0, gamesScheduled: 0 };
   }
 
-  const conferences = config.format.conferences;
-  if (!conferences || conferences.length === 0) {
-    return { seriesCreated: 0, gamesScheduled: 0 };
-  }
-
-  const qualifyCount = round1Def.teams_per_conference ?? 4;
   const tiebreakers  = config.tiebreakers;
   const roundDates   = getPlayoffRoundDates(season.year, 1);
 
@@ -229,7 +224,7 @@ export function generatePostSeason(
   let gamesScheduled = 0;
 
   function createSeries(
-    conference: string,
+    conference: string | null,
     seedHigh: number,
     seedLow: number,
     highTeamId: number,
@@ -264,26 +259,56 @@ export function generatePostSeason(
   }
 
   db.transaction(() => {
-    for (const conf of conferences) {
+    if (round1Def.scope === 'per_conference') {
+      const conferences = config!.format.conferences;
+      if (!conferences || conferences.length === 0) return;
+
+      const qualifyCount = round1Def.teams_per_conference ?? 4;
       const orderClause = buildOrderClause(tiebreakers, 'DESC');
+
+      for (const conf of conferences) {
+        const topTeams = db.prepare(`
+          SELECT id FROM teams
+          WHERE league_id = ? AND region = ?
+          ORDER BY ${orderClause}
+          LIMIT ?
+        `).all(season!.league_id, conf.region_tag, qualifyCount) as { id: number }[];
+
+        if (topTeams.length < qualifyCount) {
+          throw new Error(`Not enough teams in ${conf.name} conference (need ${qualifyCount}, found ${topTeams.length})`);
+        }
+
+        if (round1Def.matchup_pattern === 'top_vs_bottom') {
+          const half = Math.floor(qualifyCount / 2);
+          for (let i = 0; i < half; i++) {
+            const highSeed = i + 1;
+            const lowSeed  = qualifyCount - i;
+            createSeries(conf.name, highSeed, lowSeed, topTeams[i].id, topTeams[qualifyCount - 1 - i].id);
+          }
+        }
+      }
+    } else if (round1Def.scope === 'whole_table') {
+      // Single-table bracket: top N teams, seed 1 vs N, 2 vs N-1, etc.
+      const qualifyCount = round1Def.teams_count ?? 8;
+      const orderClause = buildOrderClause(tiebreakers, 'DESC');
+
       const topTeams = db.prepare(`
         SELECT id FROM teams
-        WHERE league_id = ? AND region = ?
+        WHERE league_id = ?
         ORDER BY ${orderClause}
         LIMIT ?
-      `).all(season!.league_id, conf.region_tag, qualifyCount) as { id: number }[];
+      `).all(season!.league_id, qualifyCount) as { id: number }[];
 
       if (topTeams.length < qualifyCount) {
-        throw new Error(`Not enough teams in ${conf.name} conference (need ${qualifyCount}, found ${topTeams.length})`);
+        throw new Error(`Not enough teams in league ${season!.league_id} (need ${qualifyCount}, found ${topTeams.length})`);
       }
 
       if (round1Def.matchup_pattern === 'top_vs_bottom') {
-        // Pair seed 1 vs N, seed 2 vs N-1, etc.
         const half = Math.floor(qualifyCount / 2);
         for (let i = 0; i < half; i++) {
           const highSeed = i + 1;
           const lowSeed  = qualifyCount - i;
-          createSeries(conf.name, highSeed, lowSeed, topTeams[i].id, topTeams[qualifyCount - 1 - i].id);
+          createSeries(null, highSeed, lowSeed, topTeams[i].id, topTeams[qualifyCount - 1 - i].id);
         }
       }
     }

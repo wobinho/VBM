@@ -34,7 +34,15 @@ function ovrTier(v: number): { label: string; text: string; ring: string } {
     return         { label: 'BRONZE', text: 'text-orange-300',   ring: 'ring-orange-300/30' };
 }
 
-interface League { id: number; league_name: string; format_type?: string | null; }
+interface League {
+    id: number;
+    league_name: string;
+    format_type?: string | null;
+    post_season_type?: string | null;
+    playoff_teams?: number;
+    promotion_count?: number;
+    relegation_count?: number;
+}
 interface Team {
     id: number; team_name: string; league_id: number; league_name: string; country?: string; region?: string;
     played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number;
@@ -224,7 +232,7 @@ export default function StandingsPage() {
         );
     }
 
-    function StandingsTable({ conferenceTeams, title, accentColor = "amber", relegatedTeamIds }: { conferenceTeams: Team[]; title: string; accentColor?: string; relegatedTeamIds?: Set<number> }) {
+    function StandingsTable({ conferenceTeams, title, accentColor = "amber", relegatedTeamIds, playoffCount = 0, promotionCount = 0 }: { conferenceTeams: Team[]; title: string; accentColor?: string; relegatedTeamIds?: Set<number>; playoffCount?: number; promotionCount?: number }) {
         const total = conferenceTeams.length;
         const accent = accentColor === 'sky' ? 'var(--info)' : accentColor === 'violet' ? 'var(--epic)' : 'var(--volt)';
         const accentHex = accentColor === 'sky' ? '#22d3ee' : accentColor === 'violet' ? '#a78bfa' : '#facc15';
@@ -275,10 +283,9 @@ export default function StandingsPage() {
                         </div>
 
                         {conferenceTeams.map((team, idx) => {
-                            const isTop4 = idx < 4;
-                            const isBottom = relegatedTeamIds !== undefined
-                                ? relegatedTeamIds.has(team.id)
-                                : idx === total - 1;
+                            const isPlayoffSpot = playoffCount > 0 && idx < playoffCount;
+                            const isPromotionSpot = promotionCount > 0 && idx < promotionCount;
+                            const isBottom = relegatedTeamIds !== undefined && relegatedTeamIds.has(team.id);
                             const isUserTeam = userTeam?.id === team.id;
                             const pointsPct = totalPoints > 0 ? Math.max(4, Math.round((team.points / Math.max(...conferenceTeams.map(t => t.points), 1)) * 100)) : 0;
 
@@ -290,7 +297,8 @@ export default function StandingsPage() {
                             // Left rail color
                             let railColor = 'transparent';
                             if (isUserTeam) railColor = 'var(--volt)';
-                            else if (isTop4) railColor = 'rgba(250,204,21,0.50)';
+                            else if (isPromotionSpot) railColor = 'rgba(34,197,94,0.65)';
+                            else if (isPlayoffSpot) railColor = 'rgba(250,204,21,0.50)';
                             else if (isBottom) railColor = 'rgba(239,68,68,0.65)';
 
                             return (
@@ -316,7 +324,8 @@ export default function StandingsPage() {
                                         <div className="w-6 md:w-8 flex items-center justify-center">
                                             <span className={`font-display text-sm md:text-base tabular leading-none ${
                                                 isUserTeam ? 'text-[var(--volt)]' :
-                                                isTop4 ? 'text-[var(--volt)]/65' :
+                                                isPromotionSpot ? 'text-[var(--win)]/85' :
+                                                isPlayoffSpot ? 'text-[var(--volt)]/65' :
                                                 isBottom ? 'text-[var(--loss)]/70' :
                                                 'text-[var(--ink-500)]'
                                             }`}>{idx + 1}</span>
@@ -367,11 +376,19 @@ export default function StandingsPage() {
 
                         {/* Legend */}
                         <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 md:px-6 py-3 border-t border-white/[0.04] bg-[var(--ink-950)]/30">
-                            <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]/65" />
-                                <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Top 4 · Playoff</span>
-                            </div>
-                            {(relegatedTeamIds === undefined || relegatedTeamIds.size > 0) && (
+                            {promotionCount > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-[2px] bg-[var(--win)]/75" />
+                                    <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Top {promotionCount} · Promotion</span>
+                                </div>
+                            )}
+                            {playoffCount > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-[2px] bg-[var(--volt)]/65" />
+                                    <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Top {playoffCount} · Playoff</span>
+                                </div>
+                            )}
+                            {relegatedTeamIds !== undefined && relegatedTeamIds.size > 0 && (
                             <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-[2px] bg-[var(--loss)]/65" />
                                 <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-400)]">Relegation</span>
@@ -664,29 +681,59 @@ export default function StandingsPage() {
 
                                     {/* Standings table(s) */}
                                     <div className="p-4 pt-3 md:p-5 md:pt-3">
-                                        {hasTwoConf && showConference ? (
-                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-8">
-                                                <StandingsTable conferenceTeams={northTeams} title="North Conference" accentColor="sky" />
-                                                <StandingsTable conferenceTeams={southTeams} title="South Conference" accentColor="violet" />
-                                            </div>
-                                        ) : hasTwoConf ? (
-                                            // Overall view for multi-conference league: relegate last of each conference
-                                            <StandingsTable
-                                                conferenceTeams={leagueTeams}
-                                                title={selectedLeague?.league_name ?? 'Standings'}
-                                                relegatedTeamIds={new Set([
-                                                    ...(northTeams.length > 0 ? [northTeams[northTeams.length - 1].id] : []),
-                                                    ...(southTeams.length > 0 ? [southTeams[southTeams.length - 1].id] : []),
-                                                ])}
-                                            />
-                                        ) : (
-                                            // Single-conference league: no relegation
-                                            <StandingsTable
-                                                conferenceTeams={leagueTeams}
-                                                title={selectedLeague?.league_name ?? 'Standings'}
-                                                relegatedTeamIds={new Set()}
-                                            />
-                                        )}
+                                        {(() => {
+                                            const sel = selectedLeague as League | undefined;
+                                            const playoffCount = sel?.playoff_teams ?? 0;
+                                            const promotionCount = sel?.promotion_count ?? 0;
+                                            const relegationCount = sel?.relegation_count ?? 0;
+                                            // For multi-conference, relegate last N of each conference (N = relegation_count / 2)
+                                            // For single-table, relegate last N of the whole table.
+                                            if (hasTwoConf && showConference) {
+                                                const perConfRel = Math.max(1, Math.floor(relegationCount / 2));
+                                                const northRel = relegationCount > 0
+                                                    ? new Set(northTeams.slice(-perConfRel).map(t => t.id))
+                                                    : new Set<number>();
+                                                const southRel = relegationCount > 0
+                                                    ? new Set(southTeams.slice(-perConfRel).map(t => t.id))
+                                                    : new Set<number>();
+                                                return (
+                                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-8">
+                                                        <StandingsTable conferenceTeams={northTeams} title="North Conference" accentColor="sky"
+                                                            playoffCount={playoffCount} promotionCount={promotionCount} relegatedTeamIds={northRel} />
+                                                        <StandingsTable conferenceTeams={southTeams} title="South Conference" accentColor="violet"
+                                                            playoffCount={playoffCount} promotionCount={promotionCount} relegatedTeamIds={southRel} />
+                                                    </div>
+                                                );
+                                            }
+                                            if (hasTwoConf) {
+                                                const perConfRel = relegationCount > 0 ? Math.max(1, Math.floor(relegationCount / 2)) : 0;
+                                                const relIds = new Set<number>([
+                                                    ...(perConfRel > 0 ? northTeams.slice(-perConfRel).map(t => t.id) : []),
+                                                    ...(perConfRel > 0 ? southTeams.slice(-perConfRel).map(t => t.id) : []),
+                                                ]);
+                                                return (
+                                                    <StandingsTable
+                                                        conferenceTeams={leagueTeams}
+                                                        title={selectedLeague?.league_name ?? 'Standings'}
+                                                        playoffCount={playoffCount}
+                                                        promotionCount={promotionCount}
+                                                        relegatedTeamIds={relIds}
+                                                    />
+                                                );
+                                            }
+                                            const relIds = relegationCount > 0
+                                                ? new Set(leagueTeams.slice(-relegationCount).map(t => t.id))
+                                                : new Set<number>();
+                                            return (
+                                                <StandingsTable
+                                                    conferenceTeams={leagueTeams}
+                                                    title={selectedLeague?.league_name ?? 'Standings'}
+                                                    playoffCount={playoffCount}
+                                                    promotionCount={promotionCount}
+                                                    relegatedTeamIds={relIds}
+                                                />
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             )}

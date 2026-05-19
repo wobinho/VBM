@@ -1488,35 +1488,62 @@ export function advancePlayoffRound(seasonId: number): { advanced: boolean; roun
 
   const leagueId = (db.prepare('SELECT league_id FROM playoff_series WHERE season_id = ? LIMIT 1').get(seasonId) as { league_id: number }).league_id;
 
+  // Detect bracket format: conference-based (has 'north'/'south') vs single-table (all null).
+  const r1AllSeries = db.prepare(
+    'SELECT * FROM playoff_series WHERE season_id = ? AND round = 1 ORDER BY seed_high ASC'
+  ).all(seasonId) as PlayoffSeries[];
+  const isSingleTable = r1AllSeries.length > 0 && r1AllSeries.every(s => s.conference === null);
+
   db.transaction(() => {
     if (nextRound === 2) {
-      // Conference Finals: winner of N(1v4) vs winner of N(2v3), same for South
-      for (const conf of ['north', 'south'] as const) {
-        const confSeries = db.prepare(`
-          SELECT * FROM playoff_series WHERE season_id = ? AND round = 1 AND conference = ? ORDER BY seed_high ASC
-        `).all(seasonId, conf) as PlayoffSeries[];
+      if (isSingleTable) {
+        // Single-table QF -> SF: winner(1v8) vs winner(4v5), winner(2v7) vs winner(3v6)
+        const s18 = r1AllSeries.find(s => s.seed_high === 1 && s.seed_low === 8);
+        const s45 = r1AllSeries.find(s => s.seed_high === 4 && s.seed_low === 5);
+        const s27 = r1AllSeries.find(s => s.seed_high === 2 && s.seed_low === 7);
+        const s36 = r1AllSeries.find(s => s.seed_high === 3 && s.seed_low === 6);
+        if (!s18?.winner_team_id || !s45?.winner_team_id || !s27?.winner_team_id || !s36?.winner_team_id) return;
 
-        // series with seed_high=1 winner vs series with seed_high=2 winner
-        const s14 = confSeries.find(s => s.seed_high === 1 && s.seed_low === 4);
-        const s23 = confSeries.find(s => s.seed_high === 2 && s.seed_low === 3);
-        if (!s14?.winner_team_id || !s23?.winner_team_id) return;
+        // Higher overall seed (lower seed_high number) hosts
+        createNextSeries(null, 1, 4, s18.winner_team_id, s45.winner_team_id, leagueId);
+        createNextSeries(null, 2, 3, s27.winner_team_id, s36.winner_team_id, leagueId);
+      } else {
+        // Conference Finals: winner of N(1v4) vs winner of N(2v3), same for South
+        for (const conf of ['north', 'south'] as const) {
+          const confSeries = db.prepare(`
+            SELECT * FROM playoff_series WHERE season_id = ? AND round = 1 AND conference = ? ORDER BY seed_high ASC
+          `).all(seasonId, conf) as PlayoffSeries[];
 
-        // Higher seed (1v4 winner) is home
-        createNextSeries(conf, 1, 2, s14.winner_team_id, s23.winner_team_id, leagueId);
+          const s14 = confSeries.find(s => s.seed_high === 1 && s.seed_low === 4);
+          const s23 = confSeries.find(s => s.seed_high === 2 && s.seed_low === 3);
+          if (!s14?.winner_team_id || !s23?.winner_team_id) return;
+
+          createNextSeries(conf, 1, 2, s14.winner_team_id, s23.winner_team_id, leagueId);
+        }
       }
     } else if (nextRound === 3) {
-      // Grand Final: North conference winner vs South conference winner
-      const northFinal = db.prepare(`
-        SELECT * FROM playoff_series WHERE season_id = ? AND round = 2 AND conference = 'north' LIMIT 1
-      `).get(seasonId) as PlayoffSeries | undefined;
-      const southFinal = db.prepare(`
-        SELECT * FROM playoff_series WHERE season_id = ? AND round = 2 AND conference = 'south' LIMIT 1
-      `).get(seasonId) as PlayoffSeries | undefined;
+      if (isSingleTable) {
+        // Grand Final: winner of SF(1v4) vs winner of SF(2v3)
+        const r2 = db.prepare(
+          'SELECT * FROM playoff_series WHERE season_id = ? AND round = 2 ORDER BY seed_high ASC'
+        ).all(seasonId) as PlayoffSeries[];
+        const sfTop = r2.find(s => s.seed_high === 1);
+        const sfBot = r2.find(s => s.seed_high === 2);
+        if (!sfTop?.winner_team_id || !sfBot?.winner_team_id) return;
+        createNextSeries(null, 1, 2, sfTop.winner_team_id, sfBot.winner_team_id, leagueId);
+      } else {
+        // Grand Final: North conference winner vs South conference winner
+        const northFinal = db.prepare(`
+          SELECT * FROM playoff_series WHERE season_id = ? AND round = 2 AND conference = 'north' LIMIT 1
+        `).get(seasonId) as PlayoffSeries | undefined;
+        const southFinal = db.prepare(`
+          SELECT * FROM playoff_series WHERE season_id = ? AND round = 2 AND conference = 'south' LIMIT 1
+        `).get(seasonId) as PlayoffSeries | undefined;
 
-      if (!northFinal?.winner_team_id || !southFinal?.winner_team_id) return;
+        if (!northFinal?.winner_team_id || !southFinal?.winner_team_id) return;
 
-      // North winner is home for games 1,2,5; South winner for games 3,4
-      createNextSeries(null, 1, 2, northFinal.winner_team_id, southFinal.winner_team_id, leagueId);
+        createNextSeries(null, 1, 2, northFinal.winner_team_id, southFinal.winner_team_id, leagueId);
+      }
     }
   })();
 
