@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getSquadLineup, getPlayers, getUserTeam,
   recordPlayoffGameResult,
@@ -15,10 +17,9 @@ import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib
  * Simulates a single playoff game (typically the user's own game).
  * Returns the match result and updated series state.
  */
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
 
-  const { getDb } = await import('@/lib/db');
   const db = getDb();
 
   const body = await req.json() as { gameId?: number };
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     seriesComplete,
     series: updatedSeries,
   });
-}
+});
 
 function buildLineup(teamId: number): SimLineup {
   const saved   = getSquadLineup(teamId);

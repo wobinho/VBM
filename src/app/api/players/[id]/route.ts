@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPlayerById, updatePlayer, deletePlayer } from '@/lib/db/queries';
 import { calculateOverall } from '@/lib/overall';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withUserDb(async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const player = getPlayerById(Number(id));
     if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
     return NextResponse.json(player);
-}
+});
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withUserDb(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     try {
         const { id } = await params;
         const data = await req.json();
@@ -29,10 +30,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         console.error('PATCH /api/players/[id] error:', error);
         return NextResponse.json({ error: String(error) }, { status: 500 });
     }
-}
+});
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withUserDb(async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     deletePlayer(Number(id));
     return NextResponse.json({ success: true });
-}
+});

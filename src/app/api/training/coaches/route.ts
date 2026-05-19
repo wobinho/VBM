@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 import { getTrainingCoaches, insertTrainingCoach, deleteTrainingCoach, getUserTeam } from '@/lib/db/queries';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import { TRAINING_PLANS } from '@/lib/training/plans';
 
 // Coach pool generation: deterministic based on team_id seed
@@ -59,16 +60,10 @@ function getCoachMonthlyWage(quality: number): number {
   return quality * 60;
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
 
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -92,18 +87,12 @@ export async function GET(request: NextRequest) {
     teamMoney: team.team_money,
     maxCoaches: 3,
   });
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
 
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -141,18 +130,12 @@ export async function POST(request: NextRequest) {
     coach: { ...coach, stars: Math.ceil((coach.quality / 100) * 5) },
     newTeamMoney: team.team_money - hireCost,
   });
-}
+});
 
-export async function DELETE(request: NextRequest) {
+export const DELETE = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
 
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -164,4 +147,4 @@ export async function DELETE(request: NextRequest) {
 
   deleteTrainingCoach(coachId, ut.team_id);
   return NextResponse.json({ success: true });
-}
+});

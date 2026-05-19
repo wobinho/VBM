@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTeamById, updateTeamMoney, updateTeamStats } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withUserDb(async (_req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const team = getTeamById(Number(id));
     if (!team) return NextResponse.json({ error: 'Team not found' }, { status: 404 });
@@ -10,9 +11,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             'Cache-Control': 'no-store, max-age=0',
         }
     });
-}
+});
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withUserDb(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     try {
         const { id } = await params;
         const data = await req.json();
@@ -27,4 +28,4 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         console.error('Error updating team:', err);
         return NextResponse.json({ error: 'Failed to update team' }, { status: 500 });
     }
-}
+});

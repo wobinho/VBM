@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { createUser, getUserByEmail, getUserByUsername } from '@/lib/db/queries';
+import { authGetUserByEmail, authGetUserByUsername, authCreateUser } from '@/lib/db/auth-db';
+import { openUserDb } from '@/lib/db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
@@ -13,17 +14,22 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
         }
 
-        if (getUserByEmail(email)) {
+        if (authGetUserByEmail(email)) {
             return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
         }
-        if (getUserByUsername(username)) {
+        if (authGetUserByUsername(username)) {
             return NextResponse.json({ error: 'Username already taken' }, { status: 400 });
         }
 
         const id = crypto.randomUUID();
         const passwordHash = await bcrypt.hash(password, 10);
 
-        createUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 1 });
+        authCreateUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 1 });
+
+        // Eagerly create + seed this user's game DB so first login is fast.
+        // openUserDb is idempotent — running schema + seeds on an empty file
+        // takes a few seconds, but only happens once per user.
+        openUserDb(id);
 
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
         session.userId = id;

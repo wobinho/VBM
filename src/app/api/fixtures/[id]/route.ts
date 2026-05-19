@@ -7,16 +7,17 @@ import {
 } from '@/lib/db/queries';
 import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer, PlayerStatLine } from '@/lib/simulation-engine';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 
 /**
  * PATCH /api/fixtures/[id] — Save the user's manually-simulated match result,
  * then simulate all other fixtures/playoff games on the same date.
  */
-export async function PATCH(
-  req: Request,
+export const PATCH = withUserDb(async (
+  req,
   { params }: { params: Promise<{ id: string }> },
-) {
+) => {
   try {
     const { id } = await params;
     const gameId = Number(id);
@@ -201,13 +202,13 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
 /** GET /api/fixtures/[id] — fetch a single fixture */
-export async function GET(
-  req: Request,
+export const GET = withUserDb(async (
+  req,
   { params }: { params: Promise<{ id: string }> },
-) {
+) => {
   const { id } = await params;
   const gameId = Number(id);
   const { searchParams } = new URL(req.url);
@@ -266,7 +267,7 @@ export async function GET(
     return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
   }
   return NextResponse.json(fixture);
-}
+});
 
 /**
  * POST /api/fixtures/[id] — Quick Sim: simulate the target fixture AND all other
@@ -274,10 +275,10 @@ export async function GET(
  *
  * This behaves like simulate-matchday but includes the user's game.
  */
-export async function POST(
-  req: Request,
+export const POST = withUserDb(async (
+  req,
   { params }: { params: Promise<{ id: string }> },
-) {
+) => {
   try {
     const { id } = await params;
     const gameId = Number(id);
@@ -414,7 +415,7 @@ export async function POST(
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

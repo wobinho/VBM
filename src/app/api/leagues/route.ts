@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 interface LinkCondition {
     scope?: string;
@@ -20,7 +21,7 @@ interface ParsedConfig {
     post_season?: { type?: string; rounds?: RoundDef[] };
 }
 
-export async function GET() {
+export const GET = withUserDb(async () => {
     const db = getDb();
     const leagues = db.prepare(`
         SELECT l.*, lc.config
@@ -88,4 +89,4 @@ export async function GET() {
     });
 
     return NextResponse.json(result);
-}
+});

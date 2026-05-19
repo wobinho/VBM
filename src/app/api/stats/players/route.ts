@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(req: Request) {
+export const GET = withUserDb(async (req) => {
   const db = getDb();
   const { searchParams } = new URL(req.url);
   const teamId = parseInt(searchParams.get('teamId') ?? '0', 10);
@@ -240,4 +241,4 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({ players: result });
-}
+});

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import { getGameState, getPlayoffBracket, getPlayoffGamesForSeries, getSeasonById, getUserTeam } from '@/lib/db/queries';
 
 /**
@@ -14,8 +16,7 @@ import { getGameState, getPlayoffBracket, getPlayoffGamesForSeries, getSeasonByI
  *   ?year=YYYY   → return the bracket for that season year in the user's country
  *   (no params)  → return the bracket for the current season in the user's country
  */
-export async function GET(request: Request) {
-  const { getDb } = await import('@/lib/db');
+export const GET = withUserDb(async (request) => {
   const db = getDb();
 
   const { searchParams } = new URL(request.url);
@@ -126,4 +127,4 @@ export async function GET(request: Request) {
     round2: enrichSeries(bracket.round2),
     round3: enrichSeries(bracket.round3),
   });
-}
+});

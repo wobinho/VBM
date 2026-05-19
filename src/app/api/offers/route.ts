@@ -3,19 +3,18 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { getReceivedOffers, getSentOffers, createOffer } from '@/lib/db/queries';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(req: NextRequest) {
+export const GET = withUserDb(async (req: NextRequest) => {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-    if (!session.userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const type = req.nextUrl.searchParams.get('type');
-    if (type === 'sent') return NextResponse.json(getSentOffers(session.userId));
-    return NextResponse.json(getReceivedOffers(session.userId));
-}
+    if (type === 'sent') return NextResponse.json(getSentOffers(session.userId!));
+    return NextResponse.json(getReceivedOffers(session.userId!));
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req: NextRequest) => {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-    if (!session.userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     try {
         const data = await req.json();
@@ -25,4 +24,4 @@ export async function POST(req: NextRequest) {
         console.error('Create offer error:', error);
         return NextResponse.json({ error: 'Failed to create offer' }, { status: 500 });
     }
-}
+});

@@ -3,6 +3,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 import { getSquadLineupWithPlayers, saveSquadLineup, getUserTeam, getPlayers } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 const SLOT_POSITION: Record<string, string> = {
     oh1: 'Outside Hitter',
@@ -14,17 +15,16 @@ const SLOT_POSITION: Record<string, string> = {
     l:   'Libero',
 };
 
-export async function GET(req: NextRequest) {
+export const GET = withUserDb(async (req: NextRequest) => {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get('teamId');
     if (!teamId) return NextResponse.json({ error: 'teamId required' }, { status: 400 });
     const lineup = getSquadLineupWithPlayers(Number(teamId));
     return NextResponse.json(lineup);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req: NextRequest) => {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-    if (!session.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
     const { teamId, lineup } = body as {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Check if user owns this team
-    const userTeam = getUserTeam(session.userId);
+    const userTeam = getUserTeam(session.userId!);
     if (!userTeam || userTeam.team_id !== teamId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -57,4 +57,4 @@ export async function POST(req: NextRequest) {
 
     saveSquadLineup(teamId, lineup);
     return NextResponse.json({ success: true });
-}
+});

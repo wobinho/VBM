@@ -1,23 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { getTeams, getTeamsByLeague, createTeam, getLeagueById, assignTeam, getUserTeam } from '@/lib/db/queries';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(req: NextRequest) {
+export const GET = withUserDb(async (req) => {
     const leagueId = req.nextUrl.searchParams.get('leagueId');
     if (leagueId) {
         return NextResponse.json(getTeamsByLeague(Number(leagueId)));
     }
     return NextResponse.json(getTeams());
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req) => {
     try {
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-        if (!session.userId) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-        }
 
         const { teamName, leagueId } = await req.json();
         if (!teamName || !leagueId) {
@@ -32,8 +30,8 @@ export async function POST(req: NextRequest) {
 
         // Create team and assign to user
         const newTeamId = createTeam({ team_name: teamName.trim(), league_id: Number(leagueId) });
-        assignTeam(session.userId, newTeamId);
-        const userTeam = getUserTeam(session.userId);
+        assignTeam(session.userId!, newTeamId);
+        const userTeam = getUserTeam(session.userId!);
 
         if (userTeam) {
             session.teamId = userTeam.team_id;
@@ -49,4 +47,4 @@ export async function POST(req: NextRequest) {
         console.error('Create team error:', err);
         return NextResponse.json({ error: 'Failed to create team' }, { status: 500 });
     }
-}
+});

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
-import { getUserById, getUserTeam, getLeagues, assignTeam } from '@/lib/db/queries';
+import { authGetUserById } from '@/lib/db/auth-db';
+import { openUserDb, runWithDb } from '@/lib/db';
+import { getUserTeam, getLeagues, assignTeam } from '@/lib/db/queries';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function GET() {
@@ -9,15 +11,18 @@ export async function GET() {
     if (!session.userId) {
         return NextResponse.json({ user: null, team: null });
     }
-    const user = getUserById(session.userId);
+    const user = authGetUserById(session.userId);
     if (!user) {
         return NextResponse.json({ user: null, team: null });
     }
-    const userTeam = getUserTeam(user.id);
-    return NextResponse.json({
-        user: { id: user.id, email: user.email, username: user.username, displayName: user.display_name, isAdmin: user.is_admin === 1 },
-        team: userTeam ? { id: userTeam.team_id, name: userTeam.team_name, league_id: userTeam.league_id } : null,
-        availableLeagues: !userTeam ? getLeagues() : undefined,
+    const userDb = openUserDb(user.id);
+    return runWithDb(userDb, () => {
+        const userTeam = getUserTeam(user.id);
+        return NextResponse.json({
+            user: { id: user.id, email: user.email, username: user.username, displayName: user.display_name, isAdmin: user.is_admin === 1 },
+            team: userTeam ? { id: userTeam.team_id, name: userTeam.team_name, league_id: userTeam.league_id } : null,
+            availableLeagues: !userTeam ? getLeagues() : undefined,
+        });
     });
 }
 
@@ -30,8 +35,11 @@ export async function POST(req: Request) {
     if (!teamId) {
         return NextResponse.json({ error: 'Team ID required' }, { status: 400 });
     }
-    assignTeam(session.userId, teamId);
-    const userTeam = getUserTeam(session.userId);
+    const userDb = openUserDb(session.userId);
+    const userTeam = await runWithDb(userDb, () => {
+        assignTeam(session.userId!, teamId);
+        return getUserTeam(session.userId!);
+    });
     if (userTeam) {
         session.teamId = userTeam.team_id;
         session.teamName = userTeam.team_name;

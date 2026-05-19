@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { getUserByEmail, getUserTeam } from '@/lib/db/queries';
+import { authGetUserByEmail } from '@/lib/db/auth-db';
+import { openUserDb, runWithDb } from '@/lib/db';
+import { getUserTeam } from '@/lib/db/queries';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
@@ -13,7 +15,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
         }
 
-        const user = getUserByEmail(email);
+        const user = authGetUserByEmail(email);
         if (!user) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
@@ -23,7 +25,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        const userTeam = getUserTeam(user.id);
+        // Open the user's game DB (also seeds it if this is the first time the
+        // user has logged in since registration). getUserTeam reads from it via
+        // AsyncLocalStorage, so wrap the call in runWithDb.
+        const userDb = openUserDb(user.id);
+        const userTeam = await runWithDb(userDb, () => getUserTeam(user.id));
 
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
         session.userId = user.id;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPlayer } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 interface BulkPlayerData {
   version: string;
@@ -49,7 +50,7 @@ interface BulkPlayerData {
   }>;
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req: NextRequest) => {
   try {
     const body = await req.json();
     const bulkData: BulkPlayerData = body;
@@ -159,4 +160,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

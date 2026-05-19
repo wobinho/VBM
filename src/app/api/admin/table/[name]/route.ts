@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(
+export const GET = withUserDb(async (
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
-) {
+) => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
@@ -23,12 +24,12 @@ export async function GET(
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch table data' }, { status: 500 });
   }
-}
+});
 
-export async function POST(
+export const POST = withUserDb(async (
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
-) {
+) => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
@@ -43,8 +44,8 @@ export async function POST(
 
     // Get columns from table schema
     const columns = db.prepare(`PRAGMA table_info(${name})`).all() as any[];
-    
-    // Filter columns to include 'id' only if it's in the body, 
+
+    // Filter columns to include 'id' only if it's in the body,
     // and only include columns that are actually present in the request body.
     const columnNames = columns.map(c => c.name).filter(c => {
       if (c === 'id') return body.id !== undefined;
@@ -67,4 +68,4 @@ export async function POST(
     console.error('Insert error:', error);
     return NextResponse.json({ error: 'Failed to insert row' }, { status: 500 });
   }
-}
+});

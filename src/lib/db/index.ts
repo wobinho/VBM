@@ -1,26 +1,96 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
+import { AsyncLocalStorage } from 'async_hooks';
 import { runSchema } from './schema';
-import { seedDatabase } from './seed';
+import { seedItaly } from './seed-italy';
 import { seedFrance } from './seed-france';
 import { seedPoland } from './seed-poland';
 import { seedTurkey } from './seed-turkey';
 import type { LeagueConfig } from '../league-engine';
 import { generateScheduleForLeague } from '../league-engine';
 
-let db: Database.Database | null = null;
+// ============================================================
+// Per-user DB architecture
+// ============================================================
+// Each user has their own SQLite file at <DB_DIR>/users/<userId>.db
+// containing the full game world (leagues, teams, players, fixtures, etc).
+// The shared auth.db (see ./auth-db) only holds the users table.
+//
+// API routes wrap their handlers in withUserDb() (see ./with-user-db),
+// which opens the caller's DB and runs the handler inside an
+// AsyncLocalStorage scope. getDb() then returns that per-request DB.
+// ============================================================
 
+const dbStore = new AsyncLocalStorage<Database.Database>();
+const userDbCache = new Map<string, Database.Database>();
+
+function getDataDir(): string {
+  return process.env.DB_DIR || path.join(process.cwd(), 'data');
+}
+
+/**
+ * Returns the per-request DB stashed in AsyncLocalStorage by withUserDb().
+ * Throws if called outside a wrapped request — that catches accidental
+ * leakage of "global" DB access from queries into auth-only contexts.
+ */
 export function getDb(): Database.Database {
+  const db = dbStore.getStore();
   if (!db) {
-    const dbPath = path.join(process.cwd(), 'spike-dynasty.db');
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    throw new Error(
+      'getDb() called outside a user-scoped request. ' +
+      'Wrap API routes with withUserDb(), or use getAuthDb() for auth-only queries.'
+    );
+  }
+  return db;
+}
 
-    // Run migrations on startup
-    const userCols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-    if (!userCols.find(c => c.name === 'is_admin')) {
-      db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0");
+/** Run `fn` with `db` available to getDb() via AsyncLocalStorage. */
+export function runWithDb<T>(db: Database.Database, fn: () => T | Promise<T>): T | Promise<T> {
+  return dbStore.run(db, fn);
+}
+
+/**
+ * Open (or return cached) per-user game DB. Runs schema + all migrations
+ * + seed on first open. Subsequent calls are O(1).
+ */
+export function openUserDb(userId: string): Database.Database {
+  if (!userId) throw new Error('openUserDb: userId is required');
+
+  const cached = userDbCache.get(userId);
+  if (cached) return cached;
+
+  const dataDir = getDataDir();
+  const usersDir = path.join(dataDir, 'users');
+  fs.mkdirSync(usersDir, { recursive: true });
+
+  const dbPath = path.join(usersDir, `${userId}.db`);
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  // initializeGameDb's seed helpers call query functions that use getDb() via
+  // AsyncLocalStorage, so we have to populate the store for the duration of init.
+  dbStore.run(db, () => initializeGameDb(db));
+
+  userDbCache.set(userId, db);
+  return db;
+}
+
+/**
+ * Runs the full schema + migrations + idempotent seeds against `db`.
+ * Safe to run repeatedly — every step is guarded by an existence check.
+ */
+function initializeGameDb(db: Database.Database) {
+    // For a fresh DB, create the base schema. We deliberately skip the legacy
+    // seedDatabase() — it inserts a 4+3-team toy "VB League" that breaks the
+    // 16-team config seeded later. The real content comes from
+    // seedFrance / seedPoland / seedTurkey below.
+    const baseTableCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='leagues'"
+    ).get();
+    if (!baseTableCheck) {
+      runSchema(db);
     }
 
     // Migration: new player stat schema (Technical + expanded Physical/Mental)
@@ -208,16 +278,6 @@ export function getDb(): Database.Database {
       `);
     }
 
-    // Check if tables exist
-    const tableCheck = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='leagues'"
-    ).get();
-
-    if (!tableCheck) {
-      runSchema(db);
-      seedDatabase(db);
-    }
-
     // Migration: squad_lineups table
     const squadCheck = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='squad_lineups'"
@@ -308,41 +368,16 @@ export function getDb(): Database.Database {
       seedLeagueConfigs(db);
     }
 
-    // Ensure league_configs are seeded if they exist but are empty
-    const emptyConfigs = db.prepare("SELECT COUNT(*) as c FROM league_configs").get() as { c: number };
-    if (emptyConfigs.c === 0) {
-      seedLeagueConfigs(db);
-    }
+    // One-time Italian league seed: idempotent — runs only when Italy is absent.
+    // Seeded FIRST so IVL leagues claim league_id 1/2/3 and Italian teams claim
+    // team_id 1–48, matching the legacy spike-dynasty.db layout (e.g. team_id 6
+    // = Zebrette Udine, used by seedTeam6Lineup).
+    seedItaly(db);
 
-    // Always ensure tiers are correct for Italian leagues
-    db.exec(`UPDATE leagues SET tier = 2 WHERE league_name = 'IVL Premier Division'`);
-    db.exec(`UPDATE leagues SET tier = 3 WHERE league_name IN ('IVL North', 'IVL South')`);
-
-    // Backfill league_links for existing DBs where configs were seeded earlier
-    // but links never were. seedLeagueConfigs is idempotent (its own guard skips
-    // when links already exist), so this is safe to re-run.
-    const emptyLinks = db.prepare("SELECT COUNT(*) as c FROM league_links").get() as { c: number };
-    if (emptyLinks.c === 0) {
-      seedLeagueConfigs(db);
-    }
-
-    // Ensure league_presets table exists if league_configs already did (migration for existing DBs)
-    const presetsCheck = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='league_presets'"
-    ).get();
-    if (!presetsCheck) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS league_presets (
-          id           INTEGER PRIMARY KEY AUTOINCREMENT,
-          preset_name  TEXT    NOT NULL UNIQUE,
-          config       TEXT    NOT NULL,
-          created_at   TEXT    DEFAULT (datetime('now')),
-          updated_at   TEXT    DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_league_presets_name ON league_presets(preset_name);
-      `);
-      seedLeagueConfigs(db);
-    }
+    // Italian-tier corrections — defensive backfill for legacy DBs created before
+    // the tier column existed. No-op on freshly seeded per-user DBs.
+    db.prepare("UPDATE leagues SET tier = 2 WHERE league_name = 'IVL Premier Division'").run();
+    db.prepare("UPDATE leagues SET tier = 3 WHERE league_name IN ('IVL North', 'IVL South')").run();
 
     // One-time French league seed: idempotent — runs only when France is absent.
     // Seeds FVL Premier Division, FVL North, FVL South, their 48 teams (16 each),
@@ -638,8 +673,6 @@ export function getDb(): Database.Database {
     }
 
     migrateTrainingFacilitiesLevel(db);
-  }
-  return db;
 }
 
 /**

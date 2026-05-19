@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { processPromotionRelegation } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 /**
  * POST /api/admin/process-promotion
@@ -10,14 +11,11 @@ import { processPromotionRelegation } from '@/lib/db/queries';
  *  - Top team from IVL North → IVL Premier (league 1, region north)
  *  - Top team from IVL South → IVL Premier (league 1, region south)
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { getDb } = await import('@/lib/db');
-    getDb();
-
     const result = processPromotionRelegation();
 
     const lines: string[] = [];
@@ -36,4 +34,4 @@ export async function POST() {
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Promotion/relegation failed' }, { status: 500 });
   }
-}
+});

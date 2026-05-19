@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
 import { calculateOverall } from '@/lib/overall';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function PUT(
+export const PUT = withUserDb(async (
   req: NextRequest,
   { params }: { params: Promise<{ name: string; id: string }> }
-) {
+) => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
@@ -44,12 +45,12 @@ export async function PUT(
     console.error('Update error:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = withUserDb(async (
   req: NextRequest,
   { params }: { params: Promise<{ name: string; id: string }> }
-) {
+) => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
@@ -68,4 +69,4 @@ export async function DELETE(
     console.error('Delete error:', error);
     return NextResponse.json({ error: 'Failed to delete row' }, { status: 500 });
   }
-}
+});

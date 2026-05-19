@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate, getFixtures,
   updateFixtureResult, updateTeamStatsAfterMatch,
@@ -21,11 +23,8 @@ import { tickTraining } from '@/lib/training/engine';
  * Auto-resolve:     On success, simulate all remaining unresolved AI fixtures for today
  *                   before advancing the date.
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-
-  const { getDb } = await import('@/lib/db');
-  getDb();
 
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
@@ -155,7 +154,6 @@ export async function POST() {
   // Training tick: run for all AI and user teams
   let trainingGainCount = 0;
   {
-    const { getDb } = await import('@/lib/db');
     const db = getDb();
     const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
     for (const t of allTeams) {
@@ -167,7 +165,6 @@ export async function POST() {
   // Monthly economy: fire on the 1st of each month
   let monthlyEconomyRan = false;
   if (newDate.endsWith('-01')) {
-    const { getDb } = await import('@/lib/db');
     const db = getDb();
     const month = newDate.slice(0, 7); // "YYYY-MM"
     const allTeams = db.prepare('SELECT id FROM teams').all() as { id: number }[];
@@ -210,7 +207,7 @@ export async function POST() {
     monthlyEconomyRan,
     playoffsGenerated,
   });
-}
+});
 
 function buildLineup(teamId: number): SimLineup {
   const saved   = getSquadLineup(teamId);

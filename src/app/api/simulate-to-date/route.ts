@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getDb, runWithDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate, getFixtures, getPlayoffGamesByDate,
   updateFixtureResult, updateTeamStatsAfterMatch,
@@ -14,8 +16,7 @@ import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
  * Streams day-by-day simulation progress using Server-Sent Events (SSE).
  * Simulates ALL fixtures AND playoff games on every match day, reporting progress in real-time.
  */
-export async function POST(req: Request) {
-  const { getDb } = await import('@/lib/db');
+export const POST = withUserDb(async (req) => {
   const db = getDb();
 
   let { targetDate } = await req.json() as { targetDate: string };
@@ -54,10 +55,12 @@ export async function POST(req: Request) {
     }
   }
 
-  // Create a ReadableStream to send SSE updates
+  // Create a ReadableStream to send SSE updates.
+  // The IIFE below runs *after* the handler returns, which would normally lose
+  // the AsyncLocalStorage DB context. Re-enter it via runWithDb so getDb() works.
   const stream = new ReadableStream({
     start(controller) {
-      (async () => {
+      runWithDb(db, async () => {
         try {
           let cursor = new Date(state.current_date);
           const end = new Date(targetDate);
@@ -218,7 +221,7 @@ export async function POST(req: Request) {
           );
           controller.close();
         }
-      })();
+      });
     },
   });
 
@@ -229,7 +232,7 @@ export async function POST(req: Request) {
       'Connection': 'keep-alive',
     },
   });
-}
+});
 
 function buildLineup(teamId: number): SimLineup {
   const saved   = getSquadLineup(teamId);

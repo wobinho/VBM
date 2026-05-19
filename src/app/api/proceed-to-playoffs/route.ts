@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate,
   generatePlayoffs, getUserTeam,
@@ -18,11 +20,10 @@ import { generateAllCups } from '@/lib/cup-engine';
  *
  * Returns: { qualified: boolean, playoffsGenerated: boolean, newDate: string }
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   try {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
 
-    const { getDb } = await import('@/lib/db');
     const db = getDb();
 
     const state = getGameState();
@@ -82,4 +83,4 @@ export async function POST() {
     console.error('Error in proceed-to-playoffs:', error);
     return NextResponse.json({ error: error.message ?? 'Internal Server Error' }, { status: 500 });
   }
-}
+});

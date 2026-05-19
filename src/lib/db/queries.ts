@@ -1,4 +1,10 @@
 import { getDb } from './index';
+import {
+    authGetUserByEmail,
+    authGetUserByUsername,
+    authGetUserById,
+    authCreateUser,
+} from './auth-db';
 import { generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
 import { generateScheduleForLeague, generatePostSeason, shouldGeneratePostSeason, processPromotionRelegationByConfig } from '../league-engine';
 import { calculateOverall as calcOvr, calculateOverallCapped, ALL_STAT_KEYS } from '../overall';
@@ -259,32 +265,37 @@ export function updateTransferStatus(id: number, status: string) {
 }
 
 // ==================== USERS ====================
+// Users live in the shared auth DB (see ./auth-db). These wrappers delegate
+// there so callers keep using `getUserByEmail` etc. without knowing which
+// DB the row lives in.
 export function getUserByEmail(email: string): User | undefined {
-    return getDb().prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+    return authGetUserByEmail(email) as User | undefined;
 }
 
 export function getUserByUsername(username: string): User | undefined {
-    return getDb().prepare('SELECT * FROM users WHERE username = ?').get(username) as User | undefined;
+    return authGetUserByUsername(username) as User | undefined;
 }
 
 export function getUserById(id: string): User | undefined {
-    return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
+    return authGetUserById(id) as User | undefined;
 }
 
+// Two-step lookup: user_teams (per-user game DB) -> auth DB for user row.
+// Note: in the per-user-world model, any team in the current game DB belongs
+// to the current user, so this is mostly a convenience that returns the
+// current logged-in user when their team is queried.
 export function getUserByTeamId(teamId: number): User | undefined {
-    return getDb().prepare(`
-        SELECT u.* FROM users u
-        JOIN user_teams ut ON u.id = ut.user_id
-        WHERE ut.team_id = ? AND ut.is_primary = 1
+    const row = getDb().prepare(`
+        SELECT user_id FROM user_teams
+        WHERE team_id = ? AND is_primary = 1
         LIMIT 1
-    `).get(teamId) as User | undefined;
+    `).get(teamId) as { user_id: string } | undefined;
+    if (!row) return undefined;
+    return authGetUserById(row.user_id) as User | undefined;
 }
 
 export function createUser(data: { id: string; email: string; username: string; password_hash: string; display_name: string; is_admin?: number }) {
-    return getDb().prepare(`
-    INSERT INTO users (id, email, username, password_hash, display_name, is_admin)
-    VALUES (@id, @email, @username, @password_hash, @display_name, @is_admin)
-  `).run({ ...data, is_admin: data.is_admin ?? 0 });
+    return authCreateUser(data);
 }
 
 // ==================== USER TEAMS ====================

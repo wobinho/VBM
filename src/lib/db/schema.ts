@@ -16,6 +16,10 @@ export function runSchema(db: Database.Database) {
       team_name TEXT NOT NULL UNIQUE,
       league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
       country TEXT DEFAULT 'Italy',
+      region TEXT DEFAULT 'north',
+      stadium TEXT DEFAULT '',
+      capacity INTEGER DEFAULT 0,
+      founded TEXT DEFAULT '',
       team_money REAL DEFAULT 1000000.00,
       played INTEGER DEFAULT 0,
       won INTEGER DEFAULT 0,
@@ -23,7 +27,9 @@ export function runSchema(db: Database.Database) {
       sets_won INTEGER DEFAULT 0,
       sets_lost INTEGER DEFAULT 0,
       points INTEGER DEFAULT 0,
-      score_diff INTEGER DEFAULT 0
+      score_diff INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS players (
@@ -93,22 +99,12 @@ export function runSchema(db: Database.Database) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      last_login TEXT,
-      is_active INTEGER DEFAULT 1,
-      is_admin INTEGER DEFAULT 0
-    );
+    -- The users table lives in auth.db, not in per-user game DBs.
+    -- user_id columns below are plain TEXT (no FK) because they reference the auth DB.
 
     CREATE TABLE IF NOT EXISTS user_teams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
       team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
       is_primary INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
@@ -119,8 +115,8 @@ export function runSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS transfer_offers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      to_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
       offer_amount REAL NOT NULL CHECK (offer_amount > 0),
       message TEXT,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'withdrawn', 'expired')),

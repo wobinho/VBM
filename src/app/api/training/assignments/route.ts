@@ -4,15 +4,10 @@ import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 import { getTrainingAssignments, upsertTrainingAssignment, deleteTrainingAssignment, getUserTeam } from '@/lib/db/queries';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET(request: NextRequest) {
+export const GET = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
-
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   const teamId = parseInt(request.nextUrl.searchParams.get('teamId') ?? '0');
   if (!teamId) {
@@ -20,23 +15,17 @@ export async function GET(request: NextRequest) {
   }
 
   // Verify user owns this team
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut || ut.team_id !== teamId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const assignments = getTrainingAssignments(teamId);
   return NextResponse.json(assignments);
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
-
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   const body = await request.json();
   const { playerId, planKey } = body;
@@ -46,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify player belongs to user's team
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -59,16 +48,10 @@ export async function POST(request: NextRequest) {
 
   upsertTrainingAssignment(playerId, planKey);
   return NextResponse.json({ success: true });
-}
+});
 
-export async function DELETE(request: NextRequest) {
+export const DELETE = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
-
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   const playerId = parseInt(request.nextUrl.searchParams.get('playerId') ?? '0');
   if (!playerId) {
@@ -76,7 +59,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   // Verify player belongs to user's team
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -89,4 +72,4 @@ export async function DELETE(request: NextRequest) {
 
   deleteTrainingAssignment(playerId);
   return NextResponse.json({ success: true });
-}
+});

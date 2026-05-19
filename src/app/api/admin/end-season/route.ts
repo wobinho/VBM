@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { endSeason } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 /**
  * POST /api/admin/end-season
@@ -11,14 +12,11 @@ import { endSeason } from '@/lib/db/queries';
  *  4. Generates fresh fixtures with the updated team rosters
  *  5. Resets all team stats and advances calendar to Jan 1 of the new year
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { getDb } = await import('@/lib/db');
-    getDb();
-
     const result = endSeason();
 
     const relegatedNames = result.promotion.relegated.map(r => r.teamName).join(', ') || 'none';
@@ -32,4 +30,4 @@ export async function POST() {
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'End season failed' }, { status: 500 });
   }
-}
+});

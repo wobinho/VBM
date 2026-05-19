@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTransfers, createTransfer } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET() {
+export const GET = withUserDb(async () => {
     return NextResponse.json(getTransfers());
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withUserDb(async (req: NextRequest) => {
     try {
         const data = await req.json();
         createTransfer(data);
@@ -14,4 +15,4 @@ export async function POST(req: NextRequest) {
         console.error('Create transfer error:', error);
         return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
     }
-}
+});

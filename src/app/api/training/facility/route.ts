@@ -4,22 +4,17 @@ import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 import { getTrainingFacilities, upgradeTrainingFacility, getUserTeam } from '@/lib/db/queries';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import { UPGRADE_COST_TO_LEVEL, MAX_LEVEL } from '@/lib/training/facilities';
 
 function getUpgradeCost(_facilityType: string, targetLevel: number): number {
   return UPGRADE_COST_TO_LEVEL[targetLevel] ?? 0;
 }
 
-export async function GET(_request: NextRequest) {
+export const GET = withUserDb(async (_request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
 
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -36,18 +31,12 @@ export async function GET(_request: NextRequest) {
     facilities: result,
     teamMoney: team.team_money,
   });
-}
+});
 
-export async function PUT(request: NextRequest) {
+export const PUT = withUserDb(async (request: NextRequest) => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  const { getDb: getDbFn } = await import('@/lib/db');
-  getDbFn();
 
-  if (!session.userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ut = getUserTeam(session.userId);
+  const ut = getUserTeam(session.userId!);
   if (!ut) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -92,4 +81,4 @@ export async function PUT(request: NextRequest) {
     facility: upgraded,
     newTeamMoney: team.team_money - cost,
   });
-}
+});

@@ -4,10 +4,10 @@ import { cookies } from 'next/headers';
 import { updateOfferStatus, getOfferById, updatePlayer, updateTeamMoney, getTeamById, getPlayerById, getGameState } from '@/lib/db/queries';
 import { getDb } from '@/lib/db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withUserDb(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-    if (!session.userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id } = await params;
     const { status } = await req.json();
@@ -45,4 +45,4 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     return NextResponse.json({ success: true });
-}
+});

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { resetSeasonForTesting } from '@/lib/db/queries';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 /**
  * POST /api/admin/reset-season
@@ -9,14 +10,11 @@ import { resetSeasonForTesting } from '@/lib/db/queries';
  *  - All team stats reset to 0
  *  - game_state rewound to season start_date
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { getDb } = await import('@/lib/db');
-    getDb();
-
     const result = resetSeasonForTesting();
 
     return NextResponse.json({
@@ -27,4 +25,4 @@ export async function POST() {
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Reset failed' }, { status: 500 });
   }
-}
+});

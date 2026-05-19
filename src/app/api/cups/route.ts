@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 import { getGameState, getSeasonById } from '@/lib/db/queries';
 
-export async function GET(request: Request) {
+export const GET = withUserDb(async (request) => {
   try {
     const db = getDb();
 
@@ -89,4 +90,4 @@ export async function GET(request: Request) {
     console.error('Error fetching cup data:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});

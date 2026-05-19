@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { withUserDb } from '@/lib/db/with-user-db';
 
 interface HistoricalStandingRow {
   team_id: number;
@@ -19,7 +20,7 @@ interface HistoricalStandingRow {
   season_year: number;
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withUserDb(async (req: NextRequest) => {
   const db = getDb();
   const yearParam = req.nextUrl.searchParams.get('year');
 
@@ -55,4 +56,4 @@ export async function GET(req: NextRequest) {
   `).all(year) as HistoricalStandingRow[];
 
   return NextResponse.json({ years, standings });
-}
+});

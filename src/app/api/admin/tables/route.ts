@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/index';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
+import { withUserDb } from '@/lib/db/with-user-db';
 
-export async function GET() {
+export const GET = withUserDb(async () => {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
@@ -26,4 +27,4 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch tables' }, { status: 500 });
   }
-}
+});

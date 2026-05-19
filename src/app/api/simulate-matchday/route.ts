@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, getFixtures, getFixtureById,
   updateFixtureResult, updateTeamStatsAfterMatch,
@@ -15,11 +16,8 @@ import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib
  * Simulate all AI regular-season fixtures AND AI playoff games on the current
  * game date. The user's own fixture/game is left as 'scheduled'.
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-
-  const { getDb } = await import('@/lib/db');
-  getDb();
 
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
@@ -127,7 +125,7 @@ export async function POST() {
     simulatedCount: simulated.length,
     simulated,
   });
-}
+});
 
 function buildLineup(teamId: number): SimLineup {
   const saved   = getSquadLineup(teamId);

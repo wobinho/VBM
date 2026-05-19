@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getFixtures, getFixturesByDate, getScheduledDatesForSeason, getActiveSeason, getSeasonById,
   getPlayoffGamesByTeam, getPlayoffGameDatesForSeason, getPlayoffGamesByDate,
@@ -57,7 +58,7 @@ function cupGameAsFixture(cg: CupGame): Fixture & { is_cup: true; cup_game_id: n
   };
 }
 
-export async function GET(request: Request) {
+export const GET = withUserDb(async (request) => {
   const { searchParams } = new URL(request.url);
 
   const date     = searchParams.get('date') ?? undefined;
@@ -138,4 +139,4 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(fixtures);
-}
+});

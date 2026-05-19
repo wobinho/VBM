@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
+import { withUserDb } from '@/lib/db/with-user-db';
 import {
   getGameState, advanceGameDate,
   getFixtures, getFixtureById, updateFixtureResult, updateTeamStatsAfterMatch,
@@ -13,12 +14,8 @@ import { runFullMatch, autoLineupFromPlayers, SimLineup, SimPlayer } from '@/lib
 import { getCupFixturesByDate } from '@/lib/cup-engine';
 
 /** GET /api/game-state — return current game date, season, upcoming fixtures */
-export async function GET() {
+export const GET = withUserDb(async () => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-
-  // Ensure DB / game state is initialized
-  const { getDb } = await import('@/lib/db');
-  getDb();
 
   const state = getGameState();
   if (!state) {
@@ -26,17 +23,14 @@ export async function GET() {
   }
 
   return NextResponse.json(await buildStatePayload(state, session.userId ?? null));
-}
+});
 
 /**
  * POST /api/game-state — advance to the next match day.
  * Auto-simulates all fixtures except the user's team, which is left 'scheduled'.
  */
-export async function POST() {
+export const POST = withUserDb(async () => {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-
-  const { getDb } = await import('@/lib/db');
-  getDb();
 
   const state = getGameState();
   if (!state) return NextResponse.json({ error: 'Game state not initialized' }, { status: 500 });
@@ -122,7 +116,7 @@ export async function POST() {
     simulatedCount: simulated.length,
     simulated,
   });
-}
+});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
