@@ -17,6 +17,7 @@ import type Database from 'better-sqlite3';
 import { getDb } from './db/index';
 import type { SimLineup, SimPlayer } from './simulation-engine';
 import { autoLineupFromPlayers } from './simulation-engine';
+import { buildFastStrengths, type FastStrengths } from './fast-match';
 
 interface LineupRow {
   oh1_player_id: number | null; mb1_player_id: number | null; opp_player_id: number | null;

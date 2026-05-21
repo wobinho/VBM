@@ -64,6 +64,34 @@ const COUNTRY_FLAG_CODES: Record<string, string> = {
   france: 'fr',
   poland: 'pl',
   turkey: 'tr',
+  slovenia: 'si',
+  bulgaria: 'bg',
+  germany: 'de',
+  serbia: 'rs',
+  belgium: 'be',
+  russia: 'ru',
+  ukraine: 'ua',
+  czechia: 'cz',
+  finland: 'fi',
+  netherlands: 'nl',
+  portugal: 'pt',
+  spain: 'es',
+  japan: 'jp',
+  china: 'cn',
+  'south korea': 'kr',
+  philippines: 'ph',
+  vietnam: 'vn',
+  thailand: 'th',
+  taiwan: 'tw',
+  iran: 'ir',
+  usa: 'us',
+  canada: 'ca',
+  mexico: 'mx',
+  cuba: 'cu',
+  'puerto rico': 'pr',
+  brazil: 'br',
+  argentina: 'ar',
+  chile: 'cl',
 };
 
 function flagCodeForCountry(country: string | undefined): string {
@@ -111,31 +139,95 @@ export default function CupsPage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
+  // Country selector: null = default (user's team country)
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+  const [availableCountries, setAvailableCountries] = useState<string[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
   // Fetch list of years once on mount
   useEffect(() => {
     fetch('/api/cups?list=true')
       .then(r => r.ok ? r.json() : null)
-      .then((d: { years: number[]; currentYear: number | null } | null) => {
+      .then((d: { years: number[]; currentYear: number | null; userCountry: string | null } | null) => {
         if (d) {
           setAvailableYears(d.years ?? []);
           setCurrentYear(d.currentYear ?? null);
+          setUserCountry(d.userCountry ?? null);
         }
       })
       .catch(() => {});
   }, []);
 
-  // Fetch cup data — live (no year) or historical (year=X)
+  // Fetch list of countries with cups for the current view's year
+  useEffect(() => {
+    const url = selectedYear !== null
+      ? `/api/cups?countries=true&year=${selectedYear}`
+      : '/api/cups?countries=true';
+    fetch(url)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { countries: { country: string }[] } | null) => {
+        if (d?.countries) setAvailableCountries(d.countries.map(c => c.country));
+      })
+      .catch(() => {});
+  }, [selectedYear]);
+
+  // Fetch cup data — live (no year) or historical (year=X), optionally by country
   useEffect(() => {
     setLoading(true);
-    const url = selectedYear !== null ? `/api/cups?year=${selectedYear}` : '/api/cups';
+    const params = new URLSearchParams();
+    if (selectedYear !== null) params.set('year', String(selectedYear));
+    if (selectedCountry !== null) params.set('country', selectedCountry);
+    const qs = params.toString();
+    const url = qs ? `/api/cups?${qs}` : '/api/cups';
     fetch(url).then(r => r.ok ? r.json() : null).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
-  }, [selectedYear]);
+  }, [selectedYear, selectedCountry]);
 
   const isHistorical = selectedYear !== null;
   // Past years are those NOT equal to the current in-game year
   const pastYears = availableYears.filter(y => y !== currentYear);
 
+  // Effective country shown (for highlighting the "default" pill)
+  const effectiveCountry = selectedCountry ?? userCountry;
+  const countrySelector = availableCountries.length > 1 && (
+    <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-white/[0.05]">
+      <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Country</span>
+      {userCountry && (
+        <button
+          onClick={() => setSelectedCountry(null)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.18em] transition-colors cursor-pointer ${
+            selectedCountry === null
+              ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+              : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+          }`}
+        >
+          <Image src={`/assets/flags/${flagCodeForCountry(userCountry)}.svg`} alt={userCountry} width={14} height={14} className="rounded-sm" />
+          {userCountry} <span className="opacity-60">(yours)</span>
+        </button>
+      )}
+      {availableCountries
+        .filter(c => c !== userCountry)
+        .map(c => {
+          const isSel = selectedCountry === c;
+          return (
+            <button
+              key={c}
+              onClick={() => setSelectedCountry(c)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.18em] transition-colors cursor-pointer ${
+                isSel
+                  ? 'bg-[var(--epic)] text-black shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+                  : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+              }`}
+            >
+              <Image src={`/assets/flags/${flagCodeForCountry(c)}.svg`} alt={c} width={14} height={14} className="rounded-sm" />
+              {c}
+            </button>
+          );
+        })}
+    </div>
+  );
+
   const yearSelector = (
+    <div>
     <div className="flex items-center gap-2 flex-wrap">
       <History size={12} className={isHistorical ? 'text-[var(--epic)]' : 'text-[var(--ink-500)]'} />
       <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Season</span>
@@ -174,6 +266,8 @@ export default function CupsPage() {
           Read-only archive
         </span>
       )}
+    </div>
+    {countrySelector}
     </div>
   );
 
@@ -218,9 +312,11 @@ export default function CupsPage() {
       {/* ── Hero ── */}
       <div className="surface-raised relative overflow-hidden p-8">
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--volt)]" />
-        <div className="absolute inset-0 overflow-hidden">
-          <Image src="/assets/team-backgrounds/copa_italia_bg.png" alt="Copa Italia Background" fill unoptimized className="object-cover opacity-40 mix-blend-overlay" />
-        </div>
+        {data.cup.country?.toLowerCase() === 'italy' && (
+          <div className="absolute inset-0 overflow-hidden">
+            <Image src="/assets/team-backgrounds/copa_italia_bg.png" alt="Cup Background" fill unoptimized className="object-cover opacity-40 mix-blend-overlay" />
+          </div>
+        )}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_50%,rgba(250,204,21,0.10),transparent)]" />
 
         <div className="relative flex items-center justify-between gap-6 my-4">
