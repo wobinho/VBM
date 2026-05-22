@@ -150,7 +150,7 @@ function TeamLogo({ teamId }: { teamId?: number | null }) {
     const [useFallback, setUseFallback] = useState(false);
     const [failed, setFailed] = useState(false);
     if (!teamId || failed) return null;
-    const src = useFallback ? '/assets/teams/default.png' : `/assets/teams/${teamId}.png`;
+    const src = useFallback ? '/assets/teams/default.png' : `/api/team-badge/${teamId}`;
     return (
         <div className="relative w-8 h-8">
             <Image src={src} alt="Team" fill unoptimized className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"

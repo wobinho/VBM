@@ -52,7 +52,7 @@ interface PlayoffBracket {
 // ─── Team Logo ────────────────────────────────────────────────────────────────
 
 function TeamLogo({ teamId, size = 40 }: { teamId: number; size?: number }) {
-    const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+    const [src, setSrc] = useState(`/api/team-badge/${teamId}`);
     const [failed, setFailed] = useState(false);
     if (failed) return <div style={{ width: size, height: size }} className="rounded-full bg-white/5 border border-white/10" />;
     return (

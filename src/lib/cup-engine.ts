@@ -20,6 +20,7 @@
 import { getDb } from './db/index';
 import { getCupMatchdays } from './schedule-engine';
 import { incrementMatchesPlayedForTeams } from './db/queries';
+import { advanceCustomCupRound } from './custom-cup';
 
 export interface CupCompetition {
   id: number;
@@ -37,6 +38,11 @@ export interface CupCompetition {
  */
 export function generateAllCups(year: number): void {
   const db = getDb();
+
+  // Custom worlds manage their own cups — never auto-generate national cups.
+  const meta = db.prepare("SELECT value FROM world_meta WHERE key = 'world_type'")
+    .get() as { value: string } | undefined;
+  if (meta?.value === 'custom') return;
 
   const execute = db.transaction(() => {
     _generateAllCupsInternal(db, year);
@@ -469,7 +475,14 @@ export function recordCupFixtureResult(
     incrementMatchesPlayedForTeams(fixture.home_team_id, fixture.away_team_id);
   }
 
-  advanceCupRound(fixture.cup_id);
+  // Custom cups use the generic, date-window-aware advancement.
+  const cupType = db.prepare('SELECT cup_type FROM cup_competitions WHERE id = ?')
+    .get(fixture.cup_id) as { cup_type: string } | undefined;
+  if (cupType?.cup_type === 'custom') {
+    advanceCustomCupRound(fixture.cup_id);
+  } else {
+    advanceCupRound(fixture.cup_id);
+  }
 }
 
 /**

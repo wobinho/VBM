@@ -18,6 +18,8 @@ export function runSchema(db: Database.Database) {
       league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
       country TEXT DEFAULT 'Italy',
       region TEXT DEFAULT 'north',
+      origin_team_id INTEGER,
+      logo TEXT,
       stadium TEXT DEFAULT '',
       capacity INTEGER DEFAULT 0,
       founded TEXT DEFAULT '',
@@ -217,7 +219,7 @@ export function runSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS cup_competitions (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       name        TEXT NOT NULL,
-      cup_type    TEXT NOT NULL CHECK (cup_type IN ('national', 'cl', 'secondary')),
+      cup_type    TEXT NOT NULL CHECK (cup_type IN ('national', 'cl', 'secondary', 'custom')),
       format      TEXT NOT NULL CHECK (format IN ('single_elimination', 'group_knockout')),
       country     TEXT,
       year        INTEGER NOT NULL,
@@ -395,5 +397,86 @@ export function runSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_tsg_player_id ON training_stat_gains(player_id);
     CREATE INDEX IF NOT EXISTS idx_tsg_team_id   ON training_stat_gains(team_id);
     CREATE INDEX IF NOT EXISTS idx_tsg_gained_at ON training_stat_gains(gained_at);
+
+    -- Playoff series + games (also created as a migration for legacy DBs)
+    CREATE TABLE IF NOT EXISTS playoff_series (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      league_id INTEGER NOT NULL REFERENCES leagues(id),
+      round INTEGER NOT NULL,
+      conference TEXT,
+      seed_high INTEGER NOT NULL,
+      seed_low INTEGER NOT NULL,
+      home_team_id INTEGER NOT NULL REFERENCES teams(id),
+      away_team_id INTEGER NOT NULL REFERENCES teams(id),
+      home_wins INTEGER NOT NULL DEFAULT 0,
+      away_wins INTEGER NOT NULL DEFAULT 0,
+      winner_team_id INTEGER REFERENCES teams(id),
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','in_progress','completed')),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS playoff_games (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      series_id INTEGER NOT NULL REFERENCES playoff_series(id) ON DELETE CASCADE,
+      game_number INTEGER NOT NULL,
+      home_team_id INTEGER NOT NULL REFERENCES teams(id),
+      away_team_id INTEGER NOT NULL REFERENCES teams(id),
+      scheduled_date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled')),
+      home_sets INTEGER,
+      away_sets INTEGER,
+      home_points INTEGER,
+      away_points INTEGER,
+      played_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_playoff_series_season ON playoff_series(season_id);
+    CREATE INDEX IF NOT EXISTS idx_playoff_series_status ON playoff_series(status);
+    CREATE INDEX IF NOT EXISTS idx_playoff_games_series ON playoff_games(series_id);
+    CREATE INDEX IF NOT EXISTS idx_playoff_games_date ON playoff_games(scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_playoff_games_status ON playoff_games(status);
+
+    -- Starting lineup per team (also created as a migration for legacy DBs)
+    CREATE TABLE IF NOT EXISTS squad_lineups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL UNIQUE REFERENCES teams(id) ON DELETE CASCADE,
+      oh1_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      mb1_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      opp_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      s_player_id   INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      mb2_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      oh2_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      l_player_id   INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_squad_lineups_team_id ON squad_lineups(team_id);
+
+    -- Monthly financial transactions (also created as a migration for legacy DBs)
+    CREATE TABLE IF NOT EXISTS financial_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      income_matchday REAL NOT NULL DEFAULT 0,
+      income_sponsorship REAL NOT NULL DEFAULT 0,
+      income_merchandise REAL NOT NULL DEFAULT 0,
+      income_broadcast REAL NOT NULL DEFAULT 0,
+      income_other REAL NOT NULL DEFAULT 0,
+      expense_wages REAL NOT NULL DEFAULT 0,
+      expense_staff REAL NOT NULL DEFAULT 0,
+      expense_other REAL NOT NULL DEFAULT 0,
+      net REAL NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(team_id, month)
+    );
+    CREATE INDEX IF NOT EXISTS idx_fin_team_month ON financial_transactions(team_id, month);
+
+    -- Key/value world metadata. Used to flag custom-built worlds so classic
+    -- systems (e.g. national-cup auto-generation) know to stand down.
+    CREATE TABLE IF NOT EXISTS world_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 }

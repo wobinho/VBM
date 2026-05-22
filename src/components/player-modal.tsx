@@ -106,7 +106,7 @@ function ModalTeamLogo({ teamId }: { teamId?: number | null }) {
     const [useFallback, setUseFallback] = useState(false);
     const [failed, setFailed] = useState(false);
     if (!teamId || failed) return null;
-    const src = useFallback ? '/assets/teams/default.png' : `/assets/teams/${teamId}.png`;
+    const src = useFallback ? '/assets/teams/default.png' : `/api/team-badge/${teamId}`;
     return (
         <div className="relative w-14 h-14">
             <Image src={src} alt="Team" fill unoptimized className="object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.7)]"
@@ -173,7 +173,7 @@ function TeamLogoSmall({ teamId }: { teamId?: number | null }) {
     if (!teamId || failed) return <div className="w-5 h-5 rounded bg-white/5 shrink-0" />;
     return (
         <div className="relative w-5 h-5 shrink-0">
-            <Image src={`/assets/teams/${teamId}.png`} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />
+            <Image src={`/api/team-badge/${teamId}`} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />
         </div>
     );
 }

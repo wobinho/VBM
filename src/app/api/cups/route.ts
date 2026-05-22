@@ -14,6 +14,8 @@ export const GET = withUserDb(async (request) => {
     const yearParam = searchParams.get('year');
     const listOnly = searchParams.get('list') === 'true';
     const countriesOnly = searchParams.get('countries') === 'true';
+    const customListParam = searchParams.get('customList') === 'true';
+    const cupIdParam = searchParams.get('cupId');
     const countryParam = searchParams.get('country');
 
     // Resolve the signed-in user's team country (used as the default cup country).
@@ -61,11 +63,24 @@ export const GET = withUserDb(async (request) => {
     }
 
     // Resolve which country's cup to show: explicit override → user's country → fallback.
+    // Return every custom cup (powers the custom-save cup picker).
+    if (customListParam) {
+      const customCups = db.prepare(`
+        SELECT id, name, status, year FROM cup_competitions
+        WHERE cup_type = 'custom'
+        ORDER BY id ASC
+      `).all();
+      return NextResponse.json({ customCups });
+    }
+
     const resolvedCountry = countryParam ?? userCountry;
 
     let cup: any = null;
 
-    if (yearParam) {
+    if (cupIdParam) {
+      // Explicit cup id — used for custom cups, which have no country.
+      cup = db.prepare('SELECT * FROM cup_competitions WHERE id = ?').get(Number(cupIdParam));
+    } else if (yearParam) {
       // Historical view — show the cup for the requested year (any status)
       if (resolvedCountry) {
         cup = db.prepare(`

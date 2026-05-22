@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { authGetUserByEmail } from '@/lib/db/auth-db';
-import { openUserDb, runWithDb } from '@/lib/db';
-import { getUserTeam } from '@/lib/db/queries';
+import { authGetUserByEmail, authEnsureClassicSave } from '@/lib/db/auth-db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
@@ -25,26 +23,23 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        // Open the user's game DB (also seeds it if this is the first time the
-        // user has logged in since registration). getUserTeam reads from it via
-        // AsyncLocalStorage, so wrap the call in runWithDb.
-        const userDb = openUserDb(user.id);
-        const userTeam = await runWithDb(userDb, () => getUserTeam(user.id));
+        // Make sure the user's classic "Main Save" is registered — backfills
+        // accounts created before multi-save existed. Which save to actually
+        // load is chosen on the save-picker screen, not here.
+        authEnsureClassicSave(user.id);
 
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
         session.userId = user.id;
         session.username = user.username;
         session.displayName = user.display_name;
-        if (userTeam) {
-            session.teamId = userTeam.team_id;
-            session.teamName = userTeam.team_name;
-        }
+        session.saveId = undefined;
+        session.teamId = undefined;
+        session.teamName = undefined;
         await session.save();
 
         return NextResponse.json({
             success: true,
             user: { id: user.id, email: user.email, username: user.username, displayName: user.display_name, isAdmin: user.is_admin === 1 },
-            team: userTeam ? { id: userTeam.team_id, name: userTeam.team_name } : null,
         });
     } catch (error) {
         console.error('Login error:', error);

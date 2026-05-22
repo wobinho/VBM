@@ -75,7 +75,7 @@ function TeamLogo({ teamId, size = 32 }: { teamId?: number | null; size?: number
   if (!teamId || failed) return <div style={{ width: size, height: size }} className="rounded bg-white/5" />;
   return (
     <div style={{ width: size, height: size }} className="relative shrink-0">
-      <Image src={`/assets/teams/${teamId}.png`} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />
+      <Image src={`/api/team-badge/${teamId}`} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield, BarChart2, Dumbbell } from 'lucide-react';
+import { LayoutDashboard, Users, ListOrdered, ShoppingCart, Swords, UserCircle, LogOut, Menu, X, Database, Briefcase, Trophy, UserCog, Shield, BarChart2, Dumbbell, Save, Repeat } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
@@ -25,7 +25,7 @@ const navItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
-    const { user, team, logout, isAdmin } = useAuth();
+    const { user, team, logout, isAdmin, activeSave, switchSave } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
     const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
@@ -70,6 +70,12 @@ export default function Sidebar() {
                     <div className="px-6 py-4 border-b border-white/[0.05]">
                         <p className="eyebrow mb-2">Manager</p>
                         <p className="font-display text-lg tracking-wide text-[var(--bone)] leading-tight">{user.displayName.toUpperCase()}</p>
+                        {activeSave && (
+                            <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--ink-500)] mt-1.5 flex items-center gap-1.5">
+                                <Save size={9} className="text-[var(--ink-600)] shrink-0" />
+                                <span className="truncate">{activeSave.name}</span>
+                            </p>
+                        )}
                         {team && (
                             <div className="mt-3 p-3 relative overflow-hidden"
                                 style={{
@@ -125,7 +131,14 @@ export default function Sidebar() {
 
                 {/* Footer */}
                 {user && (
-                    <div className="px-4 py-4 border-t border-white/[0.05]">
+                    <div className="px-4 py-4 border-t border-white/[0.05] space-y-2">
+                        <button
+                            onClick={() => switchSave()}
+                            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-mono uppercase tracking-[0.22em] text-[var(--ink-400)] hover:text-[var(--volt)] border border-white/[0.06] hover:border-[var(--volt)]/40 rounded transition-all duration-150 cursor-pointer"
+                        >
+                            <Repeat size={13} />
+                            Switch Save
+                        </button>
                         <button
                             onClick={logout}
                             className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-mono uppercase tracking-[0.22em] text-[var(--ink-400)] hover:text-[var(--loss)] border border-white/[0.06] hover:border-[var(--loss)]/40 rounded transition-all duration-150 cursor-pointer"

@@ -3,11 +3,13 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
 import Sidebar from '@/components/sidebar';
 import AuthModal from '@/components/auth-modal';
+import SavePicker from '@/components/save-picker';
+import DraftScreen from '@/components/draft-screen';
 import MusicPlayer from '@/components/music-player';
 import ClickSoundListener from '@/components/click-sound-listener';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-    const { user, team, loading } = useAuth();
+    const { user, team, loading, needsSaveSelection, draftPending } = useAuth();
 
     if (loading) {
         return (
@@ -39,11 +41,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         );
     }
 
-    if (!user || !team) {
+    if (!user) {
         return (
             <>
                 <ClickSoundListener />
                 <AuthModal />
+                <MusicPlayer />
+            </>
+        );
+    }
+
+    if (needsSaveSelection) {
+        return (
+            <>
+                <ClickSoundListener />
+                <SavePicker />
+                <MusicPlayer />
+            </>
+        );
+    }
+
+    if (!team) {
+        return (
+            <>
+                <ClickSoundListener />
+                <AuthModal />
+                <MusicPlayer />
+            </>
+        );
+    }
+
+    if (draftPending) {
+        return (
+            <>
+                <ClickSoundListener />
+                <DraftScreen />
                 <MusicPlayer />
             </>
         );

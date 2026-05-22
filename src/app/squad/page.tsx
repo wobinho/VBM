@@ -110,7 +110,7 @@ function FlagImg({ countryCode, size = 'sm' }: { countryCode: string; size?: 'sm
 }
 
 function TeamLogoImg({ teamId, size = 10 }: { teamId?: number; size?: number }) {
-    const [src, setSrc] = useState(teamId ? `/assets/teams/${teamId}.png` : '');
+    const [src, setSrc] = useState(teamId ? `/api/team-badge/${teamId}` : '');
     const [failed, setFailed] = useState(!teamId);
     if (failed) return null;
     return (

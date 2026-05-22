@@ -82,7 +82,7 @@ function formatMoney(n: number) {
 }
 
 function TeamLogo({ teamId, size = 32 }: { teamId: number; size?: number }) {
-  const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+  const [src, setSrc] = useState(`/api/team-badge/${teamId}`);
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <Image src={src} alt="Team" fill unoptimized className="object-contain"
@@ -110,7 +110,7 @@ function OpponentBadge({ teamId, oppName, accent }: { teamId: number; oppName: s
   return (
     <div className="absolute bottom-0.5 right-0.5 w-[32px] h-[32px] pointer-events-none transition-opacity duration-200 opacity-95 group-hover:opacity-100">
       <Image
-        src={`/assets/teams/${teamId}.png`}
+        src={`/api/team-badge/${teamId}`}
         alt={oppName}
         fill
         unoptimized

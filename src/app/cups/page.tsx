@@ -109,7 +109,7 @@ const ACCENT_CLASSES = {
 // ─── TeamLogo ─────────────────────────────────────────────────────────────────
 
 function TeamLogo({ teamId, size = 32 }: { teamId: number; size?: number }) {
-  const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+  const [src, setSrc] = useState(`/api/team-badge/${teamId}`);
   const [failed, setFailed] = useState(false);
   if (failed) return (
     <div
@@ -144,6 +144,11 @@ export default function CupsPage() {
   const [availableCountries, setAvailableCountries] = useState<string[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
+  // Custom-save cups (cup_type = 'custom'). When present, the page switches to
+  // a cup picker keyed by cup id instead of the country/year selectors.
+  const [customCups, setCustomCups] = useState<{ id: number; name: string; status: string }[]>([]);
+  const [selectedCupId, setSelectedCupId] = useState<number | null>(null);
+
   // Fetch list of years once on mount
   useEffect(() => {
     fetch('/api/cups?list=true')
@@ -153,6 +158,19 @@ export default function CupsPage() {
           setAvailableYears(d.years ?? []);
           setCurrentYear(d.currentYear ?? null);
           setUserCountry(d.userCountry ?? null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Detect custom-save cups
+  useEffect(() => {
+    fetch('/api/cups?customList=true')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { customCups?: { id: number; name: string; status: string }[] } | null) => {
+        if (d?.customCups?.length) {
+          setCustomCups(d.customCups);
+          setSelectedCupId(prev => prev ?? d.customCups![0].id);
         }
       })
       .catch(() => {});
@@ -171,16 +189,24 @@ export default function CupsPage() {
       .catch(() => {});
   }, [selectedYear]);
 
-  // Fetch cup data — live (no year) or historical (year=X), optionally by country
+  const isCustomMode = customCups.length > 0;
+
+  // Fetch cup data — custom cup (by id) or classic (live / historical / country)
   useEffect(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (selectedYear !== null) params.set('year', String(selectedYear));
-    if (selectedCountry !== null) params.set('country', selectedCountry);
-    const qs = params.toString();
-    const url = qs ? `/api/cups?${qs}` : '/api/cups';
+    let url = '/api/cups';
+    if (isCustomMode) {
+      if (selectedCupId === null) { setLoading(false); return; }
+      url = `/api/cups?cupId=${selectedCupId}`;
+    } else {
+      const params = new URLSearchParams();
+      if (selectedYear !== null) params.set('year', String(selectedYear));
+      if (selectedCountry !== null) params.set('country', selectedCountry);
+      const qs = params.toString();
+      if (qs) url = `/api/cups?${qs}`;
+    }
     fetch(url).then(r => r.ok ? r.json() : null).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
-  }, [selectedYear, selectedCountry]);
+  }, [selectedYear, selectedCountry, isCustomMode, selectedCupId]);
 
   const isHistorical = selectedYear !== null;
   // Past years are those NOT equal to the current in-game year
@@ -271,9 +297,31 @@ export default function CupsPage() {
     </div>
   );
 
+  const cupSelector = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Trophy size={12} className="text-[var(--volt)]" />
+      <span className="font-mono text-[9.5px] uppercase tracking-[0.28em] text-[var(--ink-400)] font-bold mr-1">Cup</span>
+      {customCups.map(c => (
+        <button key={c.id}
+          onClick={() => setSelectedCupId(c.id)}
+          className={`px-3 py-1.5 rounded-sm font-mono text-[10px] font-black uppercase tracking-[0.18em] transition-colors cursor-pointer ${
+            selectedCupId === c.id
+              ? 'bg-[var(--volt)] text-[var(--ink-950)] shadow-[0_2px_0_0_rgba(0,0,0,0.4)]'
+              : 'bg-white/[0.04] text-[var(--ink-300)] hover:text-[var(--bone)] border border-white/[0.08]'
+          }`}
+        >
+          {c.name}
+          {c.status === 'completed' && <span className="ml-1 opacity-60">✓</span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  const topSelector = isCustomMode ? cupSelector : yearSelector;
+
   if (loading) return (
     <div className="space-y-6 animate-fade-up">
-      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+      <div className="surface-raised px-5 py-3">{topSelector}</div>
       <div className="min-h-[40vh] flex items-center justify-center">
         <div className="text-center space-y-3">
           <Loader2 className="w-8 h-8 text-[var(--volt)] animate-spin mx-auto" />
@@ -285,7 +333,7 @@ export default function CupsPage() {
 
   if (!data?.rounds?.length) return (
     <div className="space-y-6 animate-fade-up">
-      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+      <div className="surface-raised px-5 py-3">{topSelector}</div>
       <div className="surface-raised text-center py-24 px-8 relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-[var(--volt)]/8 blur-3xl" />
         <div className="relative">
@@ -307,7 +355,7 @@ export default function CupsPage() {
   return (
     <div className="space-y-6 animate-fade-up">
       {/* ── Season selector ── */}
-      <div className="surface-raised px-5 py-3">{yearSelector}</div>
+      <div className="surface-raised px-5 py-3">{topSelector}</div>
 
       {/* ── Hero ── */}
       <div className="surface-raised relative overflow-hidden p-8">
@@ -323,11 +371,13 @@ export default function CupsPage() {
           <div className="relative shrink-0">
             <div className="absolute inset-0 rounded bg-[var(--volt)]/30 blur-2xl" />
             <div className="relative w-[100px] h-[100px] rounded bg-gradient-to-br from-[var(--volt)]/25 to-transparent border-2 border-[var(--volt)]/40 flex items-center justify-center shadow-2xl shadow-[var(--volt)]/20 overflow-hidden">
-              <Image src={`/assets/flags/${flagCodeForCountry(data.cup.country)}.svg`} alt="Country Flag" width={60} height={60} className="object-cover" />
+              {data.cup.country
+                ? <Image src={`/assets/flags/${flagCodeForCountry(data.cup.country)}.svg`} alt="Country Flag" width={60} height={60} className="object-cover" />
+                : <Trophy size={52} className="text-[var(--volt)]" />}
             </div>
           </div>
           <div className="flex-1 min-w-0 px-2">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)] mb-2">National Championship</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--volt)] mb-2">{data.cup.country ? 'National Championship' : 'Custom Cup'}</p>
             <h1 className="font-display text-4xl md:text-5xl tracking-[0.02em] text-[var(--bone)] leading-none">{data.cup.name.toUpperCase()}</h1>
             <p className="font-mono text-xs text-[var(--ink-400)] mt-2 uppercase tracking-wider tabular">{data.cup.year} SEASON</p>
           </div>

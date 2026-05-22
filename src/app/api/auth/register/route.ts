@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { authGetUserByEmail, authGetUserByUsername, authCreateUser } from '@/lib/db/auth-db';
-import { openUserDb } from '@/lib/db';
+import { authGetUserByEmail, authGetUserByUsername, authCreateUser, authEnsureClassicSave } from '@/lib/db/auth-db';
+import { openSaveDb } from '@/lib/db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
@@ -26,10 +26,10 @@ export async function POST(req: NextRequest) {
 
         authCreateUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 1 });
 
-        // Eagerly create + seed this user's game DB so first login is fast.
-        // openUserDb is idempotent — running schema + seeds on an empty file
-        // takes a few seconds, but only happens once per user.
-        openUserDb(id);
+        // Register the user's classic "Main Save" and eagerly seed its game DB
+        // so first play is fast. Seeding runs schema + all country seeds once.
+        const classicSave = authEnsureClassicSave(id);
+        openSaveDb(classicSave);
 
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
         session.userId = id;

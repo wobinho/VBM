@@ -34,6 +34,17 @@ export function getAuthDb(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+    CREATE TABLE IF NOT EXISTS saves (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL,
+      name        TEXT NOT NULL,
+      save_type   TEXT NOT NULL DEFAULT 'classic' CHECK (save_type IN ('classic','custom')),
+      status      TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('creating','ready')),
+      created_at  TEXT DEFAULT (datetime('now')),
+      last_played TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_saves_user_id ON saves(user_id);
   `;
   authDb.exec(ddl);
 
@@ -77,4 +88,72 @@ export function authCreateUser(data: {
     INSERT INTO users (id, email, username, password_hash, display_name, is_admin)
     VALUES (@id, @email, @username, @password_hash, @display_name, @is_admin)
   `).run({ ...data, is_admin: data.is_admin ?? 0 });
+}
+
+// ============================================================
+// Saves — each row is one independent game world for a user.
+// The game data itself lives in its own SQLite file per save
+// (see openSaveDb in ./index). This table is only the index.
+// ============================================================
+
+export interface SaveRow {
+  id: string;
+  user_id: string;
+  name: string;
+  save_type: 'classic' | 'custom';
+  status: 'creating' | 'ready';
+  created_at: string;
+  last_played: string | null;
+}
+
+/**
+ * Returns the user's classic "Main Save", creating its index row if missing.
+ * The original per-user game DB predates multi-save, so its save id IS the
+ * user id — that is what keeps its file at the legacy path (see openSaveDb).
+ */
+export function authEnsureClassicSave(userId: string): SaveRow {
+  const db = getAuthDb();
+  const existing = db.prepare('SELECT * FROM saves WHERE id = ?').get(userId) as SaveRow | undefined;
+  if (existing) return existing;
+  db.prepare(`
+    INSERT OR IGNORE INTO saves (id, user_id, name, save_type, status)
+    VALUES (?, ?, 'Main Save', 'classic', 'ready')
+  `).run(userId, userId);
+  return db.prepare('SELECT * FROM saves WHERE id = ?').get(userId) as SaveRow;
+}
+
+export function authListSaves(userId: string): SaveRow[] {
+  return getAuthDb().prepare(`
+    SELECT * FROM saves WHERE user_id = ?
+    ORDER BY (last_played IS NULL) ASC, last_played DESC, created_at ASC
+  `).all(userId) as SaveRow[];
+}
+
+export function authGetSave(id: string): SaveRow | undefined {
+  return getAuthDb().prepare('SELECT * FROM saves WHERE id = ?').get(id) as SaveRow | undefined;
+}
+
+export function authCreateSave(data: {
+  id: string;
+  user_id: string;
+  name: string;
+  save_type: 'classic' | 'custom';
+  status?: 'creating' | 'ready';
+}) {
+  return getAuthDb().prepare(`
+    INSERT INTO saves (id, user_id, name, save_type, status)
+    VALUES (@id, @user_id, @name, @save_type, @status)
+  `).run({ ...data, status: data.status ?? 'ready' });
+}
+
+export function authUpdateSaveStatus(id: string, status: 'creating' | 'ready') {
+  return getAuthDb().prepare('UPDATE saves SET status = ? WHERE id = ?').run(status, id);
+}
+
+export function authTouchSave(id: string) {
+  return getAuthDb().prepare("UPDATE saves SET last_played = datetime('now') WHERE id = ?").run(id);
+}
+
+export function authDeleteSave(id: string) {
+  return getAuthDb().prepare('DELETE FROM saves WHERE id = ?').run(id);
 }

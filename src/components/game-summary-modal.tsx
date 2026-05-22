@@ -28,7 +28,7 @@ interface Props {
 }
 
 function TeamLogo({ teamId, size = 48 }: { teamId: number; size?: number }) {
-    const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+    const [src, setSrc] = useState(`/api/team-badge/${teamId}`);
     return (
         <div className="relative shrink-0" style={{ width: size, height: size }}>
             <Image src={src} alt="Team" fill unoptimized className="object-contain drop-shadow-lg"

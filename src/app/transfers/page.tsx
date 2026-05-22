@@ -80,7 +80,7 @@ function TeamLogo({ teamId, className = "" }: { teamId?: number | null; classNam
     return (
         <div className={`relative ${className}`}>
             <Image
-                src={`/assets/teams/${teamId}.png`}
+                src={`/api/team-badge/${teamId}`}
                 alt="Team"
                 fill
                 unoptimized

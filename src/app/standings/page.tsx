@@ -205,7 +205,7 @@ export default function StandingsPage() {
     const formatMoney = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : `$${(n / 1000).toFixed(0)}K`;
 
     function TeamLogo({ teamId, size = 32, className = "" }: { teamId: number; size?: number; className?: string }) {
-        const [src, setSrc] = useState(`/assets/teams/${teamId}.png`);
+        const [src, setSrc] = useState(`/api/team-badge/${teamId}`);
         const [failed, setFailed] = useState(false);
         if (failed) return null;
         return (
@@ -840,7 +840,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                         }} />
                     {/* Ghosted oversized logo backdrop */}
                     <div className="absolute -right-10 -top-6 w-[300px] h-[300px] opacity-[0.06] pointer-events-none">
-                        <Image src={`/assets/teams/${team.id}.png`} alt="" fill unoptimized className="object-contain"
+                        <Image src={`/api/team-badge/${team.id}`} alt="" fill unoptimized className="object-contain"
                             onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
                     </div>
 
@@ -856,7 +856,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                             <div className="relative shrink-0">
                                 <div className="absolute -inset-2 bg-[var(--volt)]/15 blur-xl rounded-lg" />
                                 <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-md bg-gradient-to-br from-white/[0.06] to-white/[0.01] border border-white/[0.10] p-4 flex items-center justify-center overflow-hidden shadow-[0_20px_50px_-15px_rgba(0,0,0,0.7)]">
-                                    <Image src={`/assets/teams/${team.id}.png`} alt={team.team_name} fill unoptimized
+                                    <Image src={`/api/team-badge/${team.id}`} alt={team.team_name} fill unoptimized
                                         className="object-contain p-5"
                                         onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
                                     {/* corner ticks */}
@@ -1095,7 +1095,7 @@ function TeamDetailsModal({ team, onClose, onPlayerClick }: {
                                             {/* Opponent */}
                                             <div className="flex items-center gap-2 min-w-0 flex-1 z-10">
                                                 <div className="relative w-7 h-7 shrink-0">
-                                                    <Image src={`/assets/teams/${oppId}.png`} alt={oppName || ''} fill unoptimized className="object-contain"
+                                                    <Image src={`/api/team-badge/${oppId}`} alt={oppName || ''} fill unoptimized className="object-contain"
                                                         onError={(e) => { (e.target as HTMLImageElement).src = '/assets/teams/default.png'; }} />
                                                 </div>
                                                 <div className="min-w-0">

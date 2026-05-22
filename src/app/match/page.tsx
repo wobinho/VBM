@@ -703,7 +703,7 @@ const SPEED_MS: Record<SimSpeed, number> = { very_slow: 3200, slow: 1600, normal
 const SPEED_LABELS: Record<SimSpeed, string> = { very_slow: 'Immersive', slow: 'Slow', normal: 'Normal', fast: 'Fast' };
 
 function TeamBadge({ teamId, size = 'sm' }: { teamId?: number; size?: 'sm' | 'md' }) {
-    const [src, setSrc] = useState(teamId ? `/assets/teams/${teamId}.png` : '');
+    const [src, setSrc] = useState(teamId ? `/api/team-badge/${teamId}` : '');
     const [failed, setFailed] = useState(!teamId);
     const dims = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
     if (failed) return null;

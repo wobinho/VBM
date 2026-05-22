@@ -26,7 +26,7 @@ import { generateScheduleForLeague } from '../league-engine';
 // ============================================================
 
 const dbStore = new AsyncLocalStorage<Database.Database>();
-const userDbCache = new Map<string, Database.Database>();
+const saveDbCache = new Map<string, Database.Database>();
 
 function getDataDir(): string {
   return process.env.DB_DIR || path.join(process.cwd(), 'data');
@@ -53,31 +53,101 @@ export function runWithDb<T>(db: Database.Database, fn: () => T | Promise<T>): T
   return dbStore.run(db, fn);
 }
 
-/**
- * Open (or return cached) per-user game DB. Runs schema + all migrations
- * + seed on first open. Subsequent calls are O(1).
- */
-export function openUserDb(userId: string): Database.Database {
-  if (!userId) throw new Error('openUserDb: userId is required');
+/** Minimal shape of a save needed to locate and open its game DB. */
+export interface SaveRef {
+  id: string;
+  user_id: string;
+  save_type: 'classic' | 'custom';
+}
 
-  const cached = userDbCache.get(userId);
+/**
+ * Resolves a save's SQLite file path. The original per-user save predates
+ * multi-save: its id equals the user id, and it keeps its legacy location so
+ * it is never moved or rewritten. Every other save lives under data/saves/.
+ */
+function saveDbFilePath(save: SaveRef): string {
+  const dataDir = getDataDir();
+  if (save.save_type === 'classic' && save.id === save.user_id) {
+    return path.join(dataDir, 'users', `${save.id}.db`);
+  }
+  return path.join(dataDir, 'saves', `${save.id}.db`);
+}
+
+/**
+ * Open (or return cached) game DB for a single save. Runs schema + all
+ * migrations + seed on first open. Subsequent calls are O(1).
+ */
+export function openSaveDb(save: SaveRef): Database.Database {
+  if (!save?.id) throw new Error('openSaveDb: save.id is required');
+
+  const cached = saveDbCache.get(save.id);
   if (cached) return cached;
 
-  const dataDir = getDataDir();
-  const usersDir = path.join(dataDir, 'users');
-  fs.mkdirSync(usersDir, { recursive: true });
+  const dbPath = saveDbFilePath(save);
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-  const dbPath = path.join(usersDir, `${userId}.db`);
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  // initializeGameDb's seed helpers call query functions that use getDb() via
-  // AsyncLocalStorage, so we have to populate the store for the duration of init.
-  dbStore.run(db, () => initializeGameDb(db));
+  // Seed helpers call query functions that use getDb() via AsyncLocalStorage,
+  // so the store must be populated for the duration of init. Custom saves only
+  // get the schema here — their world is built by seedCustomWorld at creation.
+  dbStore.run(db, () => {
+    if (save.save_type === 'custom') initializeCustomDb(db);
+    else initializeGameDb(db);
+  });
 
-  userDbCache.set(userId, db);
+  saveDbCache.set(save.id, db);
   return db;
+}
+
+/**
+ * Schema-only initialisation for a custom save. The world itself (leagues,
+ * teams, players, fixtures) is built by seedCustomWorld at creation time.
+ */
+function initializeCustomDb(db: Database.Database) {
+  runSchema(db);
+  // Back-fill the logo column for custom saves created before it existed.
+  const teamCols = db.prepare('PRAGMA table_info(teams)').all() as { name: string }[];
+  if (!teamCols.find(c => c.name === 'logo')) {
+    db.prepare('ALTER TABLE teams ADD COLUMN logo TEXT').run();
+  }
+}
+
+let catalogDb: Database.Database | null = null;
+
+/**
+ * The catalog DB is a pristine, fully-seeded classic world used purely as the
+ * read-only source of "original" leagues/teams/players when building custom
+ * saves. It is never played and lives at data/catalog.db.
+ */
+export function openCatalogDb(): Database.Database {
+  if (catalogDb) return catalogDb;
+  const dbPath = path.join(getDataDir(), 'catalog.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  dbStore.run(db, () => initializeGameDb(db));
+  catalogDb = db;
+  return db;
+}
+
+/**
+ * Closes and deletes a save's DB entirely (file + WAL/SHM sidecars). Used when
+ * a user deletes a save. No-op for files that are already gone.
+ */
+export function dropSaveDb(save: SaveRef): void {
+  const cached = saveDbCache.get(save.id);
+  if (cached) {
+    try { cached.close(); } catch { /* already closed */ }
+    saveDbCache.delete(save.id);
+  }
+  const dbPath = saveDbFilePath(save);
+  for (const suffix of ['', '-wal', '-shm']) {
+    try { fs.unlinkSync(dbPath + suffix); } catch { /* missing is fine */ }
+  }
 }
 
 /**
@@ -213,6 +283,18 @@ function initializeGameDb(db: Database.Database) {
       for (const [name, region] of Object.entries(regionMap)) {
         updateRegion.run(region, name);
       }
+    }
+
+    // Migration: origin_team_id links a custom-save team back to the catalog
+    // team it was copied from (used for shared assets like logos).
+    if (!teamCols.find(c => c.name === 'origin_team_id')) {
+      db.prepare('ALTER TABLE teams ADD COLUMN origin_team_id INTEGER').run();
+    }
+
+    // Migration: logo decouples a team's club badge from its row id, so
+    // custom-save teams (and copied ones) render the correct crest.
+    if (!teamCols.find(c => c.name === 'logo')) {
+      db.prepare('ALTER TABLE teams ADD COLUMN logo TEXT').run();
     }
 
     // Always ensure south teams have correct region (handles name spelling variants)
@@ -691,6 +773,11 @@ function initializeGameDb(db: Database.Database) {
     }
 
     migrateTrainingFacilitiesLevel(db);
+
+    // Migration: world_meta key/value table (custom-world flag, etc.)
+    db.prepare(
+      'CREATE TABLE IF NOT EXISTS world_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'
+    ).run();
 
     ensureGameStateRow(db);
 }

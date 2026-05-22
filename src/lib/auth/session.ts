@@ -4,6 +4,7 @@ export interface SessionData {
     userId?: string;
     username?: string;
     displayName?: string;
+    saveId?: string;
     teamId?: number;
     teamName?: string;
 }
