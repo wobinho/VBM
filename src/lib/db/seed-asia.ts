@@ -16,7 +16,7 @@ import { calculateOverall } from '../overall';
  *
  * Skips entirely if Japan is already present in the database.
  */
-export function seedAsia(db: Database.Database): void {
+export function seedAsia(db: Database.Database, countries?: string[]): void {
     const existing = db.prepare(
         "SELECT COUNT(*) as c FROM leagues WHERE country = 'Japan'"
     ).get() as { c: number };
@@ -75,7 +75,11 @@ export function seedAsia(db: Database.Database): void {
 
         const positionOrder = ['Outside Hitter', 'Middle Blocker', 'Opposite Hitter', 'Setter', 'Middle Blocker', 'Outside Hitter', 'Libero'];
 
-        for (const c of COUNTRIES) {
+        const countriesToSeed = countries
+            ? COUNTRIES.filter(c => countries.includes(c.country))
+            : COUNTRIES;
+
+        for (const c of countriesToSeed) {
             const leagueId = Number(insertLeague.run(c.leagueName, c.country).lastInsertRowid);
             insertCfg.run(leagueId, JSON.stringify(sharedConfig));
 

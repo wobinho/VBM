@@ -5,7 +5,7 @@ import {
     authEnsureClassicSave, authListSaves, authGetSave,
     authCreateSave, authUpdateSaveStatus, authDeleteSave,
 } from '@/lib/db/auth-db';
-import { openSaveDb } from '@/lib/db';
+import { openSaveDb, createSelectiveClassicSaveDb } from '@/lib/db';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
 
 /** GET /api/saves — list the current user's saves. */
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name ?? '').trim();
     const type = body?.type ?? 'classic';
+    const selectedCountries = Array.isArray(body?.selectedCountries) ? body.selectedCountries : undefined;
 
     if (!name) {
         return NextResponse.json({ error: 'Save name is required' }, { status: 400 });
@@ -48,8 +49,12 @@ export async function POST(req: NextRequest) {
     const id = crypto.randomUUID();
     authCreateSave({ id, user_id: session.userId, name, save_type: 'classic', status: 'creating' });
     try {
-        // Builds the world: schema + all country seeds. Takes a few seconds.
-        openSaveDb({ id, user_id: session.userId, save_type: 'classic' });
+        // Builds the world: schema + selected country seeds. Takes a few seconds.
+        if (selectedCountries && selectedCountries.length > 0) {
+            createSelectiveClassicSaveDb({ id, user_id: session.userId, save_type: 'classic' }, selectedCountries);
+        } else {
+            openSaveDb({ id, user_id: session.userId, save_type: 'classic' });
+        }
         authUpdateSaveStatus(id, 'ready');
     } catch (error) {
         console.error('Save creation failed:', error);
@@ -57,5 +62,5 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to create save' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, save: authGetSave(id) });
+    return NextResponse.json({ success: true, save: authGetSave(id), saveId: id });
 }

@@ -23,7 +23,7 @@ interface CountrySeed {
     lastNames: string[];
 }
 
-export function seedAmerica(db: Database.Database): void {
+export function seedAmerica(db: Database.Database, countries?: string[]): void {
     // Skip entirely if USA (the first country in this seeder) is already present.
     const existing = db.prepare("SELECT COUNT(*) as c FROM leagues WHERE country = 'USA'").get() as { c: number };
     if (existing.c > 0) return;
@@ -81,7 +81,11 @@ export function seedAmerica(db: Database.Database): void {
 
         const positionOrder = ['Outside Hitter', 'Middle Blocker', 'Opposite Hitter', 'Setter', 'Middle Blocker', 'Outside Hitter', 'Libero'];
 
-        for (const seed of COUNTRY_SEEDS) {
+        const countriesToSeed = countries
+            ? COUNTRY_SEEDS.filter(c => countries.includes(c.country))
+            : COUNTRY_SEEDS;
+
+        for (const seed of countriesToSeed) {
             const leagueId = Number(insertLeague.run(seed.leagueName, seed.country).lastInsertRowid);
             insertCfg.run(leagueId, JSON.stringify(americanConfig));
 

@@ -273,7 +273,7 @@ export function seedCustomWorld(customDb: Db, catalogDb: Db, config: CustomWorld
         for (const col of teamCols) teamRow[col] = null;
         teamRow.team_name = def.name.trim();
         teamRow.league_id = newLeagueId;
-        teamRow.country = country;
+        teamRow.country = (def.country && def.country.trim()) || country;
         teamRow.region = 'north';
         teamRow.logo = def.logo ? String(def.logo) : null;
         teamRow.origin_team_id = null;

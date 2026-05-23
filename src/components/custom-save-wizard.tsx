@@ -266,7 +266,7 @@ export default function CustomSaveWizard({ onClose }: { onClose: () => void }) {
                                 <StepTeams
                                     pyramids={pyramids} updatePyramid={updatePyramid}
                                     catalog={catalog} teamIndex={teamIndex} usedTeamIds={usedTeamIds}
-                                    nextCustomId={nextCustomId}
+                                    nextCustomId={nextCustomId} countries={countries}
                                 />
                             )}
                             {step === 3 && (
@@ -587,13 +587,14 @@ function PyramidCard({ pyramid: p, index, countries, onChange, onRemove }: {
 
 // ─── Step 3: Teams ──────────────────────────────────────────────────────────
 
-function StepTeams({ pyramids, updatePyramid, catalog, teamIndex, usedTeamIds, nextCustomId }: {
+function StepTeams({ pyramids, updatePyramid, catalog, teamIndex, usedTeamIds, nextCustomId, countries }: {
     pyramids: PyramidDraft[];
     updatePyramid: (uid: string, fn: (p: PyramidDraft) => PyramidDraft) => void;
     catalog: CatalogLeague[];
     teamIndex: Map<number, CatalogTeam & { leagueName: string }>;
     usedTeamIds: Set<number>;
     nextCustomId: () => number;
+    countries: string[];
 }) {
     return (
         <div className="space-y-5">
@@ -615,7 +616,7 @@ function StepTeams({ pyramids, updatePyramid, catalog, teamIndex, usedTeamIds, n
                             <TierTeamPicker
                                 key={tier} pyramid={p} tier={tier}
                                 catalog={catalog} teamIndex={teamIndex} usedTeamIds={usedTeamIds}
-                                nextCustomId={nextCustomId}
+                                nextCustomId={nextCustomId} countries={countries}
                                 onChange={fn => updatePyramid(p.uid, fn)}
                             />
                         ))}
@@ -626,13 +627,14 @@ function StepTeams({ pyramids, updatePyramid, catalog, teamIndex, usedTeamIds, n
     );
 }
 
-function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nextCustomId, onChange }: {
+function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nextCustomId, countries, onChange }: {
     pyramid: PyramidDraft;
     tier: 1 | 2;
     catalog: CatalogLeague[];
     teamIndex: Map<number, CatalogTeam & { leagueName: string }>;
     usedTeamIds: Set<number>;
     nextCustomId: () => number;
+    countries: string[];
     onChange: (fn: (p: PyramidDraft) => PyramidDraft) => void;
 }) {
     const [adding, setAdding] = useState(false);
@@ -640,6 +642,7 @@ function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nex
     const [sourceLeagueId, setSourceLeagueId] = useState<number | ''>('');
     const [draftName, setDraftName] = useState('');
     const [draftLogo, setDraftLogo] = useState(() => randomBadge());
+    const [draftCountry, setDraftCountry] = useState('');
     const [badgeRowId, setBadgeRowId] = useState<number | null>(null);
 
     const key = tier === 1 ? 'tier1TeamIds' : 'tier2TeamIds';
@@ -678,17 +681,24 @@ function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nex
         customTeams: prev.customTeams.map(c => (c.id === teamId ? { ...c, logo } : c)),
     }));
 
+    const setCustomCountry = (teamId: number, country: string) => onChange(prev => ({
+        ...prev,
+        customTeams: prev.customTeams.map(c => (c.id === teamId ? { ...c, country } : c)),
+    }));
+
     const addCustomTeam = () => {
         const name = draftName.trim();
         if (!name) return;
         const id = nextCustomId();
+        const country = draftCountry.trim();
         onChange(prev => ({
             ...prev,
             [key]: [...prev[key], id],
-            customTeams: [...prev.customTeams, { id, name, logo: draftLogo }],
+            customTeams: [...prev.customTeams, { id, name, logo: draftLogo, country: country || undefined }],
         }));
         setDraftName('');
         setDraftLogo(randomBadge());
+        setDraftCountry('');
         setCreating(false);
     };
 
@@ -712,7 +722,7 @@ function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nex
             {ids.length > 0 && (
                 <div className="p-2 space-y-1">
                     {ids.map(id => {
-                        // From-scratch custom team — editable name + badge.
+                        // From-scratch custom team — editable name + badge + country.
                         if (id < 0) {
                             const def = customById.get(id);
                             if (!def) return null;
@@ -730,6 +740,17 @@ function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nex
                                             placeholder="Team name"
                                             className="flex-1 min-w-0 px-2 py-1 bg-[var(--ink-850)] border border-white/10 rounded text-xs text-[var(--bone)] focus:outline-none focus:border-[var(--volt)]/50"
                                         />
+                                        <select
+                                            value={def.country ?? ''}
+                                            onChange={e => setCustomCountry(id, e.target.value)}
+                                            title="Country"
+                                            className="shrink-0 max-w-[110px] px-1.5 py-1 bg-[var(--ink-850)] border border-white/10 rounded text-[10px] text-[var(--ink-200)] focus:outline-none focus:border-[var(--volt)]/50"
+                                        >
+                                            <option value="">
+                                                {p.kind === 'international' ? 'Default' : (p.country || 'Default')}
+                                            </option>
+                                            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
                                         <span className="font-mono text-[8px] uppercase tracking-[0.14em] text-[var(--epic)] bg-[var(--epic)]/10 px-1.5 py-0.5 rounded shrink-0">
                                             Custom
                                         </span>
@@ -845,11 +866,23 @@ function TierTeamPicker({ pyramid: p, tier, catalog, teamIndex, usedTeamIds, nex
                         />
                     </div>
                     <div>
+                        <label className={labelClass}>Country</label>
+                        <select value={draftCountry} onChange={e => setDraftCountry(e.target.value)}
+                            className={inputClass}>
+                            <option value="">
+                                {p.kind === 'international'
+                                    ? 'Use league default…'
+                                    : `Use league country${p.country ? ` (${p.country})` : ''}…`}
+                            </option>
+                            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div>
                         <label className={labelClass}>Club Badge</label>
                         <BadgeGrid value={draftLogo} onPick={setDraftLogo} />
                     </div>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => { setCreating(false); setDraftName(''); }}
+                        <button onClick={() => { setCreating(false); setDraftName(''); setDraftCountry(''); }}
                             className="btn-ghost flex-1 py-1.5 text-xs">
                             Cancel
                         </button>
@@ -1075,6 +1108,14 @@ function CupCard({ cup: c, index, leagueTeamIds, teamIndex, customTeamIndex, onC
         teamIds: prev.teamIds.includes(id) ? prev.teamIds.filter(x => x !== id) : [...prev.teamIds, id],
     }));
 
+    const selectAll = () => onChange(prev => {
+        const maxValid = [...ALLOWED_CUP_SIZES].reverse().find(n => n <= leagueTeamIds.length) ?? 0;
+        const take = maxValid > 0 ? maxValid : leagueTeamIds.length;
+        return { ...prev, teamIds: leagueTeamIds.slice(0, take) };
+    });
+
+    const clearAll = () => onChange(prev => ({ ...prev, teamIds: [] }));
+
     const setWindow = (patch: Partial<CupDraft['window']>) => onChange(prev => {
         const w = { ...prev.window, ...patch };
         w.startDay = 1;
@@ -1120,12 +1161,25 @@ function CupCard({ cup: c, index, leagueTeamIds, teamIndex, customTeamIndex, onC
                 </div>
 
                 <div>
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1.5 gap-2">
                         <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--ink-400)]">Teams</span>
-                        <span className="font-mono text-[10px] font-bold"
-                            style={{ color: validSize ? 'var(--win)' : 'var(--loss)' }}>
-                            {count} selected {validSize ? '✓' : '· pick 2, 4, 8 or 16'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <button type="button" onClick={selectAll}
+                                disabled={leagueTeamIds.length === 0}
+                                className="font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--epic)] hover:text-[var(--bone)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                Add All
+                            </button>
+                            <span className="text-white/10">|</span>
+                            <button type="button" onClick={clearAll}
+                                disabled={count === 0}
+                                className="font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--ink-400)] hover:text-[var(--loss)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                Clear
+                            </button>
+                            <span className="font-mono text-[10px] font-bold"
+                                style={{ color: validSize ? 'var(--win)' : 'var(--loss)' }}>
+                                {count} selected {validSize ? '✓' : '· pick 2, 4, 8 or 16'}
+                            </span>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-44 overflow-y-auto pr-1">
                         {leagueTeamIds.map(id => {

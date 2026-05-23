@@ -4,11 +4,18 @@ import { useState, useEffect } from 'react';
 import { useAuth, SaveSummary } from '@/contexts/auth-context';
 import {
     Loader2, Plus, Trash2, LogOut, Sparkles, Clock,
-    ChevronRight, X, Gamepad2, AlertCircle,
+    ChevronRight, X, Gamepad2, AlertCircle, Layers, Users,
 } from 'lucide-react';
 import CustomSaveWizard from '@/components/custom-save-wizard';
+import ClassicSaveWizard from '@/components/classic-save-wizard';
 
 const inputClass = "w-full px-4 py-3 bg-[var(--ink-850)] border border-white/10 rounded text-[var(--bone)] placeholder-[var(--ink-500)] focus:outline-none focus:border-[var(--volt)]/60 focus:ring-2 focus:ring-[var(--volt)]/15 transition-all font-body";
+
+interface SaveMetadata {
+    game_date: string;
+    league_count: number;
+    team_count: number;
+}
 
 function formatWhen(save: SaveSummary): string {
     const raw = save.last_played ?? save.created_at;
@@ -20,6 +27,15 @@ function formatWhen(save: SaveSummary): string {
     return save.last_played ? `Last played ${label}` : `Created ${label}`;
 }
 
+function getGameYear(dateStr: string): string {
+    try {
+        const year = dateStr.split('-')[0];
+        return year || 'Unknown';
+    } catch {
+        return 'Unknown';
+    }
+}
+
 export default function SavePicker() {
     const { user, saves, loadSaves, selectSave, createSave, deleteSave, logout } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -29,11 +45,36 @@ export default function SavePicker() {
     const [newName, setNewName] = useState('');
     const [error, setError] = useState('');
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-    const [showWizard, setShowWizard] = useState(false);
+    const [showClassicWizard, setShowClassicWizard] = useState(false);
+    const [showCustomWizard, setShowCustomWizard] = useState(false);
+    const [metadata, setMetadata] = useState<Record<string, SaveMetadata>>({});
+    const [metadataLoading, setMetadataLoading] = useState(true);
 
     useEffect(() => {
         loadSaves().finally(() => setLoading(false));
     }, [loadSaves]);
+
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            setMetadataLoading(true);
+            const meta: Record<string, SaveMetadata> = {};
+            for (const save of saves) {
+                try {
+                    const res = await fetch(`/api/saves/${save.id}/meta`);
+                    if (res.ok) {
+                        meta[save.id] = await res.json();
+                    }
+                } catch {
+                    // Silently fail, metadata is optional
+                }
+            }
+            setMetadata(meta);
+            setMetadataLoading(false);
+        };
+        if (saves.length > 0 && !metadataLoading) {
+            fetchMetadata();
+        }
+    }, [saves]);
 
     const handleSelect = async (id: string) => {
         if (busyId) return;
@@ -41,16 +82,6 @@ export default function SavePicker() {
         const res = await selectSave(id);
         // On success the app re-renders past the picker; on failure, recover.
         if (!res.success) { setError(res.error || 'Could not open this save'); setBusyId(null); }
-    };
-
-    const handleCreate = async () => {
-        const name = newName.trim();
-        if (!name || creating) return;
-        setCreating(true); setError('');
-        const res = await createSave(name);
-        setCreating(false);
-        if (res.success) { setNewName(''); setShowNewForm(false); }
-        else setError(res.error || 'Could not create save');
     };
 
     const handleDelete = async (id: string) => {
@@ -163,6 +194,24 @@ export default function SavePicker() {
                                                     <span className="text-[var(--ink-700)]">·</span>
                                                     {isCustom ? 'Custom' : 'Classic'}
                                                 </p>
+                                                {!isCreating && metadata[save.id] && (
+                                                    <div className="flex items-center gap-3 mt-2.5 text-[9px] font-mono tracking-wider text-[var(--ink-500)]">
+                                                        <span className="flex items-center gap-1">
+                                                            <span className="text-[var(--volt)]">{getGameYear(metadata[save.id].game_date)}</span>
+                                                            Season
+                                                        </span>
+                                                        <span className="text-[var(--ink-700)]">·</span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Layers size={10} />
+                                                            {metadata[save.id].league_count} League{metadata[save.id].league_count !== 1 ? 's' : ''}
+                                                        </span>
+                                                        <span className="text-[var(--ink-700)]">·</span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Users size={10} />
+                                                            {metadata[save.id].team_count} Team{metadata[save.id].team_count !== 1 ? 's' : ''}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                             {isBusy ? (
                                                 <Loader2 size={16} className="animate-spin text-[var(--volt)] shrink-0" />
@@ -186,54 +235,23 @@ export default function SavePicker() {
                         </div>
                     )}
 
-                    {/* New save */}
-                    {!loading && (showNewForm ? (
-                        <div className="space-y-3 p-4 rounded border border-[var(--volt)]/25 bg-[var(--volt)]/[0.04]">
-                            <label className="block font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--ink-400)]">
-                                New Classic Save
-                            </label>
-                            <input
-                                type="text"
-                                value={newName}
-                                onChange={e => setNewName(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleCreate(); }}
-                                maxLength={40}
-                                autoFocus
-                                className={inputClass}
-                                placeholder="e.g. Second Career"
-                            />
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={handleCreate}
-                                    disabled={creating || !newName.trim()}
-                                    className="btn-volt flex-1 flex items-center justify-center gap-2"
-                                >
-                                    {creating
-                                        ? <><Loader2 size={14} className="animate-spin" /> Building world…</>
-                                        : <>Create Save</>}
-                                </button>
-                                <button
-                                    onClick={() => { setShowNewForm(false); setNewName(''); }}
-                                    disabled={creating}
-                                    className="btn-ghost px-4"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
+                    {/* New save buttons */}
+                    {!loading && (
                         <div className="grid grid-cols-2 gap-2.5">
-                            <button onClick={() => { setShowNewForm(true); setError(''); }} className="btn-ghost flex items-center justify-center gap-2">
+                            <button
+                                onClick={() => { setShowClassicWizard(true); setError(''); }}
+                                className="btn-ghost flex items-center justify-center gap-2"
+                            >
                                 <Plus size={14} /> New Classic Save
                             </button>
                             <button
-                                onClick={() => { setShowWizard(true); setError(''); }}
+                                onClick={() => { setShowCustomWizard(true); setError(''); }}
                                 className="flex items-center justify-center gap-2 px-4 py-3 rounded border border-[var(--epic)]/30 bg-[var(--epic)]/[0.06] text-[var(--epic)] hover:bg-[var(--epic)]/[0.14] hover:border-[var(--epic)]/50 transition-all cursor-pointer font-mono text-xs uppercase tracking-[0.14em]"
                             >
                                 <Sparkles size={13} /> Custom Save
                             </button>
                         </div>
-                    ))}
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -250,7 +268,8 @@ export default function SavePicker() {
                 </div>
             </div>
         </div>
-        {showWizard && <CustomSaveWizard onClose={() => setShowWizard(false)} />}
+        {showClassicWizard && <ClassicSaveWizard onClose={() => setShowClassicWizard(false)} />}
+        {showCustomWizard && <CustomSaveWizard onClose={() => setShowCustomWizard(false)} />}
         </>
     );
 }

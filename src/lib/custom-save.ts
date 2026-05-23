@@ -14,6 +14,7 @@ export interface CustomTeamDef {
     id: number;     // synthetic, negative, unique across the whole save
     name: string;
     logo: string;   // club badge key — a file in public/assets/teams (e.g. "12")
+    country?: string; // optional — falls back to the pyramid's country at seed time
 }
 
 /** One user-created league — always a 2-tier pyramid with promotion/relegation. */

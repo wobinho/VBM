@@ -33,7 +33,7 @@ interface AuthContextType {
     refresh: () => Promise<void>;
     loadSaves: () => Promise<void>;
     selectSave: (saveId: string) => Promise<{ success: boolean; error?: string }>;
-    createSave: (name: string) => Promise<{ success: boolean; error?: string }>;
+    createSave: (name: string, selectedCountries?: string[]) => Promise<{ success: boolean; error?: string; saveId?: string }>;
     createCustomSave: (config: CustomWorldConfig) => Promise<{ success: boolean; error?: string; saveId?: string }>;
     deleteSave: (saveId: string) => Promise<{ success: boolean; error?: string }>;
     switchSave: () => Promise<void>;
@@ -128,12 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setDraftPending(false);
     };
 
-    const createSave = async (name: string) => {
-        const res = await fetch('/api/saves', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name, type: 'classic' }) });
+    const createSave = async (name: string, selectedCountries?: string[]) => {
+        const res = await fetch('/api/saves', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name, type: 'classic', selectedCountries }) });
         const data = await res.json();
         if (!data.success) return { success: false, error: data.error };
         await loadSaves();
-        return { success: true };
+        return { success: true, saveId: data.saveId as string };
     };
 
     const createCustomSave = async (config: CustomWorldConfig) => {
