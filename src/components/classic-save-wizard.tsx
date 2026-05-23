@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Loader2, X, ChevronLeft, ChevronRight, AlertCircle, Check } from 'lucide-react';
@@ -10,60 +11,71 @@ const STEPS = ['Name', 'Leagues'];
 
 interface CountryGroup {
   name: string;
-  countries: Array<{ name: string; icon: string; leagues: number }>;
+  countries: Array<{ name: string; code: string; leagues: number }>;
 }
+
+const countryCodeMap: Record<string, string> = {
+  'Italy': 'it', 'France': 'fr', 'Poland': 'pl', 'Turkey': 'tr',
+  'Slovenia': 'si', 'Bulgaria': 'bg', 'Germany': 'de', 'Serbia': 'rs',
+  'Belgium': 'be', 'Russia': 'ru', 'Ukraine': 'ua', 'Czechia': 'cz',
+  'Finland': 'fi', 'Netherlands': 'nl', 'Portugal': 'pt', 'Spain': 'es',
+  'Japan': 'jp', 'China': 'cn', 'South Korea': 'kr', 'Philippines': 'ph',
+  'Vietnam': 'vn', 'Thailand': 'th', 'Taiwan': 'tw', 'Iran': 'ir',
+  'USA': 'us', 'Brazil': 'br', 'Argentina': 'ar', 'Cuba': 'cu',
+  'Dominican Republic': 'do', 'Puerto Rico': 'pr', 'Mexico': 'mx', 'Canada': 'ca',
+};
 
 const countryGroups: CountryGroup[] = [
   {
     name: 'Europe (Core)',
     countries: [
-      { name: 'Italy', icon: '🇮🇹', leagues: 3 },
-      { name: 'France', icon: '🇫🇷', leagues: 3 },
-      { name: 'Poland', icon: '🇵🇱', leagues: 3 },
-      { name: 'Turkey', icon: '🇹🇷', leagues: 3 },
+      { name: 'Italy', code: 'it', leagues: 3 },
+      { name: 'France', code: 'fr', leagues: 3 },
+      { name: 'Poland', code: 'pl', leagues: 3 },
+      { name: 'Turkey', code: 'tr', leagues: 3 },
     ],
   },
   {
     name: 'Europe (Other)',
     countries: [
-      { name: 'Slovenia', icon: '🇸🇮', leagues: 1 },
-      { name: 'Bulgaria', icon: '🇧🇬', leagues: 1 },
-      { name: 'Germany', icon: '🇩🇪', leagues: 1 },
-      { name: 'Serbia', icon: '🇷🇸', leagues: 1 },
-      { name: 'Belgium', icon: '🇧🇪', leagues: 1 },
-      { name: 'Russia', icon: '🇷🇺', leagues: 1 },
-      { name: 'Ukraine', icon: '🇺🇦', leagues: 1 },
-      { name: 'Czechia', icon: '🇨🇿', leagues: 1 },
-      { name: 'Finland', icon: '🇫🇮', leagues: 1 },
-      { name: 'Netherlands', icon: '🇳🇱', leagues: 1 },
-      { name: 'Portugal', icon: '🇵🇹', leagues: 1 },
-      { name: 'Spain', icon: '🇪🇸', leagues: 1 },
+      { name: 'Slovenia', code: 'si', leagues: 1 },
+      { name: 'Bulgaria', code: 'bg', leagues: 1 },
+      { name: 'Germany', code: 'de', leagues: 1 },
+      { name: 'Serbia', code: 'rs', leagues: 1 },
+      { name: 'Belgium', code: 'be', leagues: 1 },
+      { name: 'Russia', code: 'ru', leagues: 1 },
+      { name: 'Ukraine', code: 'ua', leagues: 1 },
+      { name: 'Czechia', code: 'cz', leagues: 1 },
+      { name: 'Finland', code: 'fi', leagues: 1 },
+      { name: 'Netherlands', code: 'nl', leagues: 1 },
+      { name: 'Portugal', code: 'pt', leagues: 1 },
+      { name: 'Spain', code: 'es', leagues: 1 },
     ],
   },
   {
     name: 'Asia',
     countries: [
-      { name: 'Japan', icon: '🇯🇵', leagues: 1 },
-      { name: 'China', icon: '🇨🇳', leagues: 1 },
-      { name: 'South Korea', icon: '🇰🇷', leagues: 1 },
-      { name: 'Philippines', icon: '🇵🇭', leagues: 1 },
-      { name: 'Vietnam', icon: '🇻🇳', leagues: 1 },
-      { name: 'Thailand', icon: '🇹🇭', leagues: 1 },
-      { name: 'Taiwan', icon: '🇹🇼', leagues: 1 },
-      { name: 'Iran', icon: '🇮🇷', leagues: 1 },
+      { name: 'Japan', code: 'jp', leagues: 1 },
+      { name: 'China', code: 'cn', leagues: 1 },
+      { name: 'South Korea', code: 'kr', leagues: 1 },
+      { name: 'Philippines', code: 'ph', leagues: 1 },
+      { name: 'Vietnam', code: 'vn', leagues: 1 },
+      { name: 'Thailand', code: 'th', leagues: 1 },
+      { name: 'Taiwan', code: 'tw', leagues: 1 },
+      { name: 'Iran', code: 'ir', leagues: 1 },
     ],
   },
   {
     name: 'America',
     countries: [
-      { name: 'USA', icon: '🇺🇸', leagues: 1 },
-      { name: 'Brazil', icon: '🇧🇷', leagues: 1 },
-      { name: 'Argentina', icon: '🇦🇷', leagues: 1 },
-      { name: 'Cuba', icon: '🇨🇺', leagues: 1 },
-      { name: 'Dominican Republic', icon: '🇩🇴', leagues: 1 },
-      { name: 'Puerto Rico', icon: '🇵🇷', leagues: 1 },
-      { name: 'Mexico', icon: '🇲🇽', leagues: 1 },
-      { name: 'Canada', icon: '🇨🇦', leagues: 1 },
+      { name: 'USA', code: 'us', leagues: 1 },
+      { name: 'Brazil', code: 'br', leagues: 1 },
+      { name: 'Argentina', code: 'ar', leagues: 1 },
+      { name: 'Cuba', code: 'cu', leagues: 1 },
+      { name: 'Dominican Republic', code: 'do', leagues: 1 },
+      { name: 'Puerto Rico', code: 'pr', leagues: 1 },
+      { name: 'Mexico', code: 'mx', leagues: 1 },
+      { name: 'Canada', code: 'ca', leagues: 1 },
     ],
   },
 ];
@@ -266,7 +278,13 @@ export default function ClassicSaveWizard({ onClose }: { onClose: () => void }) 
                           {/* Content */}
                           <div className="pr-5">
                             <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-lg">{country.icon}</span>
+                              <Image
+                                src={`/assets/flags/${country.code}.svg`}
+                                alt={country.name}
+                                width={24}
+                                height={16}
+                                className="rounded-sm"
+                              />
                               <span className="font-display text-sm tracking-wide text-[var(--bone)]">
                                 {country.name}
                               </span>
