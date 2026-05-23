@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Unknown save type' }, { status: 400 });
     }
 
+    const existingSaves = authListSaves(session.userId);
+    if (existingSaves.length >= 5) {
+        return NextResponse.json({ error: 'Maximum of 5 saves allowed. Please delete a save to create a new one.' }, { status: 400 });
+    }
+
     const id = crypto.randomUUID();
     authCreateSave({ id, user_id: session.userId, name, save_type: 'classic', status: 'creating' });
     try {

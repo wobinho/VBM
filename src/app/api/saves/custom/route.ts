@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
-import { authCreateSave, authUpdateSaveStatus, authDeleteSave, authGetSave } from '@/lib/db/auth-db';
+import { authCreateSave, authUpdateSaveStatus, authDeleteSave, authGetSave, authListSaves } from '@/lib/db/auth-db';
 import { openSaveDb, openCatalogDb, dropSaveDb } from '@/lib/db';
 import { seedCustomWorld, validateAgainstCatalog } from '@/lib/seed-custom';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
@@ -17,6 +17,11 @@ export async function POST(req: NextRequest) {
     const config = (await req.json().catch(() => null)) as CustomWorldConfig | null;
     if (!config) {
         return NextResponse.json({ error: 'Invalid configuration' }, { status: 400 });
+    }
+
+    const existingSaves = authListSaves(session.userId);
+    if (existingSaves.length >= 5) {
+        return NextResponse.json({ error: 'Maximum of 5 saves allowed. Please delete a save to create a new one.' }, { status: 400 });
     }
 
     const catalogDb = openCatalogDb();

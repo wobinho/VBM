@@ -237,19 +237,29 @@ export default function SavePicker() {
 
                     {/* New save buttons */}
                     {!loading && (
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <button
-                                onClick={() => { setShowClassicWizard(true); setError(''); }}
-                                className="btn-ghost flex items-center justify-center gap-2"
-                            >
-                                <Plus size={14} /> New Classic Save
-                            </button>
-                            <button
-                                onClick={() => { setShowCustomWizard(true); setError(''); }}
-                                className="flex items-center justify-center gap-2 px-4 py-3 rounded border border-[var(--epic)]/30 bg-[var(--epic)]/[0.06] text-[var(--epic)] hover:bg-[var(--epic)]/[0.14] hover:border-[var(--epic)]/50 transition-all cursor-pointer font-mono text-xs uppercase tracking-[0.14em]"
-                            >
-                                <Sparkles size={13} /> Custom Save
-                            </button>
+                        <div className="space-y-2.5">
+                            {saves.length >= 5 && (
+                                <div className="flex items-center gap-2.5 p-3.5 rounded border border-[var(--volt)]/40 bg-[var(--volt)]/10 text-[var(--volt)] text-sm font-medium">
+                                    <AlertCircle size={14} className="shrink-0" />
+                                    <span className="flex-1">Save limit reached. Delete a save to create a new one.</span>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <button
+                                    onClick={() => { setShowClassicWizard(true); setError(''); }}
+                                    disabled={saves.length >= 5}
+                                    className="btn-ghost flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Plus size={14} /> New Classic Save
+                                </button>
+                                <button
+                                    onClick={() => { setShowCustomWizard(true); setError(''); }}
+                                    disabled={saves.length >= 5}
+                                    className="flex items-center justify-center gap-2 px-4 py-3 rounded border border-[var(--epic)]/30 bg-[var(--epic)]/[0.06] text-[var(--epic)] hover:bg-[var(--epic)]/[0.14] hover:border-[var(--epic)]/50 transition-all cursor-pointer font-mono text-xs uppercase tracking-[0.14em] disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Sparkles size={13} /> Custom Save
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
