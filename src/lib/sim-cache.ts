@@ -27,6 +27,7 @@ interface LineupRow {
 
 export interface SimCache {
   buildLineup: (teamId: number) => SimLineup;
+  buildFastStrengths: (teamId: number) => FastStrengths;
   updateFixtureResult: (id: number, r: ResultRow) => void;
   updateTeamStatsAfterMatch: (
     homeTeamId: number, awayTeamId: number,
@@ -105,6 +106,7 @@ export function createSimCache(): SimCache {
 
   const lineupCache = new Map<number, SimLineup>();
   const rosterCache = new Map<number, SimPlayer[]>();
+  const fastStrCache = new Map<number, FastStrengths>();
 
   function loadRoster(teamId: number): SimPlayer[] {
     let players = rosterCache.get(teamId);
@@ -162,8 +164,18 @@ export function createSimCache(): SimCache {
     incFor(ids.length).run(...ids);
   }
 
+  function getFastStrengths(teamId: number): FastStrengths {
+    let s = fastStrCache.get(teamId);
+    if (!s) {
+      s = buildFastStrengths(buildLineup(teamId));
+      fastStrCache.set(teamId, s);
+    }
+    return s;
+  }
+
   return {
     buildLineup,
+    buildFastStrengths: getFastStrengths,
     incrementMatchesPlayedForTeams,
 
     updateFixtureResult(id, r) {
@@ -203,6 +215,7 @@ export function createSimCache(): SimCache {
     invalidateTeam(teamId) {
       lineupCache.delete(teamId);
       rosterCache.delete(teamId);
+      fastStrCache.delete(teamId);
     },
   };
 }

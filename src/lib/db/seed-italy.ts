@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import type { LeagueConfig } from '../league-engine';
 import { calculateOverall } from '../overall';
+import { generateInitialStatPotentials } from '../potential-engine';
 
 /**
  * Idempotent Italian league seeder.
@@ -188,23 +189,19 @@ function insertItalianTeams(db: Database.Database, premierId: number, northId: n
     const teamIds: number[] = [];
 
     for (const name of PREMIER_NORTH_TEAMS) {
-        const money = randInt(10_000_000, 18_500_000);
-        const id = Number(insertTeam.run(name, premierId, 'north', money).lastInsertRowid);
+        const id = Number(insertTeam.run(name, premierId, 'north', 2_000_000).lastInsertRowid);
         teamIds.push(id);
     }
     for (const name of PREMIER_SOUTH_TEAMS) {
-        const money = randInt(10_000_000, 18_500_000);
-        const id = Number(insertTeam.run(name, premierId, 'south', money).lastInsertRowid);
+        const id = Number(insertTeam.run(name, premierId, 'south', 2_000_000).lastInsertRowid);
         teamIds.push(id);
     }
     for (const name of NORTH_FEEDER_TEAMS) {
-        const money = randInt(17_000_000, 18_500_000);
-        const id = Number(insertTeam.run(name, northId, 'north', money).lastInsertRowid);
+        const id = Number(insertTeam.run(name, northId, 'north', 750_000).lastInsertRowid);
         teamIds.push(id);
     }
     for (const name of SOUTH_FEEDER_TEAMS) {
-        const money = randInt(17_000_000, 18_500_000);
-        const id = Number(insertTeam.run(name, southId, 'south', money).lastInsertRowid);
+        const id = Number(insertTeam.run(name, southId, 'south', 750_000).lastInsertRowid);
         teamIds.push(id);
     }
 
@@ -230,18 +227,26 @@ const ITALIAN_LAST_NAMES = [
 function insertItalianPlayers(db: Database.Database, teamIds: number[]): void {
     const insertPlayer = db.prepare(`
         INSERT INTO players (
-            player_name, team_id, position, age, country, jersey_number, overall, potential,
+            player_name, team_id, position, age, country, jersey_number, overall,
             attack, defense, serve, block, receive, setting,
             precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
             speed, agility, strength, endurance, vertical, flexibility, torque, balance,
             leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+            attack_potential, defense_potential, serve_potential, block_potential, receive_potential, setting_potential,
+            precision_potential, flair_potential, digging_potential, positioning_potential, ball_control_potential, technique_potential, playmaking_potential, spin_potential,
+            speed_potential, agility_potential, strength_potential, endurance_potential, vertical_potential, flexibility_potential, torque_potential, balance_potential,
+            leadership_potential, teamwork_potential, concentration_potential, pressure_potential, consistency_potential, vision_potential, game_iq_potential, intimidation_potential,
             contract_years, monthly_wage, player_value
         ) VALUES (
-            @player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @potential,
+            @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
             @attack, @defense, @serve, @block, @receive, @setting,
             @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
             @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
             @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
+            @attack_potential, @defense_potential, @serve_potential, @block_potential, @receive_potential, @setting_potential,
+            @precision_potential, @flair_potential, @digging_potential, @positioning_potential, @ball_control_potential, @technique_potential, @playmaking_potential, @spin_potential,
+            @speed_potential, @agility_potential, @strength_potential, @endurance_potential, @vertical_potential, @flexibility_potential, @torque_potential, @balance_potential,
+            @leadership_potential, @teamwork_potential, @concentration_potential, @pressure_potential, @consistency_potential, @vision_potential, @game_iq_potential, @intimidation_potential,
             @contract_years, @monthly_wage, @player_value
         )
     `);
@@ -308,13 +313,12 @@ function generateItalianPlayer(teamId: number, jerseyNumber: number, position: s
         leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
     }, position);
 
-    let headroom: number;
-    if (age <= 20) headroom = randFloat(8, 20);
-    else if (age <= 23) headroom = randFloat(5, 14);
-    else if (age <= 26) headroom = randFloat(2, 9);
-    else if (age <= 30) headroom = randFloat(0, 5);
-    else headroom = randFloat(0, 2);
-    const potential = clamp(overall + headroom, overall, 99);
+    const statPotentials = generateInitialStatPotentials({
+        attack, defense, serve, block, receive, setting,
+        precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
+        speed, agility, strength, endurance, vertical, flexibility, torque, balance,
+        leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+    }, age, position);
 
     return {
         player_name: `${firstName} ${lastName}`,
@@ -324,11 +328,11 @@ function generateItalianPlayer(teamId: number, jerseyNumber: number, position: s
         country: 'Italy',
         jersey_number: jerseyNumber,
         overall,
-        potential,
         attack, defense, serve, block, receive, setting,
         precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
         speed, agility, strength, endurance, vertical, flexibility, torque, balance,
         leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+        ...statPotentials,
         contract_years: clamp(Math.round(randFloat(1, 5)), 1, 10),
         monthly_wage: Math.round(overall * randFloat(50, 200)),
         player_value: calculatePlayerValue(overall, age),

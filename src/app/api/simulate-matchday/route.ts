@@ -9,7 +9,7 @@ import {
   getUserTeam,
   getPlayoffGamesByDate, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch } from '@/lib/simulation-engine';
+import { runFastMatch } from '@/lib/fast-match';
 import { createSimCache } from '@/lib/sim-cache';
 
 /**
@@ -58,9 +58,9 @@ export const POST = withUserDb(async () => {
         continue;
       }
 
-      const homeLu = sim.buildLineup(f.home_team_id);
-      const awayLu = sim.buildLineup(f.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const homeStr = sim.buildFastStrengths(f.home_team_id);
+      const awayStr = sim.buildFastStrengths(f.away_team_id);
+      const result = runFastMatch(homeStr, awayStr);
 
       sim.updateFixtureResult(f.id, {
         home_sets:   result.homeSets,
@@ -95,9 +95,9 @@ export const POST = withUserDb(async () => {
         continue;
       }
 
-      const homeLu = sim.buildLineup(pg.home_team_id);
-      const awayLu = sim.buildLineup(pg.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const homeStr = sim.buildFastStrengths(pg.home_team_id);
+      const awayStr = sim.buildFastStrengths(pg.away_team_id);
+      const result = runFastMatch(homeStr, awayStr);
 
       recordPlayoffGameResult(pg.id, {
         home_sets:   result.homeSets,

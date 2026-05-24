@@ -7,7 +7,8 @@ import {
 } from './auth-db';
 import { generatePlayoffSchedule, getPlayoffRoundDates } from '../schedule-engine';
 import { generateScheduleForLeague, generatePostSeason, shouldGeneratePostSeason, processPromotionRelegationByConfig } from '../league-engine';
-import { calculateOverall as calcOvr, calculateOverallCapped, ALL_STAT_KEYS } from '../overall';
+import { calculateOverall as calcOvr, calculateOverallCapped, ALL_STAT_KEYS, ALL_POTENTIAL_KEYS, getPotentialOverall } from '../overall';
+import { recalculateSeasonPotentials } from '../potential-engine';
 import { computeEconomyMultipliers, type OfficeFacilityKey } from '../office/facilities';
 
 // ==================== TYPES ====================
@@ -15,7 +16,14 @@ export interface League { id: number; league_name: string; country?: string; tie
 export interface Team { id: number; team_name: string; league_id: number; team_money: number; played: number; won: number; lost: number; points: number; sets_won: number; sets_lost: number; score_diff: number; stadium: string; capacity: number; founded: string; country?: string; region?: string; created_at: string; updated_at: string; league_name?: string; win_rate?: number; }
 export interface Player {
     id: number; player_name: string; team_id: number | null; position: string; age: number; country: string;
-    jersey_number: number; overall: number; height?: number; potential?: number;
+    jersey_number: number; overall: number; height?: number;
+    /**
+     * Position-weighted aggregate of the 30 per-stat potentials. Not a column —
+     * computed by `recomputeOverall` whenever a player row is loaded. The
+     * legacy single `potential` column was dropped in favor of per-stat
+     * ceilings (`attack_potential`, `defense_potential`, …).
+     */
+    potential?: number;
     // Core Skills
     attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
     // Technical Skills
@@ -27,6 +35,19 @@ export interface Player {
     // Mental Skills
     leadership: number; teamwork: number; concentration: number; pressure: number;
     consistency: number; vision: number; game_iq: number; intimidation: number;
+    // Per-stat potentials (one ceiling per stat) — the `potential` field above
+    // is the position-weighted aggregate of these, computed on read.
+    attack_potential: number; defense_potential: number; serve_potential: number;
+    block_potential: number; receive_potential: number; setting_potential: number;
+    precision_potential: number; flair_potential: number; digging_potential: number;
+    positioning_potential: number; ball_control_potential: number; technique_potential: number;
+    playmaking_potential: number; spin_potential: number;
+    speed_potential: number; agility_potential: number; strength_potential: number;
+    endurance_potential: number; vertical_potential: number; flexibility_potential: number;
+    torque_potential: number; balance_potential: number;
+    leadership_potential: number; teamwork_potential: number; concentration_potential: number;
+    pressure_potential: number; consistency_potential: number; vision_potential: number;
+    game_iq_potential: number; intimidation_potential: number;
     // Contract
     contract_years: number; monthly_wage: number; player_value: number;
     // Career stats
@@ -76,8 +97,13 @@ function recomputeOverall(player: Player): Player {
     for (const k of ALL_STAT_KEYS) {
         stats[k] = (player as unknown as Record<string, number>)[k] ?? 50;
     }
-    const overall = calculateOverallCapped(stats, player.position ?? '', player.potential);
-    return { ...player, overall };
+    // Derive the "potential overall" from the 30 per-stat potential columns
+    // using the same position-weighted OVR formula. Populated on every load so
+    // callers can keep reading `player.potential` without hitting the gone
+    // single-potential column.
+    const potentialOverall = getPotentialOverall(player as unknown as Record<string, unknown>, player.position ?? '');
+    const overall = calculateOverallCapped(stats, player.position ?? '', potentialOverall);
+    return { ...player, overall, potential: potentialOverall };
 }
 
 // ==================== LEAGUES ====================
@@ -189,19 +215,31 @@ export function searchPlayers(term: string): Player[] {
 
 export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_at' | 'team_name'> & { id?: number }): number {
     const hasCustomId = data.id !== undefined;
-    const cols = `player_name, team_id, position, age, country, jersey_number, overall, height, potential,
+    const potCols = ALL_POTENTIAL_KEYS.join(', ');
+    const potVals = ALL_POTENTIAL_KEYS.map(k => `@${k}`).join(', ');
+    const cols = `player_name, team_id, position, age, country, jersey_number, overall, height,
           attack, defense, serve, block, receive, setting,
           precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
           speed, agility, strength, endurance, vertical, flexibility, torque, balance,
           leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+          ${potCols},
           contract_years, monthly_wage, player_value`;
-    const vals = `@player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @height, @potential,
+    const vals = `@player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @height,
           @attack, @defense, @serve, @block, @receive, @setting,
           @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
           @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
           @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
+          ${potVals},
           @contract_years, @monthly_wage, @player_value`;
-    const row = { height: null, potential: null, ...data } as Record<string, unknown>;
+    // Default any unspecified per-stat potential to the current stat value +
+    // a small headroom (8) so legacy callers that don't pass potentials still
+    // produce sensible players. The season recalc will rebuild these properly.
+    const defaults: Record<string, unknown> = { height: null };
+    for (const k of ALL_STAT_KEYS) {
+        const cur = (data as unknown as Record<string, number>)[k] ?? 50;
+        defaults[`${k}_potential`] = Math.min(100, cur + 8);
+    }
+    const row = { ...defaults, ...data } as Record<string, unknown>;
 
     if (hasCustomId) {
         getDb().prepare(`INSERT INTO players (id, ${cols}) VALUES (@id, ${vals})`).run(row);
@@ -215,11 +253,14 @@ export function createPlayer(data: Omit<Player, 'id' | 'created_at' | 'updated_a
 export function updatePlayer(originalId: number, data: Partial<Player> & { new_id?: number }) {
     const allowedFields = [
         'player_name', 'team_id', 'position', 'age', 'country', 'jersey_number', 'overall',
-        'height', 'potential',
+        'height',
         'attack', 'defense', 'serve', 'block', 'receive', 'setting',
         'precision', 'flair', 'digging', 'positioning', 'ball_control', 'technique', 'playmaking', 'spin',
         'speed', 'agility', 'strength', 'endurance', 'vertical', 'flexibility', 'torque', 'balance',
         'leadership', 'teamwork', 'concentration', 'pressure', 'consistency', 'vision', 'game_iq', 'intimidation',
+        // Per-stat potentials — the legacy single `potential` field is now a
+        // computed property and rejected silently (no column to write to).
+        ...ALL_POTENTIAL_KEYS,
         'contract_years', 'monthly_wage', 'player_value',
     ];
     const updates: Record<string, unknown> = {};
@@ -1162,6 +1203,17 @@ export function endSeason(): EndSeasonResult {
       });
     }
   })();
+
+  // Step 1c: Per-stat potential recalculation. Runs BEFORE age increment so
+  // age modifiers reflect the season just played. Each player's 30 stat
+  // potentials drift up/down based on age + last season's per-stat output
+  // (spikes/blocks/aces/digs/matches/team success). When a potential drops
+  // below the current stat, that stat decays one tick toward the new ceiling.
+  recalculateSeasonPotentials(db, oldYear);
+
+  // Step 1d: Age every player by 1 year so the new season uses the correct
+  // age in training, valuation, and next year's potential recalc.
+  db.prepare('UPDATE players SET age = age + 1').run();
 
   // Step 2: Process promotion / relegation (modifies teams.league_id)
   const promotion = processPromotionRelegation();

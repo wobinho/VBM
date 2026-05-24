@@ -128,23 +128,47 @@ export function autoLineup(players: SimPlayer[]): SimLineup {
 
 export function pickOne<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
+function luEndurance(lu: SimLineup): number {
+    let sum = 0, n = 0;
+    if (lu.OH1) { sum += lu.OH1.endurance; n++; }
+    if (lu.MB1) { sum += lu.MB1.endurance; n++; }
+    if (lu.OPP) { sum += lu.OPP.endurance; n++; }
+    if (lu.S)   { sum += lu.S.endurance;   n++; }
+    if (lu.MB2) { sum += lu.MB2.endurance; n++; }
+    if (lu.OH2) { sum += lu.OH2.endurance; n++; }
+    if (lu.L)   { sum += lu.L.endurance;   n++; }
+    return n ? sum / n : 50;
+}
+
 export function weightedPick(players: SimPlayer[], weightFn: (p: SimPlayer) => number): SimPlayer {
-    const weights = players.map(weightFn);
-    const total = weights.reduce((s, w) => s + Math.max(0.1, w), 0);
+    const n = players.length;
+    const weights = new Array<number>(n);
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        const w = Math.max(0.1, weightFn(players[i]));
+        weights[i] = w;
+        total += w;
+    }
     let r = Math.random() * total;
-    for (let i = 0; i < players.length; i++) {
-        r -= Math.max(0.1, weights[i]);
+    for (let i = 0; i < n; i++) {
+        r -= weights[i];
         if (r <= 0) return players[i];
     }
-    return players[players.length - 1];
+    return players[n - 1];
 }
 
 export function pickServer(lu: SimLineup): SimPlayer | null {
-    const all = Object.values(lu).filter(Boolean) as SimPlayer[];
-    if (!all.length) return null;
-    // Liberos do not serve in standard indoor volleyball
-    const eligible = all.filter(p => p.position !== 'Libero');
-    const pool = eligible.length ? eligible : all;
+    const pool: SimPlayer[] = [];
+    if (lu.OH1) pool.push(lu.OH1);
+    if (lu.MB1) pool.push(lu.MB1);
+    if (lu.OPP) pool.push(lu.OPP);
+    if (lu.S)   pool.push(lu.S);
+    if (lu.MB2) pool.push(lu.MB2);
+    if (lu.OH2) pool.push(lu.OH2);
+    if (!pool.length) {
+        if (lu.L) pool.push(lu.L);
+        else return null;
+    }
     return weightedPick(pool, p => p.serve * 0.40 + p.technique * 0.25 + p.spin * 0.20 + p.agility * 0.15);
 }
 
@@ -257,8 +281,8 @@ export function simulateRally(
     if (cAtkQ > cBlkQ + 18) return { servingWins: false, eventType: 'dig_winner', text: describePoint('dig_winner', { attacker: attacker?.player_name, digger: digger?.player_name }, rName, sName), players: { attacker: attacker?.player_name, digger: digger?.player_name }, teams: { attackerTeam: sTeam, receiverTeam: rTeam }, attackerRef: cAttacker ?? undefined, diggerRef: digger ?? undefined };
     const sRallyBonus = sLu.S ? (sLu.S.vision * 0.5 + sLu.S.game_iq * 0.5) * 0.02 : 0;
     const rRallyBonus = rLu.S ? (rLu.S.vision * 0.5 + rLu.S.game_iq * 0.5) * 0.02 : 0;
-    const sEndurance = avg(Object.values(sLu).filter(Boolean).map((p) => (p as SimPlayer).endurance));
-    const rEndurance = avg(Object.values(rLu).filter(Boolean).map((p) => (p as SimPlayer).endurance));
+    const sEndurance = luEndurance(sLu);
+    const rEndurance = luEndurance(rLu);
     const sMental = (sStr.mental + sRallyBonus + sEndurance * 0.05) * (1 + (sChem - 1) * 0.1);
     const rMental = (rStr.mental + rRallyBonus + rEndurance * 0.05) * (1 + (rChem - 1) * 0.1);
     const mentalAdv = (sMental - rMental) * 0.4 + (rng() - 0.5) * 80;

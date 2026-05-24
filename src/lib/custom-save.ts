@@ -50,10 +50,38 @@ export interface CustomCupConfig {
     window: CustomCupWindow;
 }
 
+/**
+ * A user-defined player for the fantasy-draft pool. Every stat is provided
+ * directly — no generation. `overall` is derived from the stats at seed time
+ * so the field is optional in input. Position must be one of DRAFT_POSITIONS.
+ */
+export interface CustomPlayerDef {
+    player_name: string;
+    position: string;          // one of DRAFT_POSITIONS
+    age: number;
+    country: string;
+    jersey_number: number;
+    height: number;
+    potential: number;
+    contract_years: number;
+    monthly_wage: number;
+    player_value: number;
+    // 30 ability stats — same shape as GeneratedPlayer in player-gen.ts.
+    attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
+    precision: number; flair: number; digging: number; positioning: number;
+    ball_control: number; technique: number; playmaking: number; spin: number;
+    speed: number; agility: number; strength: number; endurance: number;
+    vertical: number; flexibility: number; torque: number; balance: number;
+    leadership: number; teamwork: number; concentration: number; pressure: number;
+    consistency: number; vision: number; game_iq: number; intimidation: number;
+}
+
 /** Fantasy-draft setup for a custom save. */
 export interface CustomDraftConfig {
     enabled: boolean;
-    pool: 'existing' | 'generated' | 'mixed';
+    pool: 'existing' | 'generated' | 'mixed' | 'custom';
+    /** Required when pool === 'custom'. Ignored for the other modes. */
+    customPlayers?: CustomPlayerDef[];
 }
 
 export interface CustomWorldConfig {
@@ -81,7 +109,7 @@ export const MAX_CUP_NAME = 40;
 export const CUP_BLOCK_START_MONTH = 7;
 export const CUP_BLOCK_END_MONTH = 12;
 
-export const ALLOWED_DRAFT_POOLS = ['existing', 'generated', 'mixed'] as const;
+export const ALLOWED_DRAFT_POOLS = ['existing', 'generated', 'mixed', 'custom'] as const;
 /** Roster make-up every team must end the draft with (7 players total). */
 export const DRAFT_QUOTA: Record<string, number> = {
     'Outside Hitter': 2, 'Middle Blocker': 2, 'Opposite Hitter': 1, 'Setter': 1, 'Libero': 1,
@@ -304,9 +332,73 @@ export function validateCustomWorldConfig(config: CustomWorldConfig): string[] {
 
     // ── Draft ──
     const draft = config.draft;
-    if (draft?.enabled && !ALLOWED_DRAFT_POOLS.includes(draft.pool)) {
-        errors.push('Choose a valid draft player pool.');
+    if (draft?.enabled) {
+        if (!ALLOWED_DRAFT_POOLS.includes(draft.pool)) {
+            errors.push('Choose a valid draft player pool.');
+        } else if (draft.pool === 'custom') {
+            // For the custom pool we need enough user-defined players to fill
+            // the roster quota for every team in the save.
+            const totalTeams = allTeamIds.length;
+            const players = draft.customPlayers ?? [];
+            if (players.length === 0) {
+                errors.push('The Custom player pool needs at least one player.');
+            }
+
+            // Per-player structural checks.
+            const validPositions = new Set(DRAFT_POSITIONS);
+            const inRange = (v: unknown): boolean =>
+                typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 100;
+            const positionCounts: Record<string, number> = {};
+            players.forEach((p, i) => {
+                const label = (p?.player_name || `Player ${i + 1}`).trim() || `Player ${i + 1}`;
+                if (!p?.player_name || !p.player_name.trim()) {
+                    errors.push(`Custom players: row ${i + 1} needs a name.`);
+                }
+                if (!validPositions.has(p?.position)) {
+                    errors.push(`${label}: position must be one of ${DRAFT_POSITIONS.join(', ')}.`);
+                }
+                for (const k of CUSTOM_PLAYER_STAT_KEYS) {
+                    if (!inRange((p as unknown as Record<string, unknown>)?.[k])) {
+                        errors.push(`${label}: "${k}" must be a number between 1 and 100.`);
+                        break; // one error per player is enough
+                    }
+                }
+                if (!Number.isFinite(p?.age) || p.age < 14 || p.age > 60) {
+                    errors.push(`${label}: age must be between 14 and 60.`);
+                }
+                if (!Number.isFinite(p?.height) || p.height < 140 || p.height > 230) {
+                    errors.push(`${label}: height must be between 140 and 230 cm.`);
+                }
+                if (!Number.isFinite(p?.potential) || p.potential < 1 || p.potential > 99) {
+                    errors.push(`${label}: potential must be between 1 and 99.`);
+                }
+                if (validPositions.has(p?.position)) {
+                    positionCounts[p.position] = (positionCounts[p.position] ?? 0) + 1;
+                }
+            });
+
+            // Quota check — the draft assigns 7 players per team, with a fixed
+            // per-position make-up. The pool must contain at least that many of
+            // every position so every team can be filled.
+            if (totalTeams > 0 && players.length > 0) {
+                for (const [pos, perTeam] of Object.entries(DRAFT_QUOTA)) {
+                    const need = perTeam * totalTeams;
+                    const have = positionCounts[pos] ?? 0;
+                    if (have < need) {
+                        errors.push(`Custom players: need at least ${need} ${pos}${need !== 1 ? 's' : ''} for ${totalTeams} teams (have ${have}).`);
+                    }
+                }
+            }
+        }
     }
 
     return errors;
 }
+
+/** Stat keys a CustomPlayerDef must supply — used by the validator and the wizard. */
+export const CUSTOM_PLAYER_STAT_KEYS = [
+    'attack', 'defense', 'serve', 'block', 'receive', 'setting',
+    'precision', 'flair', 'digging', 'positioning', 'ball_control', 'technique', 'playmaking', 'spin',
+    'speed', 'agility', 'strength', 'endurance', 'vertical', 'flexibility', 'torque', 'balance',
+    'leadership', 'teamwork', 'concentration', 'pressure', 'consistency', 'vision', 'game_iq', 'intimidation',
+] as const;

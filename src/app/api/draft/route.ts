@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { getDb } from '@/lib/db';
 import { withUserDb } from '@/lib/db/with-user-db';
 import { getUserTeam } from '@/lib/db/queries';
+import { getPotentialOverall } from '@/lib/overall';
 import { autoPickLineup } from '@/lib/seed-custom';
 import { DRAFT_QUOTA, DRAFT_ROSTER_SIZE } from '@/lib/custom-save';
 import { sessionOptions, SessionData } from '@/lib/auth/session';
@@ -19,12 +20,17 @@ export const GET = withUserDb(async () => {
     const poolMode = (db.prepare("SELECT value FROM world_meta WHERE key = 'draft_pool_mode'")
         .get() as { value: string } | undefined)?.value ?? 'existing';
 
-    const pool = db.prepare(`
-        SELECT id, player_name, position, age, country, overall, potential,
-               attack, block, serve, receive, setting, digging
-        FROM players WHERE team_id IS NULL
+    // SELECT * so we get all 30 per-stat potential columns; the draft UI
+    // computes the overall potential from them via getPotentialOverall on the
+    // client side. The pool is small (one draft cycle) so the extra columns
+    // are negligible.
+    const pool = (db.prepare(`
+        SELECT * FROM players WHERE team_id IS NULL
         ORDER BY overall DESC
-    `).all();
+    `).all() as Record<string, unknown>[]).map(p => ({
+        ...p,
+        potential: getPotentialOverall(p, String(p.position)),
+    }));
 
     const teams = db.prepare(`
         SELECT t.id, t.team_name, l.league_name

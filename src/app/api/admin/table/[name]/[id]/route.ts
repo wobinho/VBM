@@ -20,10 +20,15 @@ export const PUT = withUserDb(async (
       return NextResponse.json({ error: 'Invalid table name' }, { status: 400 });
     }
 
-    const updates = Object.entries(body)
-      .map(([key]) => `${key} = ?`)
-      .join(', ');
-    const values = Object.values(body);
+    const schemaColumns = (db.prepare(`PRAGMA table_info(${name})`).all() as { name: string }[]).map(c => c.name);
+    const allowedKeys = Object.keys(body).filter(k => schemaColumns.includes(k) && k !== 'id');
+
+    if (allowedKeys.length === 0) {
+      return NextResponse.json({ error: 'No valid columns provided' }, { status: 400 });
+    }
+
+    const updates = allowedKeys.map(k => `${k} = ?`).join(', ');
+    const values = allowedKeys.map(k => body[k]);
 
     db.prepare(`UPDATE ${name} SET ${updates} WHERE id = ?`).run(...values, id);
 

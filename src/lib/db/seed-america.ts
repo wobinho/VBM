@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import type { LeagueConfig } from '../league-engine';
 import { calculateOverall } from '../overall';
+import { generateInitialStatPotentials } from '../potential-engine';
 
 /**
  * Idempotent American (North + South + Central) seeder.
@@ -63,18 +64,26 @@ export function seedAmerica(db: Database.Database, countries?: string[]): void {
         );
         const insertPlayer = db.prepare(`
             INSERT INTO players (
-                player_name, team_id, position, age, country, jersey_number, overall, potential,
+                player_name, team_id, position, age, country, jersey_number, overall,
                 attack, defense, serve, block, receive, setting,
                 precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
                 speed, agility, strength, endurance, vertical, flexibility, torque, balance,
                 leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+                attack_potential, defense_potential, serve_potential, block_potential, receive_potential, setting_potential,
+                precision_potential, flair_potential, digging_potential, positioning_potential, ball_control_potential, technique_potential, playmaking_potential, spin_potential,
+                speed_potential, agility_potential, strength_potential, endurance_potential, vertical_potential, flexibility_potential, torque_potential, balance_potential,
+                leadership_potential, teamwork_potential, concentration_potential, pressure_potential, consistency_potential, vision_potential, game_iq_potential, intimidation_potential,
                 contract_years, monthly_wage, player_value
             ) VALUES (
-                @player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @potential,
+                @player_name, @team_id, @position, @age, @country, @jersey_number, @overall,
                 @attack, @defense, @serve, @block, @receive, @setting,
                 @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
                 @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
                 @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
+                @attack_potential, @defense_potential, @serve_potential, @block_potential, @receive_potential, @setting_potential,
+                @precision_potential, @flair_potential, @digging_potential, @positioning_potential, @ball_control_potential, @technique_potential, @playmaking_potential, @spin_potential,
+                @speed_potential, @agility_potential, @strength_potential, @endurance_potential, @vertical_potential, @flexibility_potential, @torque_potential, @balance_potential,
+                @leadership_potential, @teamwork_potential, @concentration_potential, @pressure_potential, @consistency_potential, @vision_potential, @game_iq_potential, @intimidation_potential,
                 @contract_years, @monthly_wage, @player_value
             )
         `);
@@ -90,8 +99,7 @@ export function seedAmerica(db: Database.Database, countries?: string[]): void {
             insertCfg.run(leagueId, JSON.stringify(americanConfig));
 
             for (const teamName of seed.teams) {
-                const money = randInt(10_000_000, 18_500_000);
-                const teamId = Number(insertTeam.run(teamName, leagueId, seed.country, money).lastInsertRowid);
+                const teamId = Number(insertTeam.run(teamName, leagueId, seed.country, 1_500_000).lastInsertRowid);
 
                 const usedJerseys = new Set<number>();
                 for (let p = 0; p < 7; p++) {
@@ -369,13 +377,12 @@ function generateAmericanPlayer(teamId: number, jerseyNumber: number, position: 
         leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
     }, position);
 
-    let headroom: number;
-    if (age <= 20) headroom = randFloat(8, 20);
-    else if (age <= 23) headroom = randFloat(5, 14);
-    else if (age <= 26) headroom = randFloat(2, 9);
-    else if (age <= 30) headroom = randFloat(0, 5);
-    else headroom = randFloat(0, 2);
-    const potential = clamp(overall + headroom, overall, 99);
+    const statPotentials = generateInitialStatPotentials({
+        attack, defense, serve, block, receive, setting,
+        precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
+        speed, agility, strength, endurance, vertical, flexibility, torque, balance,
+        leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+    }, age, position);
 
     return {
         player_name: `${firstName} ${lastName}`,
@@ -385,11 +392,11 @@ function generateAmericanPlayer(teamId: number, jerseyNumber: number, position: 
         country: seed.country,
         jersey_number: jerseyNumber,
         overall,
-        potential,
         attack, defense, serve, block, receive, setting,
         precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
         speed, agility, strength, endurance, vertical, flexibility, torque, balance,
         leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+        ...statPotentials,
         contract_years: clamp(Math.round(randFloat(1, 5)), 1, 10),
         monthly_wage: Math.round(overall * randFloat(50, 200)),
         player_value: calculatePlayerValue(overall, age),

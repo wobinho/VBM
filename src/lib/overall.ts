@@ -14,6 +14,17 @@ export const ALL_STAT_KEYS = [
 
 export type StatKey = typeof ALL_STAT_KEYS[number];
 
+/** Column name on `players` that holds the per-stat potential ceiling. */
+export type PotentialKey = `${StatKey}_potential`;
+
+export const ALL_POTENTIAL_KEYS: readonly PotentialKey[] = ALL_STAT_KEYS.map(
+  k => `${k}_potential` as PotentialKey,
+);
+
+export function potentialKeyFor(stat: StatKey): PotentialKey {
+  return `${stat}_potential` as PotentialKey;
+}
+
 export interface PositionGrouping {
   main1: StatKey;
   main2: StatKey;
@@ -83,16 +94,34 @@ export function calculateOverall(stats: Record<string, number>, position: string
 }
 
 /**
- * Overall with a hard cap at the player's potential. Used everywhere the
- * displayed/stored overall is derived — a player's overall can never exceed
- * their potential, regardless of how high individual stats climb.
+ * The player's overall "potential" — derived from the 30 per-stat potentials
+ * using the same position-weighted OVR formula. Reads `{stat}_potential`
+ * columns from the player row.
+ */
+export function getPotentialOverall(
+  player: Record<string, unknown>,
+  position: string,
+): number {
+  const statPotentials: Record<string, number> = {};
+  for (const stat of ALL_STAT_KEYS) {
+    const v = player[potentialKeyFor(stat)];
+    statPotentials[stat] = typeof v === 'number' ? v : 50;
+  }
+  return calculateOverall(statPotentials, position);
+}
+
+/**
+ * Overall with a hard cap at the player's potential overall. Used everywhere
+ * the displayed/stored overall is derived — a player's overall can never
+ * exceed their derived potential, regardless of how high individual stats
+ * climb.
  */
 export function calculateOverallCapped(
   stats: Record<string, number>,
   position: string,
-  potential: number | null | undefined,
+  potentialOverall: number | null | undefined,
 ): number {
   const ovr = calculateOverall(stats, position);
-  if (potential == null) return ovr;
-  return Math.min(ovr, potential);
+  if (potentialOverall == null) return ovr;
+  return Math.min(ovr, potentialOverall);
 }

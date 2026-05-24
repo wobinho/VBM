@@ -5,7 +5,8 @@ import {
   getGameState, advanceGameDate, getFixtures, getPlayoffGamesByDate,
   runMonthlyEconomy, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch, PlayerStatLine } from '@/lib/simulation-engine';
+import { runFastMatch } from '@/lib/fast-match';
+import type { PlayerStatLine } from '@/lib/simulation-engine';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 import { createSimCache } from '@/lib/sim-cache';
 
@@ -126,9 +127,9 @@ export const POST = withUserDb(async (req) => {
 
               if (fixtures.length > 0) {
                 for (const f of fixtures) {
-                  const homeLu = sim.buildLineup(f.home_team_id);
-                  const awayLu = sim.buildLineup(f.away_team_id);
-                  const result = runFullMatch(homeLu, awayLu, f.home_team_id, f.away_team_id);
+                  const homeStr = sim.buildFastStrengths(f.home_team_id);
+                  const awayStr = sim.buildFastStrengths(f.away_team_id);
+                  const result = runFastMatch(homeStr, awayStr, f.home_team_id, f.away_team_id);
                   sim.updateFixtureResult(f.id, {
                     home_sets:   result.homeSets,
                     away_sets:   result.awaySets,
@@ -159,9 +160,9 @@ export const POST = withUserDb(async (req) => {
                 for (const pg of playoffGames) {
                   if (pg.status === 'completed') continue;
 
-                  const homeLu = sim.buildLineup(pg.home_team_id);
-                  const awayLu = sim.buildLineup(pg.away_team_id);
-                  const result = runFullMatch(homeLu, awayLu, pg.home_team_id, pg.away_team_id);
+                  const homeStr = sim.buildFastStrengths(pg.home_team_id);
+                  const awayStr = sim.buildFastStrengths(pg.away_team_id);
+                  const result = runFastMatch(homeStr, awayStr, pg.home_team_id, pg.away_team_id);
 
                   recordPlayoffGameResult(pg.id, {
                     home_sets:   result.homeSets,
@@ -188,9 +189,9 @@ export const POST = withUserDb(async (req) => {
                 for (const cf of cupFixtures) {
                   if (cf.status === 'completed') continue;
 
-                  const homeLu = sim.buildLineup(cf.home_team_id);
-                  const awayLu = sim.buildLineup(cf.away_team_id);
-                  const result = runFullMatch(homeLu, awayLu, cf.home_team_id, cf.away_team_id);
+                  const homeStr = sim.buildFastStrengths(cf.home_team_id);
+                  const awayStr = sim.buildFastStrengths(cf.away_team_id);
+                  const result = runFastMatch(homeStr, awayStr, cf.home_team_id, cf.away_team_id);
 
                   recordCupFixtureResult(cf.id, {
                     home_sets:   result.homeSets,

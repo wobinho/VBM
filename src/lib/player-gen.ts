@@ -5,7 +5,8 @@
  * "generated" and "mixed" pool modes). Stat distribution mirrors the country
  * seed files so generated players sit naturally alongside real ones.
  */
-import { calculateOverall } from './overall';
+import { calculateOverall, ALL_STAT_KEYS } from './overall';
+import { generateInitialStatPotentials } from './potential-engine';
 
 const FIRST_NAMES = [
     'Lucas', 'Mateo', 'Hugo', 'Leon', 'Adam', 'Noah', 'Liam', 'Ethan', 'Marco', 'Andrei',
@@ -59,7 +60,6 @@ export interface GeneratedPlayer {
     country: string;
     jersey_number: number;
     overall: number;
-    potential: number;
     height: number;
     attack: number; defense: number; serve: number; block: number; receive: number; setting: number;
     precision: number; flair: number; digging: number; positioning: number; ball_control: number;
@@ -68,6 +68,8 @@ export interface GeneratedPlayer {
     flexibility: number; torque: number; balance: number;
     leadership: number; teamwork: number; concentration: number; pressure: number; consistency: number;
     vision: number; game_iq: number; intimidation: number;
+    // Per-stat potentials — each has the corresponding `{stat}_potential` key.
+    [potentialKey: string]: number | string;
     contract_years: number; monthly_wage: number; player_value: number;
 }
 
@@ -89,13 +91,11 @@ export function generatePlayer(position: string): GeneratedPlayer {
 
     const overall = calculateOverall(stats, position);
 
-    let headroom: number;
-    if (age <= 20) headroom = randFloat(8, 20);
-    else if (age <= 23) headroom = randFloat(5, 14);
-    else if (age <= 26) headroom = randFloat(2, 9);
-    else if (age <= 30) headroom = randFloat(0, 5);
-    else headroom = randFloat(0, 2);
-    const potential = clamp(overall + headroom, overall, 99);
+    // Per-stat potentials — replaces the single legacy `potential` value.
+    // Each of the 30 stats gets its own ceiling so a Setter's attack_potential
+    // can be modest while their setting_potential is high.
+    const statRecord = stats as Record<string, number>;
+    const statPotentials = generateInitialStatPotentials(statRecord, age, position);
 
     const [hMin, hMax] = HEIGHT_BY_POSITION[position] ?? [185, 202];
 
@@ -109,11 +109,14 @@ export function generatePlayer(position: string): GeneratedPlayer {
         country: pick(NATIONALITIES),
         jersey_number: randInt(1, 99),
         overall,
-        potential,
         height: randInt(hMin, hMax),
         ...stats,
+        ...statPotentials,
         contract_years: clamp(randFloat(1, 5), 1, 10),
         monthly_wage: Math.round(overall * randFloat(50, 200)),
         player_value: Math.round(baseValue * ageMod),
-    };
+    } as GeneratedPlayer;
 }
+
+// Re-export so callers don't need to know the dual module structure.
+export { ALL_STAT_KEYS };

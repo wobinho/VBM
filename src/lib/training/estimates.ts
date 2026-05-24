@@ -1,5 +1,5 @@
-import { TRAINING_PLANS, type TrainingPlanKey, getPlanByKey } from './plans';
-import { calculateOverall, POSITION_GROUPINGS } from '@/lib/overall';
+import { type TrainingPlanKey, getPlanByKey } from './plans';
+import { calculateOverall, POSITION_GROUPINGS, potentialKeyFor, type StatKey } from '@/lib/overall';
 import { stackedStatMultiplier, STAT_TO_FACILITIES } from './facilities';
 
 /** Mirror of the engine's position-relevance multiplier — must stay in sync. */
@@ -39,9 +39,13 @@ function getStatResistance(statValue: number): number {
   return 0.30;
 }
 
-function getPotentialCapFactor(currentOverall: number, potential: number): number {
-  if (currentOverall >= potential) return 0;
-  const diff = potential - currentOverall;
+/**
+ * Per-stat cap factor — mirrors engine.ts. A stat slows as it approaches its
+ * own potential ceiling and stops entirely when it reaches it.
+ */
+function getPotentialCapFactor(currentStat: number, statPotential: number): number {
+  if (currentStat >= statPotential) return 0;
+  const diff = statPotential - currentStat;
   if (diff <= 2) return 0.20;
   if (diff <= 5) return 0.45;
   return 1.00;
@@ -60,24 +64,29 @@ function getAgePassiveMultiplier(age: number): number {
   return 1.8;
 }
 
+/** Read a stat's per-stat potential off the player row. */
+function statPotentialOf(player: Record<string, unknown>, stat: string): number {
+  const v = player[potentialKeyFor(stat as StatKey)];
+  return typeof v === 'number' ? v : 99;
+}
+
 /** Daily gain (real, not integer) on a targeted stat given current conditions. */
 export function dailyGainForTrainedStat(
   statValue: number,
-  potential: number,
+  statPotential: number,
   age: number,
   statKey: string,
   facilityLevels: Record<string, number>,
   coachQuality: number = 0,
   position: string = '',
-  currentOverall: number = statValue,
 ): number {
-  if (currentOverall >= potential) return 0;
+  if (statValue >= statPotential) return 0;
   if (statValue >= 100) return 0;
   const facilityMult = stackedStatMultiplier(statKey, facilityLevels);
   const coachMult = coachQuality > 0 ? 1 + getCoachBonus(coachQuality) : 1.0;
   const ageMult = getAgeMultiplier(age);
   const resistance = getStatResistance(statValue);
-  const capFactor = getPotentialCapFactor(currentOverall, potential);
+  const capFactor = getPotentialCapFactor(statValue, statPotential);
   const positionMult = position ? getPositionRelevance(statKey, position) : 1.0;
   return BASE_RATE * ageMult * resistance * capFactor * facilityMult * coachMult * positionMult;
 }
@@ -85,15 +94,17 @@ export function dailyGainForTrainedStat(
 /** Daily drift (real) on a passive (non-targeted) stat. */
 export function dailyDriftForPassiveStat(
   statValue: number,
-  potential: number,
+  statPotential: number,
   age: number,
   statKey: string,
   facilityLevels: Record<string, number>,
-  currentOverall: number = statValue,
 ): number {
   const facilityMult = stackedStatMultiplier(statKey, facilityLevels);
   const ageMult = getAgePassiveMultiplier(age);
-  const capFactor = getPotentialCapFactor(currentOverall, potential);
+  const capFactor = getPotentialCapFactor(statValue, statPotential);
+  // Decay toward a lowered ceiling — if current stat exceeds its potential,
+  // pull it down rather than letting cap factor zero out the drift.
+  if (statValue > statPotential) return -PASSIVE_RATE;
   if (age <= 29) return PASSIVE_RATE * ageMult * capFactor * facilityMult;
   if (PHYSICAL_STATS.has(statKey)) return -PASSIVE_RATE * ageMult * 0.5;
   return PASSIVE_RATE * 0.3 * capFactor * facilityMult;
@@ -101,16 +112,15 @@ export function dailyDriftForPassiveStat(
 
 export function daysToNextPoint(
   statValue: number,
-  potential: number,
+  statPotential: number,
   age: number,
   statKey: string,
   facilityLevels: Record<string, number>,
   coachQuality: number = 0,
   position: string = '',
-  currentOverall: number = statValue,
 ): number | null {
-  if (currentOverall >= potential) return null;
-  const g = dailyGainForTrainedStat(statValue, potential, age, statKey, facilityLevels, coachQuality, position, currentOverall);
+  if (statValue >= statPotential) return null;
+  const g = dailyGainForTrainedStat(statValue, statPotential, age, statKey, facilityLevels, coachQuality, position);
   if (g <= 0) return null;
   return Math.ceil(1 / g);
 }
@@ -145,7 +155,6 @@ export function projectSeason(
   for (const s of ALL_STATS) sim[s] = player[s] ?? 50;
 
   const currentOverall = calculateOverall(player, player.position);
-  const potential = player.potential ?? 99;
 
   // Simulate day-by-day at low resolution. Each day adds float drift; we
   // floor at the end to mirror tickTraining's integer-stat semantics.
@@ -153,18 +162,16 @@ export function projectSeason(
   for (const s of ALL_STATS) accum[s] = 0;
 
   for (let d = 0; d < days; d++) {
-    let simOverall = calculateOverall(sim, player.position);
     // Targeted stats
     if (plan) {
       for (const s of plan.stats as string[]) {
-        const g = dailyGainForTrainedStat(sim[s], potential, player.age, s, facilityLevels, coachQuality, player.position, simOverall);
+        const statPot = statPotentialOf(player, s);
+        const g = dailyGainForTrainedStat(sim[s], statPot, player.age, s, facilityLevels, coachQuality, player.position);
         accum[s] += g;
         while (accum[s] >= 1 && sim[s] < 100) {
           const next = sim[s] + 1;
-          const nextOverall = calculateOverall({ ...sim, [s]: next }, player.position);
-          if (nextOverall > potential && nextOverall > simOverall) { accum[s] = 0; break; }
+          if (next > statPot) { accum[s] = 0; break; }
           sim[s] = next;
-          simOverall = nextOverall;
           accum[s] -= 1;
         }
       }
@@ -172,37 +179,37 @@ export function projectSeason(
     // Passive stats
     for (const s of ALL_STATS) {
       if (trained.has(s)) continue;
-      const drift = dailyDriftForPassiveStat(sim[s], potential, player.age, s, facilityLevels, simOverall);
+      const statPot = statPotentialOf(player, s);
+      const drift = dailyDriftForPassiveStat(sim[s], statPot, player.age, s, facilityLevels);
       accum[s] += drift;
       while (Math.abs(accum[s]) >= 1) {
         const step = accum[s] >= 1 ? 1 : -1;
         const target = Math.max(1, Math.min(sim[s] + step, 100));
         if (target === sim[s]) { accum[s] = 0; break; }
-        if (step > 0) {
-          const nextOverall = calculateOverall({ ...sim, [s]: target }, player.position);
-          if (nextOverall > potential && nextOverall > simOverall) { accum[s] = 0; break; }
-          simOverall = nextOverall;
-        }
+        if (step > 0 && target > statPot) { accum[s] = 0; break; }
         sim[s] = target;
         accum[s] -= step;
       }
     }
   }
 
-  const stats: StatProjection[] = ALL_STATS.map(s => ({
-    statKey: s,
-    current: player[s] ?? 50,
-    projected: sim[s],
-    potential: player.potential,
-    delta: sim[s] - (player[s] ?? 50),
-    dailyGain: trained.has(s)
-      ? dailyGainForTrainedStat(player[s] ?? 50, potential, player.age, s, facilityLevels, coachQuality, player.position, currentOverall)
-      : dailyDriftForPassiveStat(player[s] ?? 50, potential, player.age, s, facilityLevels, currentOverall),
-    isTrained: trained.has(s),
-  }));
+  const stats: StatProjection[] = ALL_STATS.map(s => {
+    const statPot = statPotentialOf(player, s);
+    return {
+      statKey: s,
+      current: player[s] ?? 50,
+      projected: sim[s],
+      potential: statPot,
+      delta: sim[s] - (player[s] ?? 50),
+      dailyGain: trained.has(s)
+        ? dailyGainForTrainedStat(player[s] ?? 50, statPot, player.age, s, facilityLevels, coachQuality, player.position)
+        : dailyDriftForPassiveStat(player[s] ?? 50, statPot, player.age, s, facilityLevels),
+      isTrained: trained.has(s),
+    };
+  });
 
   const projectedPlayer = { ...player, ...sim };
-  const projectedOverall = Math.min(calculateOverall(projectedPlayer, player.position), potential);
+  const projectedOverall = calculateOverall(projectedPlayer, player.position);
 
   return {
     stats,
@@ -225,30 +232,25 @@ export function estimateDaysToNextOvr(
 
   const maxDays = 365;
   const coachQuality = coachMap.get(planKey) || 0;
-  const potential = player.potential ?? 99;
-  if (currentOvr >= potential) return null;
   const sim: Record<string, number> = {};
   for (const s of ALL_STATS) sim[s] = player[s] ?? 50;
   const accum: Record<string, number> = {};
   for (const s of ALL_STATS) accum[s] = 0;
 
   for (let day = 1; day <= maxDays; day++) {
-    let simOverall = calculateOverall({ ...player, ...sim }, player.position);
     for (const s of plan.stats as string[]) {
-      const g = dailyGainForTrainedStat(sim[s], potential, player.age, s, facilityLevels, coachQuality, player.position, simOverall);
+      const statPot = statPotentialOf(player, s);
+      const g = dailyGainForTrainedStat(sim[s], statPot, player.age, s, facilityLevels, coachQuality, player.position);
       accum[s] += g;
       while (accum[s] >= 1 && sim[s] < 100) {
         const next = sim[s] + 1;
-        const nextOvr = calculateOverall({ ...player, ...sim, [s]: next }, player.position);
-        if (nextOvr > potential && nextOvr > simOverall) { accum[s] = 0; break; }
+        if (next > statPot) { accum[s] = 0; break; }
         sim[s] = next;
-        simOverall = nextOvr;
         accum[s] -= 1;
       }
     }
     const newOvr = calculateOverall({ ...player, ...sim }, player.position);
     if (newOvr > currentOvr) return day;
-    if (newOvr >= potential) return null;
   }
   return null;
 }

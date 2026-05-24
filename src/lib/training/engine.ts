@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db';
 import { getPlayers, updatePlayer } from '@/lib/db/queries';
 import { TRAINING_PLANS, type TrainingPlanKey } from './plans';
 import { stackedStatMultiplier, STAT_TO_FACILITIES } from './facilities';
-import { POSITION_GROUPINGS, calculateOverall } from '@/lib/overall';
+import { POSITION_GROUPINGS, potentialKeyFor, type StatKey } from '@/lib/overall';
 
 /** Daily base gain on a *targeted* stat before age/resistance/facility/coach modifiers. */
 const BASE_RATE = 0.012;
@@ -55,14 +55,13 @@ function getStatResistance(statValue: number): number {
 }
 
 /**
- * Slow training as the player's *overall* approaches their potential. Once the
- * uncapped overall would reach potential, growth stops entirely. The cap is on
- * overall — individual stats can still climb up to 100, they just don't push
- * the overall past the player's ceiling.
+ * Slow training as a stat approaches its own per-stat potential. Each of the
+ * 30 stats has its own ceiling now, so the cap factor is computed per stat,
+ * not against the overall. When the stat reaches its ceiling, growth stops.
  */
-function getPotentialCapFactor(currentOverall: number, potential: number): number {
-  if (currentOverall >= potential) return 0;
-  const diff = potential - currentOverall;
+function getPotentialCapFactor(currentStat: number, statPotential: number): number {
+  if (currentStat >= statPotential) return 0;
+  const diff = statPotential - currentStat;
   if (diff <= 2) return 0.20;
   if (diff <= 5) return 0.45;
   return 1.00;
@@ -95,8 +94,11 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
   const db = getDb();
   const gains: TrainingGainEvent[] = [];
 
+  // Per-stat potentials live on the player row (one column per stat). We
+  // pull them via SELECT p.* so every `{stat}_potential` comes along — the
+  // per-stat cap check reads from p[`${stat}_potential`].
   const assignments = db.prepare(`
-    SELECT ta.*, p.id as player_id, p.age, p.player_name, p.potential
+    SELECT ta.*, p.*, p.id as player_id
     FROM training_assignments ta
     JOIN players p ON ta.player_id = p.id
     WHERE p.team_id = ?
@@ -133,20 +135,25 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
     const statProgress = JSON.parse(assignment.stat_progress || '{}') as Record<string, number>;
     const trainedStats = new Set(plan.stats as unknown as string[]);
 
-    const potential = player.potential ?? 99;
-    const currentOverall = calculateOverall(player as any, player.position);
+    // Helper to read a per-stat potential off the joined player row. Falls
+    // back to 99 if the column is somehow missing (legacy DB pre-migration).
+    const statPotentialOf = (stat: string): number => {
+      const v = (player as any)[potentialKeyFor(stat as StatKey)];
+      return typeof v === 'number' ? v : 99;
+    };
 
-    /* ── Targeted stats: full training rate ─────────────────────────── */
+    /* ── Targeted stats: full training rate, capped per-stat ─────────── */
     for (const statKey of plan.stats) {
       const currentStat = (player as any)[statKey];
       if (currentStat === undefined || currentStat === null) continue;
 
+      const statPot = statPotentialOf(statKey);
       const facilityMult = stackedStatMultiplier(statKey, facilityLevels);
       const coachQuality = coachMap.get(planKey) || 0;
       const coachMult = coachQuality > 0 ? 1 + getCoachBonus(coachQuality) : 1.0;
       const ageMult = getAgeMultiplier(player.age);
       const resistance = getStatResistance(currentStat);
-      const capFactor = getPotentialCapFactor(currentOverall, potential);
+      const capFactor = getPotentialCapFactor(currentStat, statPot);
       const positionMult = getPositionRelevance(statKey, player.position);
 
       const dailyGain = BASE_RATE * ageMult * resistance * capFactor * facilityMult * coachMult * positionMult;
@@ -156,9 +163,8 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
       statProgress[statKey] = (statProgress[statKey] || 0) + dailyGain;
       if (statProgress[statKey] >= 1.0) {
         const candidate = Math.min(currentStat + 1, 100);
-        const candidateOverall = calculateOverall({ ...(player as any), [statKey]: candidate }, player.position);
-        // Block the stat tick if it would push overall past potential.
-        if (candidateOverall > potential && candidateOverall > currentOverall) {
+        // Per-stat cap: never push a stat above its own potential.
+        if (candidate > statPot) {
           statProgress[statKey] = 0;
           continue;
         }
@@ -181,15 +187,15 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
     }
 
     /* ── Passive growth on non-targeted stats ───────────────────────── */
-    const overallAfterTargeted = calculateOverall(player as any, player.position);
     for (const statKey of ALL_STATS) {
       if (trainedStats.has(statKey)) continue;
       const currentStat = (player as any)[statKey];
       if (currentStat === undefined || currentStat === null) continue;
 
+      const statPot = statPotentialOf(statKey);
       const facilityMult = stackedStatMultiplier(statKey, facilityLevels);
       const ageMult = getAgePassiveMultiplier(player.age);
-      const capFactor = getPotentialCapFactor(overallAfterTargeted, potential);
+      const capFactor = getPotentialCapFactor(currentStat, statPot);
 
       let passiveDrift: number;
       if (player.age <= 29) {
@@ -199,7 +205,15 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
       } else {
         passiveDrift = PASSIVE_RATE * 0.3 * capFactor * facilityMult;
       }
-      if (passiveDrift === 0) continue;
+      // Even if positive drift is gated by per-stat cap, decay can still pull
+      // a stat back toward a lowered potential.
+      if (passiveDrift === 0 && currentStat <= statPot) continue;
+      // If the per-stat potential dropped below the current stat (after the
+      // season recalc lowered the ceiling), pull the stat one tick per tick
+      // toward the new ceiling.
+      if (currentStat > statPot) {
+        passiveDrift = Math.min(passiveDrift, -PASSIVE_RATE);
+      }
 
       statProgress[statKey] = (statProgress[statKey] || 0) + passiveDrift;
       if (Math.abs(statProgress[statKey]) >= 1.0) {
@@ -209,13 +223,10 @@ export function tickTraining(teamId: number, date: string): TrainingGainEvent[] 
           statProgress[statKey] = 0;
           continue;
         }
-        // Positive drift can't push overall past potential. Decline is unrestricted.
-        if (target > currentStat) {
-          const candidateOverall = calculateOverall({ ...(player as any), [statKey]: target }, player.position);
-          if (candidateOverall > potential && candidateOverall > overallAfterTargeted) {
-            statProgress[statKey] = 0;
-            continue;
-          }
+        // Per-stat cap: positive drift can't exceed the stat's own potential.
+        if (target > currentStat && target > statPot) {
+          statProgress[statKey] = 0;
+          continue;
         }
         updatePlayer(playerId, { [statKey]: target });
         (player as any)[statKey] = target;

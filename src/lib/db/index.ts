@@ -232,27 +232,15 @@ function initializeGameDb(db: Database.Database, selectedCountries?: string[]) {
         db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 50`);
       }
     }
-    // Add height and potential columns if missing
+    // Add height column if missing
     if (!playerColNames.includes('height')) {
       db.exec(`ALTER TABLE players ADD COLUMN height INTEGER`);
     }
-    if (!playerColNames.includes('potential')) {
-      db.exec(`ALTER TABLE players ADD COLUMN potential INTEGER`);
-    }
-    // Backfill potential for any player missing one. Younger players get more
-    // headroom over current OVR; veterans land near their current rating.
-    db.exec(`
-      UPDATE players SET potential = MIN(99, MAX(overall,
-        overall + CAST(
-          CASE
-            WHEN age <= 20 THEN 8 + ABS(RANDOM() % 13)
-            WHEN age <= 23 THEN 5 + ABS(RANDOM() % 10)
-            WHEN age <= 26 THEN 2 + ABS(RANDOM() % 8)
-            WHEN age <= 30 THEN ABS(RANDOM() % 6)
-            ELSE ABS(RANDOM() % 3)
-          END AS INTEGER)
-      )) WHERE potential IS NULL
-    `);
+
+    // Migration: per-stat potentials replace the single legacy `potential`
+    // column. Add the 30 new columns, backfill from age + each current stat,
+    // then drop the legacy column.
+    migratePerStatPotentials(db, playerColNames);
     if (!playerColNames.includes('created_at')) {
       db.exec(`ALTER TABLE players ADD COLUMN created_at TEXT`);
     }
@@ -852,6 +840,63 @@ function ensureGameStateRow(db: Database.Database) {
   const startDate = earliest.start_date || `${earliest.start_date?.slice(0, 4) ?? '2026'}-01-01`;
   db.prepare("INSERT OR IGNORE INTO game_state (id, current_date, season_id) VALUES (1, ?, ?)")
     .run(startDate, earliest.id);
+}
+
+/**
+ * Per-stat potentials migration.
+ *
+ * Adds the 30 `{stat}_potential` columns if they don't yet exist, backfills
+ * them from each player's age + current stat using the same headroom logic
+ * the generator uses for new players, then drops the legacy single
+ * `potential` column. Re-run safe — short-circuits when no new columns are
+ * needed and only drops the legacy column once.
+ */
+function migratePerStatPotentials(db: Database.Database, playerColNames: string[]) {
+  const POT_STATS = [
+    'attack', 'defense', 'serve', 'block', 'receive', 'setting',
+    'precision', 'flair', 'digging', 'positioning', 'ball_control', 'technique', 'playmaking', 'spin',
+    'speed', 'agility', 'strength', 'endurance', 'vertical', 'flexibility', 'torque', 'balance',
+    'leadership', 'teamwork', 'concentration', 'pressure', 'consistency', 'vision', 'game_iq', 'intimidation',
+  ];
+
+  const missing = POT_STATS
+    .map(s => `${s}_potential`)
+    .filter(c => !playerColNames.includes(c));
+
+  if (missing.length === 0) {
+    // Already migrated. Still drop the legacy column if it lingers.
+    if (playerColNames.includes('potential')) {
+      try { db.exec('ALTER TABLE players DROP COLUMN potential'); } catch { /* old SQLite — leave it */ }
+    }
+    return;
+  }
+
+  for (const col of missing) {
+    db.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 70`);
+  }
+
+  // Backfill: per stat, set the potential to the player's current stat plus
+  // an age-scaled headroom. Pure SQL keeps the migration fast on big DBs.
+  const headroomSql = `
+    CAST(
+      CASE
+        WHEN age <= 20 THEN 8 + ABS(RANDOM() % 13)
+        WHEN age <= 23 THEN 5 + ABS(RANDOM() % 10)
+        WHEN age <= 26 THEN 2 + ABS(RANDOM() % 8)
+        WHEN age <= 30 THEN ABS(RANDOM() % 6)
+        ELSE ABS(RANDOM() % 3)
+      END AS INTEGER)
+  `;
+  for (const stat of POT_STATS) {
+    db.exec(`
+      UPDATE players SET ${stat}_potential =
+        MIN(100, MAX(${stat}, ${stat} + ${headroomSql}))
+    `);
+  }
+
+  if (playerColNames.includes('potential')) {
+    try { db.exec('ALTER TABLE players DROP COLUMN potential'); } catch { /* old SQLite — leave it */ }
+  }
 }
 
 /**

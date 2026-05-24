@@ -21,6 +21,8 @@ import {
 } from './custom-save';
 import { generateCustomCup } from './custom-cup';
 import { generatePlayer } from './player-gen';
+import { calculateOverall } from './overall';
+import { generateStatPotentialsFromTarget } from './potential-engine';
 
 type Db = Database.Database;
 type Row = Record<string, unknown>;
@@ -206,18 +208,26 @@ export function seedCustomWorld(customDb: Db, catalogDb: Db, config: CustomWorld
     );
     const insertGeneratedStmt = customDb.prepare(`
         INSERT INTO players (
-            player_name, team_id, position, age, country, jersey_number, overall, potential, height,
+            player_name, team_id, position, age, country, jersey_number, overall, height,
             attack, defense, serve, block, receive, setting,
             precision, flair, digging, positioning, ball_control, technique, playmaking, spin,
             speed, agility, strength, endurance, vertical, flexibility, torque, balance,
             leadership, teamwork, concentration, pressure, consistency, vision, game_iq, intimidation,
+            attack_potential, defense_potential, serve_potential, block_potential, receive_potential, setting_potential,
+            precision_potential, flair_potential, digging_potential, positioning_potential, ball_control_potential, technique_potential, playmaking_potential, spin_potential,
+            speed_potential, agility_potential, strength_potential, endurance_potential, vertical_potential, flexibility_potential, torque_potential, balance_potential,
+            leadership_potential, teamwork_potential, concentration_potential, pressure_potential, consistency_potential, vision_potential, game_iq_potential, intimidation_potential,
             contract_years, monthly_wage, player_value, matches_played
         ) VALUES (
-            @player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @potential, @height,
+            @player_name, @team_id, @position, @age, @country, @jersey_number, @overall, @height,
             @attack, @defense, @serve, @block, @receive, @setting,
             @precision, @flair, @digging, @positioning, @ball_control, @technique, @playmaking, @spin,
             @speed, @agility, @strength, @endurance, @vertical, @flexibility, @torque, @balance,
             @leadership, @teamwork, @concentration, @pressure, @consistency, @vision, @game_iq, @intimidation,
+            @attack_potential, @defense_potential, @serve_potential, @block_potential, @receive_potential, @setting_potential,
+            @precision_potential, @flair_potential, @digging_potential, @positioning_potential, @ball_control_potential, @technique_potential, @playmaking_potential, @spin_potential,
+            @speed_potential, @agility_potential, @strength_potential, @endurance_potential, @vertical_potential, @flexibility_potential, @torque_potential, @balance_potential,
+            @leadership_potential, @teamwork_potential, @concentration_potential, @pressure_potential, @consistency_potential, @vision_potential, @game_iq_potential, @intimidation_potential,
             @contract_years, @monthly_wage, @player_value, 0
         )
     `);
@@ -302,11 +312,32 @@ export function seedCustomWorld(customDb: Db, catalogDb: Db, config: CustomWorld
     }
 
     /** Stocks the unassigned (team_id NULL) fantasy-draft player pool. */
-    function buildDraftPool(mode: 'existing' | 'generated' | 'mixed'): void {
+    function buildDraftPool(mode: 'existing' | 'generated' | 'mixed' | 'custom'): void {
         const teamCount = teamIdMap.size;
         const quota: Record<string, number> = {
             'Outside Hitter': 2, 'Middle Blocker': 2, 'Opposite Hitter': 1, 'Setter': 1, 'Libero': 1,
         };
+
+        if (mode === 'custom') {
+            // User-supplied players go straight into the pool, unassigned.
+            // The validator has already ensured per-position counts are sufficient.
+            const players = config.draft?.customPlayers ?? [];
+            for (const cp of players) {
+                // Wizard accepts a single target `potential` (overall ceiling).
+                // Fan it out into the 30 per-stat potentials so the new schema
+                // gets all the columns it expects.
+                const statRecord = cp as unknown as Record<string, number>;
+                const target = typeof statRecord.potential === 'number' ? statRecord.potential : 75;
+                const statPotentials = generateStatPotentialsFromTarget(statRecord, target, cp.position);
+                insertGeneratedStmt.run({
+                    ...cp,
+                    ...statPotentials,
+                    overall: calculateOverall(statRecord, cp.position),
+                    team_id: null,
+                });
+            }
+            return;
+        }
 
         // Real-player candidates from the selected teams, grouped by position.
         const byPosition: Record<string, Row[]> = {};

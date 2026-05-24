@@ -10,7 +10,7 @@ import {
   shouldGeneratePlayoffs, generatePlayoffs,
   getPlayoffGamesByDate, recordPlayoffGameResult,
 } from '@/lib/db/queries';
-import { runFullMatch } from '@/lib/simulation-engine';
+import { runFastMatch } from '@/lib/fast-match';
 import { getCupFixturesByDate, recordCupFixtureResult } from '@/lib/cup-engine';
 import { tickTraining } from '@/lib/training/engine';
 import { createSimCache } from '@/lib/sim-cache';
@@ -113,9 +113,9 @@ export const POST = withUserDb(async () => {
     // Auto-simulate all remaining AI regular-season fixtures for today
     const remaining = todayFixtures.filter(f => f.status !== 'completed' && f.id !== userFixture?.id);
     for (const f of remaining) {
-      const homeLu = sim.buildLineup(f.home_team_id);
-      const awayLu = sim.buildLineup(f.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const homeStr = sim.buildFastStrengths(f.home_team_id);
+      const awayStr = sim.buildFastStrengths(f.away_team_id);
+      const result = runFastMatch(homeStr, awayStr);
       sim.updateFixtureResult(f.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,
@@ -136,9 +136,9 @@ export const POST = withUserDb(async () => {
         (pg.home_team_id === userTeamId || pg.away_team_id === userTeamId);
       if (isUserGame) continue;
 
-      const homeLu = sim.buildLineup(pg.home_team_id);
-      const awayLu = sim.buildLineup(pg.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const homeStr = sim.buildFastStrengths(pg.home_team_id);
+      const awayStr = sim.buildFastStrengths(pg.away_team_id);
+      const result = runFastMatch(homeStr, awayStr);
       recordPlayoffGameResult(pg.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,
@@ -154,9 +154,9 @@ export const POST = withUserDb(async () => {
         (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId);
       if (isUserGame) continue;
 
-      const homeLu = sim.buildLineup(cf.home_team_id);
-      const awayLu = sim.buildLineup(cf.away_team_id);
-      const result = runFullMatch(homeLu, awayLu);
+      const homeStr = sim.buildFastStrengths(cf.home_team_id);
+      const awayStr = sim.buildFastStrengths(cf.away_team_id);
+      const result = runFastMatch(homeStr, awayStr);
       recordCupFixtureResult(cf.id, {
         home_sets:   result.homeSets,
         away_sets:   result.awaySets,

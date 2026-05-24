@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         const id = crypto.randomUUID();
         const passwordHash = await bcrypt.hash(password, 10);
 
-        authCreateUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 1 });
+        authCreateUser({ id, email, username, password_hash: passwordHash, display_name: displayName, is_admin: 0 });
 
         // Register the user's classic "Main Save" and eagerly seed its game DB
         // so first play is fast. Seeding runs schema + all country seeds once.

@@ -1,0 +1,143 @@
+{
+  "$schema": "volleyball-manager/custom-players@1",
+  "note": "Custom-players JSON template for the Custom Save wizard's Custom draft pool. The wizard's 'Import JSON' button accepts either this shape (object with a 'players' array) or a bare top-level array. Every numeric stat must be an integer between 1 and 100 (potential is 1-99). Position must be one of: Outside Hitter, Middle Blocker, Opposite Hitter, Setter, Libero. Draft quota per team is 7 players (2 OH, 2 MB, 1 OPP, 1 S, 1 L) so the pool must contain at least quota x teams of every position.",
+
+  "fields": {
+    "player_name": "string (required) - display name",
+    "position": "string (required) - one of: Outside Hitter, Middle Blocker, Opposite Hitter, Setter, Libero",
+    "age": "integer 14-60",
+    "country": "string - nationality, e.g. 'Italy'",
+    "jersey_number": "integer 1-99",
+    "height": "integer 140-230 (cm)",
+    "potential": "integer 1-99 - target overall potential. Fanned out into 30 per-stat ceilings at seed time (each stat now has its own potential, derived from this single target).",
+    "contract_years": "integer 1-10",
+    "monthly_wage": "integer >= 0",
+    "player_value": "integer >= 0",
+    "stats_skill": ["attack", "defense", "serve", "block", "receive", "setting"],
+    "stats_technical": ["precision", "flair", "digging", "positioning", "ball_control", "technique", "playmaking", "spin"],
+    "stats_physical": ["speed", "agility", "strength", "endurance", "vertical", "flexibility", "torque", "balance"],
+    "stats_mental": ["leadership", "teamwork", "concentration", "pressure", "consistency", "vision", "game_iq", "intimidation"]
+  },
+
+  "players": [
+    {
+      "player_name": "Marco Rossi",
+      "position": "Outside Hitter",
+      "age": 24,
+      "country": "Italy",
+      "jersey_number": 7,
+      "height": 198,
+      "potential": 88,
+      "contract_years": 3,
+      "monthly_wage": 18000,
+      "player_value": 2200000,
+
+      "attack": 85, "defense": 72, "serve": 78, "block": 70, "receive": 75, "setting": 45,
+      "precision": 78, "flair": 80, "digging": 68, "positioning": 76, "ball_control": 74, "technique": 80, "playmaking": 60, "spin": 78,
+      "speed": 78, "agility": 80, "strength": 76, "endurance": 75, "vertical": 84, "flexibility": 70, "torque": 75, "balance": 78,
+      "leadership": 72, "teamwork": 76, "concentration": 78, "pressure": 76, "consistency": 78, "vision": 72, "game_iq": 76, "intimidation": 68
+    },
+    {
+      "player_name": "Luca Conti",
+      "position": "Outside Hitter",
+      "age": 21,
+      "country": "Italy",
+      "jersey_number": 11,
+      "height": 196,
+      "potential": 84,
+      "contract_years": 2,
+      "monthly_wage": 9000,
+      "player_value": 900000,
+
+      "attack": 74, "defense": 66, "serve": 70, "block": 64, "receive": 70, "setting": 40,
+      "precision": 68, "flair": 72, "digging": 62, "positioning": 68, "ball_control": 68, "technique": 70, "playmaking": 55, "spin": 70,
+      "speed": 76, "agility": 78, "strength": 70, "endurance": 72, "vertical": 80, "flexibility": 70, "torque": 70, "balance": 74,
+      "leadership": 60, "teamwork": 70, "concentration": 70, "pressure": 66, "consistency": 70, "vision": 66, "game_iq": 68, "intimidation": 60
+    },
+    {
+      "player_name": "Andrei Vasiliev",
+      "position": "Middle Blocker",
+      "age": 27,
+      "country": "Russia",
+      "jersey_number": 4,
+      "height": 210,
+      "potential": 86,
+      "contract_years": 2,
+      "monthly_wage": 16000,
+      "player_value": 1800000,
+
+      "attack": 76, "defense": 74, "serve": 70, "block": 88, "receive": 50, "setting": 38,
+      "precision": 70, "flair": 60, "digging": 55, "positioning": 80, "ball_control": 64, "technique": 74, "playmaking": 50, "spin": 70,
+      "speed": 68, "agility": 70, "strength": 84, "endurance": 76, "vertical": 86, "flexibility": 66, "torque": 80, "balance": 72,
+      "leadership": 70, "teamwork": 74, "concentration": 78, "pressure": 74, "consistency": 76, "vision": 70, "game_iq": 76, "intimidation": 78
+    },
+    {
+      "player_name": "Kasper Lund",
+      "position": "Middle Blocker",
+      "age": 23,
+      "country": "Denmark",
+      "jersey_number": 12,
+      "height": 207,
+      "potential": 82,
+      "contract_years": 2,
+      "monthly_wage": 8000,
+      "player_value": 800000,
+
+      "attack": 70, "defense": 68, "serve": 64, "block": 80, "receive": 45, "setting": 35,
+      "precision": 66, "flair": 55, "digging": 50, "positioning": 74, "ball_control": 60, "technique": 68, "playmaking": 45, "spin": 64,
+      "speed": 66, "agility": 68, "strength": 78, "endurance": 72, "vertical": 80, "flexibility": 64, "torque": 74, "balance": 70,
+      "leadership": 62, "teamwork": 70, "concentration": 72, "pressure": 68, "consistency": 70, "vision": 64, "game_iq": 70, "intimidation": 70
+    },
+    {
+      "player_name": "Diego Fernandez",
+      "position": "Opposite Hitter",
+      "age": 25,
+      "country": "Argentina",
+      "jersey_number": 9,
+      "height": 203,
+      "potential": 87,
+      "contract_years": 3,
+      "monthly_wage": 17000,
+      "player_value": 2000000,
+
+      "attack": 86, "defense": 70, "serve": 80, "block": 74, "receive": 58, "setting": 42,
+      "precision": 76, "flair": 78, "digging": 60, "positioning": 72, "ball_control": 70, "technique": 76, "playmaking": 58, "spin": 80,
+      "speed": 74, "agility": 76, "strength": 80, "endurance": 74, "vertical": 84, "flexibility": 68, "torque": 78, "balance": 74,
+      "leadership": 68, "teamwork": 72, "concentration": 76, "pressure": 78, "consistency": 76, "vision": 70, "game_iq": 74, "intimidation": 74
+    },
+    {
+      "player_name": "Tomas Novak",
+      "position": "Setter",
+      "age": 26,
+      "country": "Czechia",
+      "jersey_number": 3,
+      "height": 192,
+      "potential": 85,
+      "contract_years": 2,
+      "monthly_wage": 14000,
+      "player_value": 1600000,
+
+      "attack": 60, "defense": 70, "serve": 72, "block": 60, "receive": 70, "setting": 88,
+      "precision": 82, "flair": 76, "digging": 70, "positioning": 80, "ball_control": 84, "technique": 84, "playmaking": 86, "spin": 60,
+      "speed": 74, "agility": 80, "strength": 64, "endurance": 76, "vertical": 70, "flexibility": 74, "torque": 64, "balance": 78,
+      "leadership": 82, "teamwork": 84, "concentration": 84, "pressure": 82, "consistency": 82, "vision": 86, "game_iq": 88, "intimidation": 64
+    },
+    {
+      "player_name": "Hiro Tanaka",
+      "position": "Libero",
+      "age": 28,
+      "country": "Japan",
+      "jersey_number": 6,
+      "height": 185,
+      "potential": 86,
+      "contract_years": 3,
+      "monthly_wage": 12000,
+      "player_value": 1400000,
+
+      "attack": 35, "defense": 84, "serve": 60, "block": 35, "receive": 88, "setting": 60,
+      "precision": 82, "flair": 70, "digging": 90, "positioning": 84, "ball_control": 86, "technique": 80, "playmaking": 64, "spin": 50,
+      "speed": 86, "agility": 88, "strength": 64, "endurance": 80, "vertical": 70, "flexibility": 82, "torque": 60, "balance": 84,
+      "leadership": 74, "teamwork": 82, "concentration": 86, "pressure": 84, "consistency": 84, "vision": 82, "game_iq": 80, "intimidation": 60
+    }
+  ]
+}
