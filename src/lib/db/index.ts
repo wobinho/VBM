@@ -138,6 +138,10 @@ function initializeCustomDb(db: Database.Database) {
   if (!teamCols.find(c => c.name === 'logo')) {
     db.prepare('ALTER TABLE teams ADD COLUMN logo TEXT').run();
   }
+  // Migrate per-stat potential columns — same migration as classic saves.
+  const playerCols = db.prepare('PRAGMA table_info(players)').all() as { name: string }[];
+  const playerColNames = playerCols.map(c => c.name);
+  migratePerStatPotentials(db, playerColNames);
 }
 
 let catalogDb: Database.Database | null = null;

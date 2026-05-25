@@ -757,9 +757,9 @@ function GrandFinalPanel({ round, userTeamId }: { round: CupRound; userTeamId: n
             <span className={`text-xs font-bold flex-1 truncate ${side.won ? 'text-amber-300' : 'text-gray-300'}`}>
               {side.name}
             </span>
-            {/* Win pips */}
+            {/* Win pips — first to 2 wins, so show 2 boxes */}
             <div className="flex gap-1.5 shrink-0">
-              {[0, 1, 2].map(i => (
+              {[0, 1].map(i => (
                 <div key={i}
                   className={`w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-black transition-all ${
                     i < side.wins

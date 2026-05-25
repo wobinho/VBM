@@ -83,6 +83,7 @@ export function buildFastStrengths(lu: SimLineup): FastStrengths {
   // Aggregate strengths.
   const attackPlayers: SimPlayer[] = [];
   if (lu.OH1) attackPlayers.push(lu.OH1);
+  if (lu.OH2) attackPlayers.push(lu.OH2);
   if (lu.OPP) attackPlayers.push(lu.OPP);
   if (lu.MB1) attackPlayers.push(lu.MB1);
   if (lu.MB2) attackPlayers.push(lu.MB2);

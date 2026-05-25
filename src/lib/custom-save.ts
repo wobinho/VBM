@@ -168,12 +168,15 @@ function cupDates(year: number, w: CustomCupWindow, count: number): string[] {
         if (wd === 1 || wd === 3 || wd === 5) pool.push(fmtDate(d));
         d.setDate(d.getDate() + 1);
     }
-    if (pool.length === 0) return Array.from({ length: count }, () => fmtDate(start));
-    if (pool.length <= count) {
-        const out = [...pool];
-        while (out.length < count) out.push(pool[pool.length - 1]);
-        return out;
+    // If the window has fewer Mon/Wed/Fri dates than needed, extend beyond it
+    // so consecutive rounds always land on distinct dates.
+    const ext = new Date(pool.length > 0 ? pool[pool.length - 1] + 'T00:00:00' : start);
+    while (pool.length < count) {
+        ext.setDate(ext.getDate() + 1);
+        if ([1, 3, 5].includes(ext.getDay())) pool.push(fmtDate(ext));
     }
+    if (pool.length === count) return pool;
+    if (count === 1) return [pool[0]];
     const out: string[] = [];
     for (let i = 0; i < count; i++) {
         out.push(pool[Math.round((i * (pool.length - 1)) / (count - 1))]);

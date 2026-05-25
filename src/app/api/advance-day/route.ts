@@ -147,8 +147,10 @@ export const POST = withUserDb(async () => {
       });
     }
 
-    // Also auto-simulate any AI cup fixtures scheduled for today
-    // (user cup fixtures are left for the user to play manually)
+    // Auto-simulate AI cup fixtures for today, then loop to catch any fixtures
+    // seeded by round advancement on the same date, and any past-dated fixtures
+    // that got stranded (e.g. from a previous narrow-window date collision).
+    const simmedCupIds = new Set<number>(todayCupFixtures.map(cf => cf.id as number));
     for (const cf of todayCupFixtures) {
       const isUserGame = userTeamId !== null &&
         (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId);
@@ -164,6 +166,34 @@ export const POST = withUserDb(async () => {
         away_points: result.awayTotalPoints,
       });
     }
+    // Catch-up loop: pick up any cup fixtures seeded mid-advance or stuck in the past
+    let catchUpBatch: { id: number; home_team_id: number; away_team_id: number }[];
+    do {
+      catchUpBatch = (db.prepare(`
+        SELECT cf.id, cf.home_team_id, cf.away_team_id
+        FROM cup_fixtures cf
+        JOIN cup_competitions cc ON cf.cup_id = cc.id
+        WHERE cf.status = 'scheduled'
+          AND cf.scheduled_date <= ?
+          AND cc.status = 'active'
+      `).all(state.current_date) as { id: number; home_team_id: number; away_team_id: number }[])
+        .filter(cf =>
+          !simmedCupIds.has(cf.id) &&
+          !(userTeamId !== null && (cf.home_team_id === userTeamId || cf.away_team_id === userTeamId)),
+        );
+      for (const cf of catchUpBatch) {
+        simmedCupIds.add(cf.id);
+        const homeStr = sim.buildFastStrengths(cf.home_team_id);
+        const awayStr = sim.buildFastStrengths(cf.away_team_id);
+        const result = runFastMatch(homeStr, awayStr);
+        recordCupFixtureResult(cf.id, {
+          home_sets:   result.homeSets,
+          away_sets:   result.awaySets,
+          home_points: result.homeTotalPoints,
+          away_points: result.awayTotalPoints,
+        });
+      }
+    } while (catchUpBatch.length > 0);
 
     advanceGameDate(newDate);
 
